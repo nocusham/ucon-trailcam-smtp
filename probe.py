@@ -12,6 +12,8 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from h4_events import list_events_staged
 from h4_transport import TransportTrace
+from h4_download import native_frames, download_photo
+from pathlib import Path
 import time
 
 from p4p_camera_sdk.credentials import CredentialClient
@@ -42,8 +44,12 @@ class DiagnosticRelay(RelaySession):
         self.transport = TransportTrace()
         self.relay_rx = Counter()
         self.relay_last = {}
+        self.native_download = False
 
     def _drain_frames(self):
+        if self.native_download:
+            yield from native_frames(self)
+            return
         frames = super()._drain_frames()
         while True:
             before = bytes(self._app_buf)
@@ -130,14 +136,18 @@ def main():
     window = parser.add_mutually_exclusive_group()
     window.add_argument('--hours', type=int, default=24)
     window.add_argument('--day', type=dt.date.fromisoformat, help='Calendar day YYYY-MM-DD')
-    parser.add_argument('--sd-flow', choices=('app', 'no-av'), default='app',
-                        help='Staged app sequence or diagnostic variant omitting AVCTRL')
+    parser.add_argument('--sd-flow', choices=('app', 'no-av'), default='no-av',
+                        help='H4 no-AV default or experimental app sequence')
+    parser.add_argument('--download-photo', choices=('thumbnail', 'original'),
+                        help='Download one latest activity photo after a successful event list')
     parser.add_argument('--kcp-window', choices=(256, 512), type=int, default=256,
                         help='KCP receive window; default SDK 256, Android observed 512')
     parser.add_argument('--tz', default='Europe/Berlin', help='Time zone for --day (default Europe/Berlin)')
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
+    if args.download_photo and (not args.events or args.sd_flow != 'no-av'):
+        parser.error('--download-photo requires --events with the no-av flow')
     sdk_version = version('p4p-camera-sdk')
     print(f'SDK version: {sdk_version}')
     if sdk_version != '0.1.16':
@@ -212,6 +222,18 @@ def main():
                         events = SdCardClient(session).list_events(begin, end)
                     else:
                         events = list_events_staged(session, begin, end, flow=args.sd_flow)
+                        if args.download_photo:
+                            stage = 'experimental JPEG download'
+                            photos = [e for e in events if e.event_type == 4 and e.length == 65535]
+                            if not photos:
+                                raise RuntimeError('No activity photo candidate')
+                            event = max(photos, key=lambda e: e.start_time)
+                            kind = 2 if args.download_photo == 'thumbnail' else 3
+                            destination = Path('media') / f'activity_{event.start_time}_{args.download_photo}.jpg'
+                            if destination.exists():
+                                raise FileExistsError('Local destination already exists')
+                            session.stage_notes.append(f'Photo candidate: timestamp={event.start_time}, type={kind}')
+                            download_photo(session, event, kind, destination)
         finally:
             print(f'Relay / SD query elapsed: {time.monotonic() - started:.1f} s')
             session.report()

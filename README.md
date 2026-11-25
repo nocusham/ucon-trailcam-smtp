@@ -4,7 +4,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmwa
 
 ## Status / Projektstand
 
-Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. Photo download compatibility remains unverified. This initial prototype only tests login and optionally lists camera events. It does not download images or send email yet.
+Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). Experimental single JPEG download is available, but is not live-validated. SMTP is not implemented yet.
 
 ## First test (Linux, Python 3.12+)
 
@@ -94,13 +94,27 @@ python probe.py --events --day 2026-11-25 --sd-flow app --kcp-window 512
 
 The first omits only AVCTRL, the second retains the prior sequence, and the third changes only the receive window relative to the second. The alternative paths and telemetry are experimental. A missing application response may still be due to framing or an incomplete session, not necessarily a rejected command.
 
+## H4 successful listing and experimental photo retrieval
+
+Test L (no AVCTRL, window 256) returned all 18/18 records in 8.0 seconds: 17 network wake events and one activity event. Tests M/N (with AVCTRL, window 256/512) both had transport ACKs but no list response. The default is now no-av; app flow remains for comparison. The failed login in the test was an input mistake.
+
+Offline reconstruction of the private SD capture yielded three 640x360 thumbnails and two decodable 5120x2880 JPEGs. The observed file transfer uses native 261 metadata and 263 file frames. One 262 request asks for the whole file, with block count at 1212 and size at 1220. The full 24-byte file body header must be retained. Four of five JPEG checksums did not match the metadata MD5 interpretation, so the probe reports the comparison without claiming integrity verification; it checks contiguous blocks, exact size and JPEG start/end signatures. The higher image size does not prove optical resolution. No raw capture, personal data or image contents are committed.
+
+```sh
+python probe.py --events --day 2026-11-25 --download-photo thumbnail
+python probe.py --events --day 2026-11-25 --download-photo original
+```
+
+These are explicit one-shot experiments: select the newest type-4 event with the observed photo sentinel 65535, use file type 2 or 3, and save in ignored media/ without overwriting. The metadata request uses the selected event record (some Android capture fields varied); exact request behavior and the new native download decoder remain to be validated live. No automatic retries or SMTP. A missing or incomplete file is an error, not success. Do not publish personal images.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
 - [x] Compare Android card-playback traffic with SDK code; identify outgoing encoding and RDT control parsing discrepancies.
 - [x] Validate outbound encoding and native settings response recovery on H4.
-- [ ] Validate staged event retrieval and native event response recovery on H4.
-- [ ] Verify SD event listing, thumbnails and original JPEG download.
+- [x] Validate staged event retrieval and native event response recovery on H4 (no-AV flow).
+- [x] Verify SD event listing.
+- [ ] Validate thumbnail and original JPEG download on the camera.
 - [ ] Test wake from sleep and personal SIM compatibility.
 - [ ] Investigate whether the backend exposes motion-event metadata without a cloud subscription; do not assume notifications are available.
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.

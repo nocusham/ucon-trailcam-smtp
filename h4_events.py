@@ -4,7 +4,7 @@ from p4p_camera_sdk.sdcard import build_list_event, parse_event_record
 from p4p_camera_sdk.sdcard_client import SdCardEvent
 
 
-def list_events_staged(session, begin, end, flow='app'):
+def list_events_staged(session, begin, end, flow='no-av'):
     """Wait for settings response before issuing the observed SD sequence.
 
     Capture: settings + companion, response 961, AVCTRL, list + companion.
@@ -33,7 +33,7 @@ def list_events_staged(session, begin, end, flow='app'):
         for _ in session.poll_ioctrl(timeout=0.03):
             pass
     elif flow == 'no-av':
-        notes.append('Diagnostic variant: AVCTRL omitted.')
+        notes.append('H4 listing: AVCTRL omitted.')
     else:
         raise ValueError('unknown SD flow')
     session.send_ioctrl_batch(0, [(256, build_list_event(begin, end, 0)),

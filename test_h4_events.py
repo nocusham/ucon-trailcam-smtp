@@ -37,7 +37,7 @@ class FakeSession:
 class StagedTests(unittest.TestCase):
     def test_wait_then_list_and_keep_zero_length(self):
         session = FakeSession()
-        events = list_events_staged(session, 1699999999, 1700000100)
+        events = list_events_staged(session, 1699999999, 1700000100, flow='app')
         self.assertEqual(session.calls, ['live', (960, 0x07074C3F),
                                          ('av', 2), (256, 0x07074C3F)])
         self.assertEqual([e.length for e in events], [0, 65535])

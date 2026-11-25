@@ -4,7 +4,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmwa
 
 ## Status / Projektstand
 
-Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). Experimental single JPEG download is available, but is not live-validated. SMTP is not implemented yet.
+Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). Live thumbnail retrieval is confirmed for a network-wake event; activity-photo retrieval and original-photo retrieval are still experimental. SMTP is not implemented yet.
 
 ## First test (Linux, Python 3.12+)
 
@@ -120,6 +120,16 @@ python probe.py --events --day 2026-11-25 --download-photo thumbnail --photo-tim
 
 The known control event had a successful 5246-byte thumbnail in the Android capture (metadata request 260 with actual timestamp, length 65535, source event 3, status 1). The test may differ if the file has since been removed. Metadata diagnostics now report body length and filename length only. Zero-size responses remain errors and do not trigger a data request. A timestamp with an explicit UTC offset is required for manual selection. These changes are not live-validated. If the control succeeds and activity fails, capture a successful in-app download of the exact activity photo next. No paid storage, camera firmware changes or automatic polling added.
 
+## Download tests Q/R: byte-identical live thumbnail
+
+Both tests established a compact alive binding with every observed inbound KCP segment matching the selected conversation. Test Q listed 23/23 events and got positive 261 metadata (6121 bytes) for a type-4 photo; request 262 was acknowledged, but no decoded 263 file frames arrived during 45 seconds of continued live traffic. Test R listed 24/24 records and downloaded the explicitly selected type-3 reference thumbnail (5246 bytes, five blocks) in 9.8 s including login-independent relay setup. Independent offline reconstruction of that file from the prior Android SD capture produced exactly the same SHA-256 digest as reported by the live probe. Thus the tested data-request and block-decoding path produces a byte-identical JPEG for the reference event.
+
+The original Android capture has three thumbnail transfers, all with five blocks; no transfer of the specific type-4 candidate is present. The activity thumbnail needs six blocks. This does not establish whether the event type, block count, request parameters, state or a transient failure caused the missing response. The capture also contains nonzero unexplained trailing fields in some 262 requests; a successful Python reference transfer with zeroed offset and actual size shows that those fields are not universally required. Do not copy opaque values into new requests.
+
+One record in test R had an unfamiliar event type 84 and length 17448. The list count alone does not establish semantic validity of every record. Keep the type-4 filter for automatic selection and compare the unfamiliar record with the app before interpreting it.
+
+Next: capture a successful Android thumbnail/original retrieval of the exact type-4 recording (prefer a short capture limited to Ucon), and if needed one failed Python transfer using tcpdump filtered to UDP port 20001. Compare 260/261/262/263 and the session state. Do not publish packet captures, image content, authentication material or personal identifiers. No further protocol changes until the exact activity-photo transfer is compared.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -127,7 +137,8 @@ The known control event had a successful 5246-byte thumbnail in the Android capt
 - [x] Validate outbound encoding and native settings response recovery on H4.
 - [x] Validate staged event retrieval and native event response recovery on H4 (no-AV flow).
 - [x] Verify SD event listing.
-- [ ] Validate thumbnail and original JPEG download on the camera.
+- [x] Validate live reference thumbnail download byte-for-byte against Android capture.
+- [ ] Validate activity-photo thumbnail and original JPEG download on the camera.
 - [ ] Test wake from sleep and personal SIM compatibility.
 - [ ] Investigate whether the backend exposes motion-event metadata without a cloud subscription; do not assume notifications are available.
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.

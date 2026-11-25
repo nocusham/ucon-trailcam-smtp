@@ -33,17 +33,36 @@ python probe.py --sd-status
 
 This opens one relay connection, waits for live data, then sends documented SD status (520) and advanced settings read (960) requests, each with up to ten seconds of response polling. It reports frame types, counts, last-frame times and payload sizes, not raw payloads or credentials. No settings are written. A missing explicit response is inconclusive: the camera could use a different response format. The camera may wake and consume data.
 
+## H4 field observations: 2026-11-25
+
+With SDK 0.1.16 and existing photos and a video visible in Ucon's card playback:
+
+| Probe | Total time | First live frame | Last decoded frame | Explicit response |
+| --- | --- | --- | --- | --- |
+| SD status / settings read | 24.3 s | 4.2 s | 6.8 s | None |
+| SD event listing | 94.3 s | 4.2 s | 6.7 s | None |
+
+Only SDK-decoded RDT types 0x10011 and 0x10013 were seen; the latter had 240-byte payloads. No decoded 521, 961, 257 or RDT control 0x10004 response. This does not establish whether requests reached the device or whether additional packets were discarded by the SDK. Longer timeouts alone did not help.
+
+App playback shows network wake events at 17:23 and 17:28 local time, matching Python test times. This is strong evidence that polling may itself create recordings. Physical sleep state and power consumption have not been measured. The app also shows genuine activity events and a video. The SDK maps network wake to event type 3 and activity to type 4; confirm these mappings against actual H4 data before enabling a default SMTP filter. Do not send network-wake recordings by default once classification is validated.
+
+### Next diagnostic: compare official Android app with Python client
+
+Use PCAPdroid (https://emanuele-f.github.io/PCAPdroid/) with the Ucon app filter, PCAP file export and full packet payload enabled. No root or TLS interception is needed for the initial UDP comparison. Stay logged in, use a test recording with non-private content, close the Python client and make one capture of opening card playback, waiting for the list and successfully downloading one known photo. Stop capture promptly. If possible make a separate live-view-only baseline capture. Record the approximate times of actions and whether each succeeded.
+
+A local VPN capture can change network behavior; note any differences in app connectivity. A capture may contain device identifiers, authentication material, IP addresses and private media. Keep it private, never commit it to the public repository, and share only with a trusted analyst after appropriate review. A packet summary alone may be insufficient for application protocol analysis.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
-- [ ] Verify delivery and response of camera control requests.
+- [ ] Compare Android card-playback traffic with SDK traffic to verify delivery, KCP acknowledgements and control responses.
 - [ ] Verify SD event listing, thumbnails and original JPEG download.
 - [ ] Test wake from sleep and personal SIM compatibility.
 - [ ] Investigate whether the backend exposes motion-event metadata without a cloud subscription; do not assume notifications are available.
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.
 - [ ] If no passive event signal is available, evaluate configurable low-frequency polling with backoff, overlapping query windows and no concurrent sessions; leave unattended polling disabled until measured.
 - [ ] Optional: Android notification webhook only for configurations where notifications are actually available.
-- [ ] Implement SQLite-backed event and delivery queue; deduplicate by camera and event/file identity.
+- [ ] Implement SQLite-backed event and delivery queue; deduplicate by camera and event/file identity; exclude verified network-wake events by default.
 - [ ] Implement SMTP with TLS certificate verification; retry failures and document possible duplicates after uncertain delivery.
 - [ ] Add tests with synthetic fixtures, Docker and setup documentation in German and English.
 

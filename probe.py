@@ -8,10 +8,14 @@ import io
 import logging
 from collections import Counter
 from importlib.metadata import version
+from unittest.mock import patch
 import time
 
 from p4p_camera_sdk.credentials import CredentialClient
 from p4p_camera_sdk.relay import RelaySession
+import p4p_camera_sdk.relay as sdk_relay
+from p4p_camera_sdk.p4p_crypto import encode
+from h4_compat import recover_control
 from p4p_camera_sdk.sdcard_client import SdCardClient
 from p4p_camera_sdk.sdcard import (
     IOTYPE_GET_SD_STATUS_REQ, IOTYPE_GET_SD_STATUS_RSP, build_get_sd_status,
@@ -30,6 +34,21 @@ class DiagnosticRelay(RelaySession):
         self.sent = Counter()
         self.lengths = Counter()
         self.last_frame = {}
+        self.encoded_packets = 0
+        self.recovered = Counter()
+
+    def _drain_frames(self):
+        frames = super()._drain_frames()
+        while True:
+            before = bytes(self._app_buf)
+            try:
+                kind, data = next(frames)
+            except StopIteration:
+                return
+            new_kind, body = recover_control(before, len(self._app_buf), kind, data)
+            if new_kind != kind:
+                self.recovered[new_kind] += 1
+            yield new_kind, body
 
     def send_ioctrl(self, channel, iotype, data):
         # 0.1.14 sends directly; 0.1.16 delegates to send_ioctrl_batch.
@@ -67,6 +86,8 @@ class DiagnosticRelay(RelaySession):
             yield iotype, data
 
     def report(self):
+        print(f'Encoded outbound P4P/KCP packets: {self.encoded_packets}')
+        print('Recovered native IOCTRL responses: ' + str(dict(self.recovered)))
         print('IOCTRL requests queued (not proof of delivery):')
         for (phase, iotype), count in sorted(self.sent.items()):
             print(f'  {phase}: 0x{iotype:08x} ({iotype}) x {count}')
@@ -98,7 +119,10 @@ def main():
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
-    print(f'SDK version: {version("p4p-camera-sdk")}')
+    sdk_version = version('p4p-camera-sdk')
+    print(f'SDK version: {sdk_version}')
+    if sdk_version != '0.1.16':
+        parser.error('Install the pinned SDK with python -m pip install -r requirements.txt')
     account = input('Ucon account: ').strip()
     password = getpass.getpass('Ucon password: ')
     if not account or not password:
@@ -116,11 +140,20 @@ def main():
         session = DiagnosticRelay(device.device_uid, device.device_password)
         started = time.monotonic()
         session.started = started
+        original_wrap = sdk_relay.wrap_relay_kcp
+
+        def encoded_wrap(raw, routing_tag):
+            session.encoded_packets += 1
+            return encode(original_wrap(raw, routing_tag))
+
+        print('H4 compatibility: encoded outbound KCP; native RDT control recovery')
         if args.events:
             print(f'Query UTC: {dt.datetime.fromtimestamp(end - args.hours * 3600, dt.timezone.utc).isoformat()}'
               f' to {dt.datetime.fromtimestamp(end, dt.timezone.utc).isoformat()}')
         try:
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            with (contextlib.redirect_stdout(io.StringIO()),
+                  contextlib.redirect_stderr(io.StringIO()),
+                  patch.object(sdk_relay, 'wrap_relay_kcp', encoded_wrap)):
                 with session:
                     if args.sd_status:
                         session.wait_for_live_stream()
@@ -150,7 +183,7 @@ def main():
             print('No events decoded; SD card may still contain recordings.')
         for event in sorted(events, key=lambda e: e.start_time):
             stamp = dt.datetime.fromtimestamp(event.start_time, dt.timezone.utc).isoformat()
-            print(f'{stamp} UTC | type={event.event_type} | length={event.length}')
+            print(f'{stamp} | type={event.event_type} | length={event.length}')
         return 0
     except Exception as exc:
         print(f'Failed during {stage}: {type(exc).__name__}. Raw diagnostic details suppressed.')

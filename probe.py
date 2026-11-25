@@ -13,6 +13,10 @@ import time
 from p4p_camera_sdk.credentials import CredentialClient
 from p4p_camera_sdk.relay import RelaySession
 from p4p_camera_sdk.sdcard_client import SdCardClient
+from p4p_camera_sdk.sdcard import (
+    IOTYPE_GET_SD_STATUS_REQ, IOTYPE_GET_SD_STATUS_RSP, build_get_sd_status,
+    IOTYPE_GET_ADVANCE_SETTINGS_REQ, IOTYPE_GET_ADVANCE_SETTINGS_RSP,
+)
 
 
 class DiagnosticRelay(RelaySession):
@@ -23,15 +27,31 @@ class DiagnosticRelay(RelaySession):
         self.phase = 'initial'
         self.frames = Counter()
         self.headers = Counter()
+        self.sent = Counter()
+        self.lengths = Counter()
+        self.last_frame = {}
 
     def send_ioctrl(self, channel, iotype, data):
+        # 0.1.14 sends directly; 0.1.16 delegates to send_ioctrl_batch.
         if iotype == 256:
             self.phase = 'SD query'
+        if not hasattr(RelaySession, 'send_ioctrl_batch'):
+            self.sent[(self.phase, iotype)] += 1
         return super().send_ioctrl(channel, iotype, data)
+
+    def send_ioctrl_batch(self, channel, commands):
+        for iotype, _ in commands:
+            if iotype == 256:
+                self.phase = 'SD query'
+            self.sent[(self.phase, iotype)] += 1
+        return super().send_ioctrl_batch(channel, commands)
 
     def poll_ioctrl(self, timeout=5.0):
         for iotype, data in super().poll_ioctrl(timeout=timeout):
             self.frames[(self.phase, iotype)] += 1
+            self.last_frame[(self.phase, iotype)] = time.monotonic() - self.started
+            if iotype != 0x10011:
+                self.lengths[(self.phase, iotype, len(data))] += 1
             if iotype == 257:
                 if len(data) < 12:
                     self.headers[('short header', len(data))] += 1
@@ -47,11 +67,18 @@ class DiagnosticRelay(RelaySession):
             yield iotype, data
 
     def report(self):
+        print('IOCTRL requests queued (not proof of delivery):')
+        for (phase, iotype), count in sorted(self.sent.items()):
+            print(f'  {phase}: 0x{iotype:08x} ({iotype}) x {count}')
         print('Decoded frame counts (no payloads):')
         if not self.frames:
             print('  None')
         for (phase, iotype), count in sorted(self.frames.items()):
-            print(f'  {phase}: 0x{iotype:08x} ({iotype}) x {count}')
+            print(f'  {phase}: 0x{iotype:08x} ({iotype}) x {count}; '
+                  f'last at +{self.last_frame[(phase, iotype)]:.1f}s')
+        print('Non-video payload sizes (top 20, no contents):')
+        for (phase, iotype, size), count in self.lengths.most_common(20):
+            print(f'  {phase}: 0x{iotype:08x}, {size} bytes x {count}')
         for header, repeats in self.headers.items():
             if len(header) == 4:
                 count, total, available, zero = header
@@ -64,7 +91,9 @@ class DiagnosticRelay(RelaySession):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--index', type=int, default=0)
-    parser.add_argument('--events', action='store_true', help='Explicitly request SD events (may wake camera)')
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--events', action='store_true', help='Explicitly request SD events (may wake camera)')
+    modes.add_argument('--sd-status', action='store_true', help='Test read-only SD status and settings requests')
     parser.add_argument('--hours', type=int, default=24)
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
@@ -80,21 +109,42 @@ def main():
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             device = asyncio.run(CredentialClient(account, password).get_device(index=args.index))
         print('Account login and device discovery successful.')
-        if not args.events:
+        if not (args.events or args.sd_status):
             return 0
-        stage = 'camera relay session / SD event listing'
+        stage = 'camera relay session / SD status' if args.sd_status else 'camera relay session / SD event listing'
         end = int(time.time())
         session = DiagnosticRelay(device.device_uid, device.device_password)
         started = time.monotonic()
-        print(f'Query UTC: {dt.datetime.fromtimestamp(end - args.hours * 3600, dt.timezone.utc).isoformat()}'
+        session.started = started
+        if args.events:
+            print(f'Query UTC: {dt.datetime.fromtimestamp(end - args.hours * 3600, dt.timezone.utc).isoformat()}'
               f' to {dt.datetime.fromtimestamp(end, dt.timezone.utc).isoformat()}')
         try:
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 with session:
-                    events = SdCardClient(session).list_events(end - args.hours * 3600, end)
+                    if args.sd_status:
+                        session.wait_for_live_stream()
+                        session.phase = 'SD status'
+                        session.send_ioctrl(0, IOTYPE_GET_SD_STATUS_REQ, build_get_sd_status())
+                        for iotype, _ in session.poll_ioctrl(timeout=10):
+                            if iotype == IOTYPE_GET_SD_STATUS_RSP:
+                                break
+                        session.phase = 'settings read'
+                        session.send_ioctrl(0, IOTYPE_GET_ADVANCE_SETTINGS_REQ, bytes(4))
+                        for iotype, _ in session.poll_ioctrl(timeout=10):
+                            if iotype == IOTYPE_GET_ADVANCE_SETTINGS_RSP:
+                                break
+                    else:
+                        events = SdCardClient(session).list_events(end - args.hours * 3600, end)
         finally:
             print(f'Relay / SD query elapsed: {time.monotonic() - started:.1f} s')
             session.report()
+        if args.sd_status:
+            for label, expected in [('SD status', IOTYPE_GET_SD_STATUS_RSP),
+                                    ('Advanced settings', IOTYPE_GET_ADVANCE_SETTINGS_RSP)]:
+                found = any(kind == expected for (_, kind) in session.frames)
+                print(f'{label}: {"response received" if found else "no explicit response decoded"}')
+            return 0
         print(f'Events returned: {len(events)}')
         if not events:
             print('No events decoded; SD card may still contain recordings.')

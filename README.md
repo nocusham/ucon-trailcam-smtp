@@ -1,2 +1,44 @@
 # ucon-trailcam-smtp
-Self-hosted SMTP bridge for Ucon 4G trail cameras without firmware modifications
+
+Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmware modifications or paid cloud storage intended. The UBIA backend is still required for authentication and relay connectivity.
+
+## Status / Projektstand
+
+Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Motion notifications arrive in the app; recordings must be retrieved from the camera. Compatibility with the SDK is unverified. This initial prototype only tests login and optionally lists camera events. It does not download images or send email yet.
+
+## First test (Linux, Python 3.12+)
+
+```sh
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python probe.py
+```
+
+Enter your own Ucon credentials locally when prompted. Passwords and device credentials are not printed. The default test logs in and resolves the first registered device without contacting the camera directly. To select another registered device, use `--index 1` (zero-based).
+
+With the camera in a known test state, trigger a recording and close the mobile app before running:
+
+```sh
+python probe.py --events --hours 24
+```
+
+This makes one relay session and lists SD events. It may wake the camera and consume battery and mobile data. The test may take several minutes and may fail on incompatible models. No unattended polling or settings changes are performed. SDK diagnostics are suppressed to avoid exposing identifiers; never publish raw credentials, device UIDs, tokens, or packet captures without redaction. Test only devices you own or are authorized to access.
+
+## Roadmap
+
+- [ ] Verify account login and H4 relay compatibility.
+- [ ] Verify SD event listing, thumbnails and original JPEG download.
+- [ ] Test wake from sleep and personal SIM compatibility.
+- [ ] Investigate whether backend exposes free motion-event metadata.
+- [ ] Android: forward Ucon notifications via an authenticated HTTPS webhook, with debounce and retry.
+- [ ] Implement SQLite-backed event and delivery queue; deduplicate by camera and event/file identity.
+- [ ] Implement SMTP with TLS certificate verification; retry failures and document possible duplicates after uncertain delivery.
+- [ ] Add tests with synthetic fixtures, Docker and setup documentation in German and English.
+
+## References
+
+- https://github.com/ArtemKiyashko/p4p_camera_sdk — existing Ucon cellular relay and SD-card protocol library.
+- https://github.com/mahumadad/ubox-p4p — related UBIA protocol research.
+
+Unofficial project; not affiliated with Ucon or UBIA. No vendor code or firmware is bundled.

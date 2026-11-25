@@ -12,7 +12,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from h4_events import list_events_staged
 from h4_transport import TransportTrace, kcp_segments
-from h4_download import native_frames, download_photo
+from h4_download import native_frames, download_photo, MAX_SIZE
 from pathlib import Path
 import time
 
@@ -150,6 +150,10 @@ def main():
                         help='Download one latest activity photo after a successful event list')
     parser.add_argument('--photo-time', type=dt.datetime.fromisoformat,
                         help='Explicit photo event time, including UTC offset; permits a network-wake control test')
+    parser.add_argument('--reference-size', type=int,
+                        help='Diagnostic only: known original size from a successful app capture')
+    parser.add_argument('--reference-sha256',
+                        help='Required SHA256 of the exact reference original')
     parser.add_argument('--kcp-window', choices=(256, 512), type=int, default=256,
                         help='KCP receive window; default SDK 256, Android observed 512')
     parser.add_argument('--tz', default='Europe/Berlin', help='Time zone for --day (default Europe/Berlin)')
@@ -163,6 +167,13 @@ def main():
             parser.error('--photo-time requires --download-photo and an explicit UTC offset')
         if args.photo_time.microsecond:
             parser.error('--photo-time must identify a whole second')
+    if args.reference_size is not None or args.reference_sha256 is not None:
+        if (args.download_photo != 'original' or args.photo_time is None
+                or args.reference_size is None or not 0 < args.reference_size <= MAX_SIZE
+                or args.reference_sha256 is None or len(args.reference_sha256) != 64
+                or any(c not in '0123456789abcdefABCDEF' for c in args.reference_sha256)):
+            parser.error('Reference test requires --download-photo original, --photo-time, '
+                         '--reference-size and a 64-digit --reference-sha256')
     sdk_version = version('p4p-camera-sdk')
     print(f'SDK version: {sdk_version}')
     if sdk_version != '0.1.16':
@@ -271,7 +282,9 @@ def main():
                             if destination.exists():
                                 raise FileExistsError('Local destination already exists')
                             session.stage_notes.append(f'Photo candidate: timestamp={event.start_time}, event_type={event.event_type}, file_type={kind}, length={event.length}, src_event={event.src_event}, src_status={event.src_status}')
-                            download_photo(session, event, kind, destination)
+                            download_photo(session, event, kind, destination,
+                                           reference_size=args.reference_size,
+                                           reference_sha256=args.reference_sha256)
         finally:
             print(f'Relay / SD query elapsed: {time.monotonic() - started:.1f} s')
             session.report()

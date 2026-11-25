@@ -1,6 +1,7 @@
+import hashlib
 import struct
 import unittest
-from h4_download import bulk_request, PhotoBlocks, native_frames
+from h4_download import bulk_request, PhotoBlocks, native_frames, transfer_size, check_reference
 
 
 class DownloadTests(unittest.TestCase):
@@ -35,3 +36,24 @@ class DownloadTests(unittest.TestCase):
     def test_zero_size_bulk_request_rejected(self):
         with self.assertRaises(ValueError):
             bulk_request(2, 1700000000, 0)
+
+    def test_reference_size_only_overrides_zero(self):
+        self.assertEqual(transfer_size(0, 275548), 275548)
+        self.assertEqual(transfer_size(275548, 275548), 275548)
+        with self.assertRaises(ValueError):
+            transfer_size(0)
+        with self.assertRaises(ValueError):
+            transfer_size(123, 275548)
+
+    def test_reference_hash_must_match(self):
+        data = b'fake JPEG for hash test'
+        self.assertEqual(check_reference(data, hashlib.sha256(data).hexdigest()),
+                         hashlib.sha256(data).hexdigest())
+        with self.assertRaises(ValueError):
+            check_reference(data, '0' * 64)
+
+    def test_reference_original_request(self):
+        req = bulk_request(3, 1700000000, 275548)
+        self.assertEqual(struct.unpack_from('<H', req, 1212)[0], 230)
+        self.assertEqual(struct.unpack_from('<I', req, 1216)[0], 0)
+        self.assertEqual(struct.unpack_from('<I', req, 1220)[0], 275548)

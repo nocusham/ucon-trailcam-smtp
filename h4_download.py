@@ -76,7 +76,32 @@ class PhotoBlocks:
         return data
 
 
-def download_photo(session, event, file_type, destination):
+def transfer_size(reported, reference_size=None):
+    """Do not substitute a different positive size, or guess a missing size."""
+    if reference_size is not None and not 0 < reference_size <= MAX_SIZE:
+        raise ValueError('Invalid reference size')
+    if reported == 0 and reference_size is not None:
+        return reference_size
+    if not 0 < reported <= MAX_SIZE:
+        raise ValueError('Invalid reported size')
+    if reference_size is not None and reported != reference_size:
+        raise ValueError('Reported size differs from reference')
+    return reported
+
+
+def check_reference(data, reference_sha256):
+    actual = hashlib.sha256(data).hexdigest()
+    if reference_sha256 is not None and actual != reference_sha256.lower():
+        raise ValueError('Reference SHA256 mismatch')
+    return actual
+
+
+def download_photo(session, event, file_type, destination, *,
+                   reference_size=None, reference_sha256=None):
+    if (reference_size is None) != (reference_sha256 is None):
+        raise ValueError('Reference size and hash must be supplied together')
+    if reference_size is not None and file_type != 3:
+        raise ValueError('Reference override restricted to original photos')
     notes = session.stage_notes
     session.phase = 'photo metadata'
     session.native_download = True
@@ -94,9 +119,16 @@ def download_photo(session, event, file_type, destination):
         raise TimeoutError('No file metadata response 261')
     notes.append(f'Photo metadata: size={size} bytes; checksum flag={flag}; '
                  f'body_length={len(body)}; filename_length={body[6]}')
-    if size == 0:
+    if size == 0 and reference_size is None:
         notes.append('Camera reported zero file size; data request not sent.')
-        raise ValueError('Zero file size in response 261')
+    if size == 0 and reference_size is not None:
+        notes.append('Reference experiment: zero-size metadata; using independently known size.')
+    if reference_size is not None and size not in (0, reference_size):
+        notes.append('Reported nonzero size differs from reference; stopping.')
+    reported_size = size
+    size = transfer_size(size, reference_size)
+    notes.append(f'Data request: timestamp={event.start_time}, file_type={file_type}, '
+                 f'size={size}, blocks={(size + CHUNK - 1)//CHUNK}')
     request = bulk_request(file_type, event.start_time, size)
     blocks = PhotoBlocks(file_type, event.start_time, size)
     session.phase = 'photo data'
@@ -110,9 +142,16 @@ def download_photo(session, event, file_type, destination):
     finally:
         notes.append(f'JPEG blocks: {len(blocks.parts)}/{(size + CHUNK - 1)//CHUNK}')
     data = blocks.image()
-    match = hashlib.md5(data).digest() == checksum
-    notes.append(f'Metadata MD5 comparison: {"match" if match else "mismatch (semantics unverified)"}')
-    notes.append(f'JPEG size/signature checked; SHA256={hashlib.sha256(data).hexdigest()}')
+    if reported_size > 0:
+        match = hashlib.md5(data).digest() == checksum
+        notes.append(f'Metadata MD5 comparison: {"match" if match else "mismatch (semantics unverified)"}')
+    actual = hashlib.sha256(data).hexdigest()
+    notes.append(f'JPEG size/signature checked; SHA256={actual}')
+    if reference_sha256 is not None:
+        if actual != reference_sha256.lower():
+            notes.append('Reference SHA256 mismatch; no file saved.')
+        check_reference(data, reference_sha256)
+        notes.append('Reference SHA256: exact match')
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open('xb') as f:

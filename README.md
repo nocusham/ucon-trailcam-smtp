@@ -130,6 +130,20 @@ One record in test R had an unfamiliar event type 84 and length 17448. The list 
 
 Next: capture a successful Android thumbnail/original retrieval of the exact type-4 recording (prefer a short capture limited to Ucon), and if needed one failed Python transfer using tcpdump filtered to UDP port 20001. Compare 260/261/262/263 and the session state. Do not publish packet captures, image content, authentication material or personal identifiers. No further protocol changes until the exact activity-photo transfer is compared.
 
+## Test S: successful Android original-photo capture
+
+A third private app capture shows a complete type-4 original JPEG transfer: metadata size 275548 bytes, type 3, 230 blocks, 5120x2880 pixels. The file was reconstructed and decoded offline with Pillow. The direct original download did not require a thumbnail of the same event beforehand. The app had already downloaded other images in the same session. Its 262 payload is byte-compatible with bulk_request(timestamp, type 3, size 275548), using zero offset. The captured 260 request contains unexplained fields instead of the event timestamp/length/flags; their meaning remains unknown and they are not copied. The previously unusual event type 84 at 18:06:27 local appears as a normal type-3 record in this capture, so it is not established as a distinct event type.
+
+A diagnostic reference mode permits using a known original size if the standard metadata response explicitly reports zero. It still sends the normal metadata request, stops on timeout or a conflicting positive size, and requires explicit event selection and a known SHA256. It saves only a complete JPEG whose SHA256 matches the supplied reference. This tests whether 262 can retrieve the exact file despite the zero metadata response, without guessing opaque 260 fields. It is not the default download behavior, not yet live-validated, and does not solve metadata discovery for arbitrary originals. Exact event timestamps, image hashes and captures are kept out of the public repository.
+
+Example syntax (substitute your own values from a successful local app capture):
+
+```sh
+python probe.py --events --day YYYY-MM-DD --download-photo original \\
+  --photo-time YYYY-MM-DDTHH:MM:SS+01:00 \\
+  --reference-size 275548 --reference-sha256 YOUR_64_DIGIT_SHA256
+```
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

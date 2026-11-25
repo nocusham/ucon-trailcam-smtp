@@ -25,7 +25,7 @@ class FakeSession:
         self.polls += 1
         if self.polls == 1 and self.settings:
             yield 961, bytes(368)
-        elif self.polls == 4:
+        elif self.polls == 4 or (self.polls == 3 and not any(c[0] == 'av' for c in self.calls if isinstance(c, tuple))):
             header = bytearray(12)
             header[7] = 2
             header[8] = 2
@@ -47,3 +47,10 @@ class StagedTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             list_events_staged(session, 1699999999, 1700000100)
         self.assertEqual(session.calls, ['live', (960, 0x07074C3F)])
+
+    def test_no_av_variant(self):
+        session = FakeSession()
+        events = list_events_staged(session, 1699999999, 1700000100, flow='no-av')
+        self.assertEqual(session.calls, ['live', (960, 0x07074C3F),
+                                         (256, 0x07074C3F)])
+        self.assertEqual(len(events), 2)

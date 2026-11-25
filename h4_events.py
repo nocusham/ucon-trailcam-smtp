@@ -4,7 +4,7 @@ from p4p_camera_sdk.sdcard import build_list_event, parse_event_record
 from p4p_camera_sdk.sdcard_client import SdCardEvent
 
 
-def list_events_staged(session, begin, end):
+def list_events_staged(session, begin, end, flow='app'):
     """Wait for settings response before issuing the observed SD sequence.
 
     Capture: settings + companion, response 961, AVCTRL, list + companion.
@@ -26,11 +26,16 @@ def list_events_staged(session, begin, end):
     # Continue processing KCP and keepalives during the observed short gap.
     for _ in session.poll_ioctrl(timeout=0.4):
         pass
-    session.phase = 'playback init'
-    session.send_avctrl(2, playrecord=0, streamindex=0, with_audio=1,
-                        st_time_day=0x07074C3F, param=0x3F0C0C4C)
-    for _ in session.poll_ioctrl(timeout=0.03):
-        pass
+    if flow == 'app':
+        session.phase = 'playback init'
+        session.send_avctrl(2, playrecord=0, streamindex=0, with_audio=1,
+                            st_time_day=0x07074C3F, param=0x3F0C0C4C)
+        for _ in session.poll_ioctrl(timeout=0.03):
+            pass
+    elif flow == 'no-av':
+        notes.append('Diagnostic variant: AVCTRL omitted.')
+    else:
+        raise ValueError('unknown SD flow')
     session.send_ioctrl_batch(0, [(256, build_list_event(begin, end, 0)),
                                   (0x07074C3F, bytes.fromhex('4f0c0cff'))])
     notes.append('SD list requested after settings response.')

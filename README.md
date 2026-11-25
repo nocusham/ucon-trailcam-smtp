@@ -78,6 +78,22 @@ python probe.py --events --day 2026-11-25 --tz Europe/Berlin
 
 The default event path now waits for live data, sends the initial pair, waits up to 15 s for 961, continues receiving for 0.4 s, then sends AVCTRL and the list request pair. It polls up to 20 s for list responses and preserves zero-length records. If initialization fails it stops without sending the list request. The previous behavior remains available as `--sdk-events`. The staged mode is experimental and has not been validated with the physical camera. No firmware or persistent settings are modified.
 
+## Staged test K: transport diagnostics
+
+Settings response 961 arrived 1.93 s after the initial request. Last decoded frame at +6.8 s, directly after AVCTRL and SD list requests; no 257 response. App capture confirms exactly the same calendar boundaries and AVCTRL payload as the probe. In the Android capture, KCP PUSH sequence numbers 0–4 were explicitly acknowledged after 117, 117, 207, 177 and 177 ms respectively. App outgoing PUSH segments advertised receive window 512; SDK 0.1.16 configures 256.
+
+The probe now reports outbound PUSH sequence/command, retransmissions, explicit ACK or cumulative UNA, last incoming relay/KCP traffic, and undrained buffer size, without raw packet content. ACK proves transport acknowledgement, not application execution.
+
+Controlled experiments (close the app, one session at a time):
+
+```sh
+python probe.py --events --day 2026-11-25 --sd-flow no-av
+python probe.py --events --day 2026-11-25 --sd-flow app
+python probe.py --events --day 2026-11-25 --sd-flow app --kcp-window 512
+```
+
+The first omits only AVCTRL, the second retains the prior sequence, and the third changes only the receive window relative to the second. The alternative paths and telemetry are experimental. A missing application response may still be due to framing or an incomplete session, not necessarily a rejected command.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

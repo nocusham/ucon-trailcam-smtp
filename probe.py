@@ -11,6 +11,7 @@ from importlib.metadata import version
 from unittest.mock import patch
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from h4_events import list_events_staged
+from h4_transport import TransportTrace
 import time
 
 from p4p_camera_sdk.credentials import CredentialClient
@@ -38,6 +39,9 @@ class DiagnosticRelay(RelaySession):
         self.last_frame = {}
         self.encoded_packets = 0
         self.recovered = Counter()
+        self.transport = TransportTrace()
+        self.relay_rx = Counter()
+        self.relay_last = {}
 
     def _drain_frames(self):
         frames = super()._drain_frames()
@@ -90,6 +94,11 @@ class DiagnosticRelay(RelaySession):
     def report(self):
         print(f'Encoded outbound P4P/KCP packets: {self.encoded_packets}')
         print('Recovered native IOCTRL responses: ' + str(dict(self.recovered)))
+        self.transport.report()
+        print('Inbound decoded relay datagrams:')
+        for kind, count in sorted(self.relay_rx.items()):
+            print(f'  0x{kind:08x}: {count}, last +{self.relay_last[kind]:.2f}s')
+        print(f'Undrained application buffer: {len(self._app_buf)} bytes')
         print('IOCTRL requests queued (not proof of delivery):')
         for (phase, iotype), count in sorted(self.sent.items()):
             print(f'  {phase}: 0x{iotype:08x} ({iotype}) x {count}')
@@ -121,6 +130,10 @@ def main():
     window = parser.add_mutually_exclusive_group()
     window.add_argument('--hours', type=int, default=24)
     window.add_argument('--day', type=dt.date.fromisoformat, help='Calendar day YYYY-MM-DD')
+    parser.add_argument('--sd-flow', choices=('app', 'no-av'), default='app',
+                        help='Staged app sequence or diagnostic variant omitting AVCTRL')
+    parser.add_argument('--kcp-window', choices=(256, 512), type=int, default=256,
+                        help='KCP receive window; default SDK 256, Android observed 512')
     parser.add_argument('--tz', default='Europe/Berlin', help='Time zone for --day (default Europe/Berlin)')
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
@@ -152,20 +165,37 @@ def main():
         started = time.monotonic()
         session.started = started
         original_wrap = sdk_relay.wrap_relay_kcp
+        original_decode = sdk_relay.try_decode
 
         def encoded_wrap(raw, routing_tag):
             session.encoded_packets += 1
+            session.transport.observe('out', bytes(raw), time.monotonic() - started)
             return encode(original_wrap(raw, routing_tag))
 
+        def observed_decode(raw):
+            plain = original_decode(raw)
+            if len(plain) >= 16 and plain[:4] == bytes.fromhex('07181000'):
+                kind = int.from_bytes(plain[8:12], 'little')
+                elapsed = time.monotonic() - started
+                session.relay_rx[kind] += 1
+                session.relay_last[kind] = elapsed
+                if kind == 0x0042140a:
+                    session.transport.observe('in', plain[16:], elapsed)
+            return plain
+
         print('H4 compatibility: encoded outbound KCP; native RDT control recovery')
+        print(f'SD flow: {args.sd_flow}; KCP receive window: {args.kcp_window}')
         if args.events or args.sdk_events:
             print(f'Query UTC: {dt.datetime.fromtimestamp(begin, dt.timezone.utc).isoformat()}'
               f' to {dt.datetime.fromtimestamp(end, dt.timezone.utc).isoformat()}')
         try:
             with (contextlib.redirect_stdout(io.StringIO()),
                   contextlib.redirect_stderr(io.StringIO()),
-                  patch.object(sdk_relay, 'wrap_relay_kcp', encoded_wrap)):
+                  patch.object(sdk_relay, 'wrap_relay_kcp', encoded_wrap),
+                  patch.object(sdk_relay, 'try_decode', observed_decode)):
                 with session:
+                    if args.kcp_window != 256:
+                        session.kcp.set_window_size(128, args.kcp_window)
                     if args.sd_status:
                         session.wait_for_live_stream()
                         session.phase = 'SD status'
@@ -181,7 +211,7 @@ def main():
                     elif args.sdk_events:
                         events = SdCardClient(session).list_events(begin, end)
                     else:
-                        events = list_events_staged(session, begin, end)
+                        events = list_events_staged(session, begin, end, flow=args.sd_flow)
         finally:
             print(f'Relay / SD query elapsed: {time.monotonic() - started:.1f} s')
             session.report()

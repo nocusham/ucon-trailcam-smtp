@@ -80,8 +80,9 @@ def download_photo(session, event, file_type, destination):
     notes = session.stage_notes
     session.phase = 'photo metadata'
     session.native_download = True
-    session.send_ioctrl(0, 260, build_download_sd_file(file_type, event.start_time,
-                         event.length, event.src_event, event.src_status))
+    payload = build_download_sd_file(file_type, event.start_time,
+                                     event.length, event.src_event, event.src_status)
+    session.send_ioctrl(0, 260, payload)
     size = None
     for kind, body in session.poll_ioctrl(timeout=15):
         if kind == 261 and len(body) >= 28:
@@ -91,7 +92,11 @@ def download_photo(session, event, file_type, destination):
             break
     if size is None:
         raise TimeoutError('No file metadata response 261')
-    notes.append(f'Photo metadata: size={size} bytes; checksum flag={flag}')
+    notes.append(f'Photo metadata: size={size} bytes; checksum flag={flag}; '
+                 f'body_length={len(body)}; filename_length={body[6]}')
+    if size == 0:
+        notes.append('Camera reported zero file size; data request not sent.')
+        raise ValueError('Zero file size in response 261')
     request = bulk_request(file_type, event.start_time, size)
     blocks = PhotoBlocks(file_type, event.start_time, size)
     session.phase = 'photo data'

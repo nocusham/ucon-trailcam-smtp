@@ -11,7 +11,7 @@ from importlib.metadata import version
 from unittest.mock import patch
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from h4_events import list_events_staged
-from h4_transport import TransportTrace
+from h4_transport import TransportTrace, kcp_segments
 from h4_download import native_frames, download_photo
 from pathlib import Path
 import time
@@ -20,7 +20,7 @@ from p4p_camera_sdk.credentials import CredentialClient
 from p4p_camera_sdk.relay import RelaySession
 import p4p_camera_sdk.relay as sdk_relay
 from p4p_camera_sdk.p4p_crypto import encode
-from h4_compat import recover_control
+from h4_compat import recover_control, is_alive_response
 from p4p_camera_sdk.sdcard_client import SdCardClient
 from p4p_camera_sdk.sdcard import (
     IOTYPE_GET_SD_STATUS_REQ, IOTYPE_GET_SD_STATUS_RSP, build_get_sd_status,
@@ -45,6 +45,9 @@ class DiagnosticRelay(RelaySession):
         self.relay_rx = Counter()
         self.relay_last = {}
         self.native_download = False
+        self.binding_replies = Counter()
+        self.binding_conv = None
+        self.inbound_conv = Counter()
 
     def _drain_frames(self):
         if self.native_download:
@@ -100,6 +103,11 @@ class DiagnosticRelay(RelaySession):
     def report(self):
         print(f'Encoded outbound P4P/KCP packets: {self.encoded_packets}')
         print('Recovered native IOCTRL responses: ' + str(dict(self.recovered)))
+        print('Relay binding replies: ' + str(dict(self.binding_replies)))
+        if self.binding_conv is not None:
+            matching = self.inbound_conv[self.binding_conv]
+            print(f'Inbound KCP segments matching selected conversation: '
+                  f'{matching}/{sum(self.inbound_conv.values())}')
         self.transport.report()
         print('Inbound decoded relay datagrams:')
         for kind, count in sorted(self.relay_rx.items()):
@@ -140,6 +148,8 @@ def main():
                         help='H4 no-AV default or experimental app sequence')
     parser.add_argument('--download-photo', choices=('thumbnail', 'original'),
                         help='Download one latest activity photo after a successful event list')
+    parser.add_argument('--photo-time', type=dt.datetime.fromisoformat,
+                        help='Explicit photo event time, including UTC offset; permits a network-wake control test')
     parser.add_argument('--kcp-window', choices=(256, 512), type=int, default=256,
                         help='KCP receive window; default SDK 256, Android observed 512')
     parser.add_argument('--tz', default='Europe/Berlin', help='Time zone for --day (default Europe/Berlin)')
@@ -148,6 +158,11 @@ def main():
         parser.error('index must be nonnegative; hours must be 1–168')
     if args.download_photo and (not args.events or args.sd_flow != 'no-av'):
         parser.error('--download-photo requires --events with the no-av flow')
+    if args.photo_time is not None:
+        if not args.download_photo or args.photo_time.utcoffset() is None:
+            parser.error('--photo-time requires --download-photo and an explicit UTC offset')
+        if args.photo_time.microsecond:
+            parser.error('--photo-time must identify a whole second')
     sdk_version = version('p4p-camera-sdk')
     print(f'SDK version: {sdk_version}')
     if sdk_version != '0.1.16':
@@ -176,6 +191,17 @@ def main():
         session.started = started
         original_wrap = sdk_relay.wrap_relay_kcp
         original_decode = sdk_relay.try_decode
+        original_parse = sdk_relay.parse_rlystreamrsp
+
+        def compact_binding(plain):
+            if not is_alive_response(plain):
+                session.binding_replies['ignored candidate or unexpected reply'] += 1
+                return None
+            reply = original_parse(plain)
+            if reply is not None:
+                session.binding_replies['accepted compact alive'] += 1
+                session.binding_conv = int.from_bytes(reply['conv'], 'little')
+            return reply
 
         def encoded_wrap(raw, routing_tag):
             session.encoded_packets += 1
@@ -191,6 +217,8 @@ def main():
                 session.relay_last[kind] = elapsed
                 if kind == 0x0042140a:
                     session.transport.observe('in', plain[16:], elapsed)
+                    for conv, *_ in kcp_segments(plain[16:]):
+                        session.inbound_conv[conv] += 1
             return plain
 
         print('H4 compatibility: encoded outbound KCP; native RDT control recovery')
@@ -202,7 +230,8 @@ def main():
             with (contextlib.redirect_stdout(io.StringIO()),
                   contextlib.redirect_stderr(io.StringIO()),
                   patch.object(sdk_relay, 'wrap_relay_kcp', encoded_wrap),
-                  patch.object(sdk_relay, 'try_decode', observed_decode)):
+                  patch.object(sdk_relay, 'try_decode', observed_decode),
+                  patch.object(sdk_relay, 'parse_rlystreamrsp', compact_binding)):
                 with session:
                     if args.kcp_window != 256:
                         session.kcp.set_window_size(128, args.kcp_window)
@@ -224,15 +253,24 @@ def main():
                         events = list_events_staged(session, begin, end, flow=args.sd_flow)
                         if args.download_photo:
                             stage = 'experimental JPEG download'
-                            photos = [e for e in events if e.event_type == 4 and e.length == 65535]
+                            photos = [e for e in events if e.length == 65535]
+                            if args.photo_time is not None:
+                                target = int(args.photo_time.timestamp())
+                                photos = [e for e in photos if e.start_time == target]
+                                if len(photos) != 1:
+                                    session.stage_notes.append('Explicit photo time did not select exactly one photo.')
+                                    raise RuntimeError('Photo selection ambiguous or missing')
+                            else:
+                                photos = [e for e in photos if e.event_type == 4]
                             if not photos:
-                                raise RuntimeError('No activity photo candidate')
+                                session.stage_notes.append('No matching photo candidate.')
+                                raise RuntimeError('No photo candidate')
                             event = max(photos, key=lambda e: e.start_time)
                             kind = 2 if args.download_photo == 'thumbnail' else 3
-                            destination = Path('media') / f'activity_{event.start_time}_{args.download_photo}.jpg'
+                            destination = Path('media') / f'event{event.event_type}_{event.start_time}_{args.download_photo}.jpg'
                             if destination.exists():
                                 raise FileExistsError('Local destination already exists')
-                            session.stage_notes.append(f'Photo candidate: timestamp={event.start_time}, type={kind}')
+                            session.stage_notes.append(f'Photo candidate: timestamp={event.start_time}, event_type={event.event_type}, file_type={kind}, length={event.length}, src_event={event.src_event}, src_status={event.src_status}')
                             download_photo(session, event, kind, destination)
         finally:
             print(f'Relay / SD query elapsed: {time.monotonic() - started:.1f} s')

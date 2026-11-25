@@ -107,6 +107,19 @@ python probe.py --events --day 2026-11-25 --download-photo original
 
 These are explicit one-shot experiments: select the newest type-4 event with the observed photo sentinel 65535, use file type 2 or 3, and save in ignored media/ without overwriting. The metadata request uses the selected event record (some Android capture fields varied); exact request behavior and the new native download decoder remain to be validated live. No automatic retries or SMTP. A missing or incomplete file is an error, not success. Do not publish personal images.
 
+## Download tests O/P and compact relay binding
+
+Test O failed before sending commands: 1152 incoming KCP PUSH segments, no outgoing KCP packets or decoded frames. Both original app captures contain a 468-byte relay candidate (0x00421206) and a 36-byte alive reply (0x00421406). Only the alive reply contains the KCP conversation matching subsequent traffic at offset 24. SDK 0.1.16 may accept either reply as binding; the probe now restricts binding to the compact alive response and reports the count of incoming segments matching the chosen conversation, without printing identifiers. This is a plausible explanation for the intermittent startup failure, not verified on a failed Python packet capture.
+
+Test P listed 22/22 events, obtained ACK for 260 and received a 60-byte response 261 with size zero for a type-4 photo. No data request or file write occurred. In the Android capture, some successful metadata requests use the event's actual timestamp/length/flags, others use unexplained values; do not replay those opaque fields. First validate the deterministic thumbnail path for an activity photo and an explicitly chosen known network-wake photo. The second is a diagnostic exception, not a change to the normal activity-only selection.
+
+```sh
+python probe.py --events --day 2026-11-25 --download-photo thumbnail
+python probe.py --events --day 2026-11-25 --download-photo thumbnail --photo-time 2026-11-25T17:42:16+01:00
+```
+
+The known control event had a successful 5246-byte thumbnail in the Android capture (metadata request 260 with actual timestamp, length 65535, source event 3, status 1). The test may differ if the file has since been removed. Metadata diagnostics now report body length and filename length only. Zero-size responses remain errors and do not trigger a data request. A timestamp with an explicit UTC offset is required for manual selection. These changes are not live-validated. If the control succeeds and activity fails, capture a successful in-app download of the exact activity photo next. No paid storage, camera firmware changes or automatic polling added.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

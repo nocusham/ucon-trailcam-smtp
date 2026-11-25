@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from h4_compat import recover_control
+from h4_compat import recover_control, is_alive_response
 
 
 class ControlRecoveryTests(unittest.TestCase):
@@ -34,6 +34,13 @@ class ControlRecoveryTests(unittest.TestCase):
         frame = struct.pack('<IIII', 4, 0, len(body), 257) + body
         self.assertEqual(recover_control(frame, 0, 0x10004, b''),
                          (0x10004, b''))
+
+    def test_only_compact_alive_is_binding_response(self):
+        alive = struct.pack('<III', 0x00101807, 20, 0x00421406) + bytes(24)
+        candidate = struct.pack('<III', 0x00101807, 452, 0x00421206) + bytes(456)
+        self.assertTrue(is_alive_response(alive))
+        self.assertFalse(is_alive_response(candidate))
+        self.assertFalse(is_alive_response(alive + bytes(1)))
 
 
 if __name__ == '__main__':

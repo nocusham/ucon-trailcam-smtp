@@ -31,3 +31,7 @@ class DownloadTests(unittest.TestCase):
         session = Session()
         self.assertEqual(list(native_frames(session)), [(263, body)])
         self.assertEqual(session._app_buf, b'')
+
+    def test_zero_size_bulk_request_rejected(self):
+        with self.assertRaises(ValueError):
+            bulk_request(2, 1700000000, 0)

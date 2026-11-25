@@ -27,3 +27,9 @@ def recover_control(before, remaining_length, kind, payload):
     if command == 257 and (len(body) < 12 or len(body) < 12 + body[7] * 8):
         return kind, payload
     return command, body
+
+
+def is_alive_response(plain):
+    """H4 KCP binding comes from the compact 36-byte alive reply only."""
+    return (len(plain) == 36 and plain[:4] == b'\x07\x18\x10\x00'
+            and struct.unpack_from('<I', plain, 8)[0] == 0x00421406)

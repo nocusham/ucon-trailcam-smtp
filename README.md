@@ -4,7 +4,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmwa
 
 ## Status / Projektstand
 
-Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Motion notifications arrive in the app; recordings must be retrieved from the camera. Compatibility with the SDK is unverified. This initial prototype only tests login and optionally lists camera events. It does not download images or send email yet.
+Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Compatibility with the SDK is unverified. This initial prototype only tests login and optionally lists camera events. It does not download images or send email yet.
 
 ## First test (Linux, Python 3.12+)
 
@@ -30,8 +30,10 @@ This makes one relay session and lists SD events. It may wake the camera and con
 - [ ] Verify account login and H4 relay compatibility.
 - [ ] Verify SD event listing, thumbnails and original JPEG download.
 - [ ] Test wake from sleep and personal SIM compatibility.
-- [ ] Investigate whether backend exposes free motion-event metadata.
-- [ ] Android: forward Ucon notifications via an authenticated HTTPS webhook, with debounce and retry.
+- [ ] Investigate whether the backend exposes motion-event metadata without a cloud subscription; do not assume notifications are available.
+- [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.
+- [ ] If no passive event signal is available, evaluate configurable low-frequency polling with backoff, overlapping query windows and no concurrent sessions; leave unattended polling disabled until measured.
+- [ ] Optional: Android notification webhook only for configurations where notifications are actually available.
 - [ ] Implement SQLite-backed event and delivery queue; deduplicate by camera and event/file identity.
 - [ ] Implement SMTP with TLS certificate verification; retry failures and document possible duplicates after uncertain delivery.
 - [ ] Add tests with synthetic fixtures, Docker and setup documentation in German and English.

@@ -9,6 +9,8 @@ import logging
 from collections import Counter
 from importlib.metadata import version
 from unittest.mock import patch
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from h4_events import list_events_staged
 import time
 
 from p4p_camera_sdk.credentials import CredentialClient
@@ -114,8 +116,12 @@ def main():
     parser.add_argument('--index', type=int, default=0)
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--events', action='store_true', help='Explicitly request SD events (may wake camera)')
+    modes.add_argument('--sdk-events', action='store_true', help='Original SDK event sequence for comparison')
     modes.add_argument('--sd-status', action='store_true', help='Test read-only SD status and settings requests')
-    parser.add_argument('--hours', type=int, default=24)
+    window = parser.add_mutually_exclusive_group()
+    window.add_argument('--hours', type=int, default=24)
+    window.add_argument('--day', type=dt.date.fromisoformat, help='Calendar day YYYY-MM-DD')
+    parser.add_argument('--tz', default='Europe/Berlin', help='Time zone for --day (default Europe/Berlin)')
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
@@ -133,10 +139,15 @@ def main():
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             device = asyncio.run(CredentialClient(account, password).get_device(index=args.index))
         print('Account login and device discovery successful.')
-        if not (args.events or args.sd_status):
+        if not (args.events or args.sdk_events or args.sd_status):
             return 0
         stage = 'camera relay session / SD status' if args.sd_status else 'camera relay session / SD event listing'
         end = int(time.time())
+        begin = end - args.hours * 3600
+        if args.day:
+            tz = ZoneInfo(args.tz)
+            begin = int(dt.datetime.combine(args.day, dt.time.min, tzinfo=tz).timestamp())
+            end = int(dt.datetime.combine(args.day + dt.timedelta(days=1), dt.time.min, tzinfo=tz).timestamp())
         session = DiagnosticRelay(device.device_uid, device.device_password)
         started = time.monotonic()
         session.started = started
@@ -147,8 +158,8 @@ def main():
             return encode(original_wrap(raw, routing_tag))
 
         print('H4 compatibility: encoded outbound KCP; native RDT control recovery')
-        if args.events:
-            print(f'Query UTC: {dt.datetime.fromtimestamp(end - args.hours * 3600, dt.timezone.utc).isoformat()}'
+        if args.events or args.sdk_events:
+            print(f'Query UTC: {dt.datetime.fromtimestamp(begin, dt.timezone.utc).isoformat()}'
               f' to {dt.datetime.fromtimestamp(end, dt.timezone.utc).isoformat()}')
         try:
             with (contextlib.redirect_stdout(io.StringIO()),
@@ -167,11 +178,15 @@ def main():
                         for iotype, _ in session.poll_ioctrl(timeout=10):
                             if iotype == IOTYPE_GET_ADVANCE_SETTINGS_RSP:
                                 break
+                    elif args.sdk_events:
+                        events = SdCardClient(session).list_events(begin, end)
                     else:
-                        events = SdCardClient(session).list_events(end - args.hours * 3600, end)
+                        events = list_events_staged(session, begin, end)
         finally:
             print(f'Relay / SD query elapsed: {time.monotonic() - started:.1f} s')
             session.report()
+            for note in getattr(session, 'stage_notes', []):
+                print(note)
         if args.sd_status:
             for label, expected in [('SD status', IOTYPE_GET_SD_STATUS_RSP),
                                     ('Advanced settings', IOTYPE_GET_ADVANCE_SETTINGS_RSP)]:

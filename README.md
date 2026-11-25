@@ -66,11 +66,24 @@ python -m pip install -r requirements.txt
 python probe.py --events --hours 24
 ```
 
+## H4 live validation and staged SD request (2026-11-25)
+
+With encoded KCP enabled, `--sd-status` received native settings response 961 (368 bytes). Live video continued until +16.4 s; the earlier stream stopped around +6.8 s. SD status 521 was not decoded. The original SDK event sequence still stopped early (+6.5 s) with no list response, so full SD compatibility is not established.
+
+The Android SD capture shows initial settings + companion at 7.540 s, settings response at 9.319 s, AVCTRL at 9.722 s, event request + companion at 9.753 s and list response at 9.930 s. It also queries local midnight to next midnight (Europe/Berlin, UTC 23:00 to 23:00 on these dates). This suggests testing a staged initialization rather than sending all commands immediately. The app timing does not prove that waiting for settings is required.
+
+```sh
+python probe.py --events --day 2026-11-25 --tz Europe/Berlin
+```
+
+The default event path now waits for live data, sends the initial pair, waits up to 15 s for 961, continues receiving for 0.4 s, then sends AVCTRL and the list request pair. It polls up to 20 s for list responses and preserves zero-length records. If initialization fails it stops without sending the list request. The previous behavior remains available as `--sdk-events`. The staged mode is experimental and has not been validated with the physical camera. No firmware or persistent settings are modified.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
 - [x] Compare Android card-playback traffic with SDK code; identify outgoing encoding and RDT control parsing discrepancies.
-- [ ] Validate both compatibility fixes on H4 with live tests.
+- [x] Validate outbound encoding and native settings response recovery on H4.
+- [ ] Validate staged event retrieval and native event response recovery on H4.
 - [ ] Verify SD event listing, thumbnails and original JPEG download.
 - [ ] Test wake from sleep and personal SIM compatibility.
 - [ ] Investigate whether the backend exposes motion-event metadata without a cloud subscription; do not assume notifications are available.

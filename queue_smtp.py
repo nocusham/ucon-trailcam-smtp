@@ -16,20 +16,23 @@ class DeliveryError(Exception):
     pass
 
 
-def ready_rows(db, begin, end, limit, state='downloaded'):
+def ready_rows(db, begin, end, limit, state='downloaded', camera_uid=None):
     if state not in ('downloaded', 'sent'):
         raise DeliveryError('Invalid selection state')
+    scope = ' AND camera_uid=?' if camera_uid is not None else ''
+    params = (state, begin, end) + ((camera_uid,) if camera_uid is not None else ())
     count, = db.execute('SELECT count(*) FROM events WHERE state=? '
-                        'AND et_utc>=? AND et_utc<?', (state, begin, end)).fetchone()
+                        'AND et_utc>=? AND et_utc<?' + scope, params).fetchone()
     if not count:
         return []
     return db.execute('''SELECT e.camera_uid,e.itemid,e.et_utc,e.metadata_json,
                          d.sd_time,d.path,d.sha256,d.size,d.width,d.height
                          FROM events e LEFT JOIN downloads d
                          ON e.camera_uid=d.camera_uid AND e.itemid=d.itemid
-                         WHERE e.state=? AND e.et_utc>=? AND e.et_utc<?
-                         ORDER BY e.et_utc,e.camera_uid,e.itemid LIMIT ?''',
-                      (state, begin, end, limit)).fetchall()
+                         WHERE e.state=? AND e.et_utc>=? AND e.et_utc<?'''
+                      + (' AND e.camera_uid=?' if camera_uid is not None else '')
+                      + ' ORDER BY e.et_utc,e.camera_uid,e.itemid LIMIT ?',
+                      (*params, limit)).fetchall()
 
 
 def prepare(row, load_image, build_message, sender, recipient):
@@ -88,13 +91,17 @@ def message_batches(prepared, mode):
     return [(rows, msg)]
 
 
-def begin_delivery(db, rows, message_id):
+def begin_delivery(db, rows, message_id, route=None):
     with db:
         db.execute('BEGIN IMMEDIATE')
         db.execute('''CREATE TABLE IF NOT EXISTS deliveries (
             camera_uid TEXT NOT NULL, itemid TEXT NOT NULL,
             message_id TEXT NOT NULL, started_utc INTEGER NOT NULL,
             accepted_utc INTEGER, PRIMARY KEY(camera_uid,itemid))''')
+        if route is not None:
+            db.execute('''CREATE TABLE IF NOT EXISTS delivery_routes (
+                camera_uid TEXT NOT NULL, itemid TEXT NOT NULL,
+                route_json TEXT NOT NULL, PRIMARY KEY(camera_uid,itemid))''')
         started = int(time.time())
         for row in rows:
             uid, ident, stamp = row[:3]
@@ -104,6 +111,9 @@ def begin_delivery(db, rows, message_id):
                 raise DeliveryError('Event state changed before sending')
             db.execute('INSERT INTO deliveries VALUES (?,?,?,?,NULL)',
                        (uid, ident, message_id, started))
+            if route is not None:
+                db.execute('INSERT INTO delivery_routes VALUES (?,?,?)',
+                           (uid, ident, json.dumps(route, ensure_ascii=False)))
 
 
 def finish_delivery(db, rows):
@@ -121,7 +131,9 @@ def finish_delivery(db, rows):
 
 
 def process(db, rows, *, load_image, build_message, sender, recipient, send=None, emit=print,
-            mode='single'):
+            mode='single', route=None):
+    if len({row[0] for row in rows}) > 1:
+        raise DeliveryError('Mixed-camera SMTP batch refused; select a camera profile')
     # Verify the exact bytes attached to the message before any SMTP operation.
     prepared = [(row, prepare(row, load_image, build_message, sender, recipient)) for row in rows]
     for row, _ in prepared:
@@ -135,7 +147,7 @@ def process(db, rows, *, load_image, build_message, sender, recipient, send=None
         if send is None:
             continue
         # All events belonging to this message transition together.
-        begin_delivery(db, group, str(msg['Message-ID']))
+        begin_delivery(db, group, str(msg['Message-ID']), route)
         try:
             send(msg)
             finish_delivery(db, group)
@@ -175,6 +187,9 @@ def main():
         begin = int(dt.datetime.combine(args.day, dt.time.min, tzinfo=tz).timestamp())
         end = int(dt.datetime.combine(args.day + dt.timedelta(days=1), dt.time.min, tzinfo=tz).timestamp())
         with batch_lock(args.queue_db), closing(sqlite3.connect(args.queue_db, timeout=10)) as db:
+            cameras, = db.execute('SELECT count(DISTINCT camera_uid) FROM events').fetchone()
+            if cameras > 1:
+                raise DeliveryError('Multiple cameras require camera_smtp.py with explicit profiles')
             uncertain, = db.execute("SELECT count(*) FROM events WHERE state='uncertain' "
                                      'AND et_utc>=? AND et_utc<?', (begin, end)).fetchone()
             rows = ready_rows(db, begin, end, args.limit, 'sent' if args.preview_sent else 'downloaded')

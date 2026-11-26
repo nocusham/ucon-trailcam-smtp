@@ -1,0 +1,20 @@
+# Copy to config.local.toml, chmod 600, and replace placeholders locally.
+# Passwords are read from named environment variables only.
+[[cameras]]
+name = "testkamera"
+uid = "REPLACE_WITH_CAMERA_UID"
+enabled = true
+
+[cameras.smtp]
+host = "smtp.example.invalid"
+port = 587
+security = "starttls"
+from = "sender@example.invalid"
+to = "recipient@example.invalid"
+username = "sender@example.invalid"
+password_env = "SMTP_PASSWORD"
+mode = "single"
+limit = 3
+
+# Add another [[cameras]] block with a different UID and its own SMTP table.
+# Revierwelt recipients must be unique and mode must be single.

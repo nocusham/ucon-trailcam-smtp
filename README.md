@@ -407,6 +407,21 @@ python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 
 
 Expected message/attachment plan: single=3 messages with one attachment each, grouped=1 message with three attachments. --preview-sent cannot be combined with --send. Do not reset sent rows. Five new tests passed locally (11 queue SMTP tests total); grouped MIME serialization, filename and bytes, receipt transitions, preview and Revierwelt guard were tested using synthetic JPEGs and injected helpers. Full integration and real grouped delivery have not yet been tested. Continue on infra-vm-06; LXC and Revierwelt live tests remain deferred.
 
+## Per-camera SMTP profiles
+
+The user confirmed separate emails; the mail client had grouped them into a conversation. All 88 tests and both preview plans passed, and the SHA256 of the saved mail attachment exactly matches the SD original. Revierwelt assigns each camera by recipient email address; other cameras may send only to a private mailbox.
+
+Copy `config.example.toml` to `config.local.toml` (ignored by Git; chmod 600), replace the UID and private SMTP settings locally, and use named password environment variables. Find the UID with `sqlite3 -readonly data/events-batch-test.sqlite3 'SELECT DISTINCT camera_uid FROM events;'`; do not publish the output. Camera names are aliases (ASCII letters, digits, hyphen, underscore); UIDs are stable identities, not app indices. Each profile has its own enabled flag, host, port, security (none/starttls/tls), sender, exactly one recipient, optional username/password environment variable, mode (single/grouped), and limit 1–10. Defaults: STARTTLS, corresponding port, single, limit 3. No global recipient or password fallback. Unconfigured and disabled cameras are skipped. Duplicate names, UIDs and Revierwelt recipients are rejected; Revierwelt requires single. Private recipients may be shared, but messages always contain only one camera's images. Passwords are not recorded in the database or logs. Route snapshot (alias, host, port, security, sender, recipient, mode) is saved in delivery_routes in the same transaction as the uncertain delivery receipt before SMTP; previous receipts remain unchanged.
+
+```sh
+cp config.example.toml config.local.toml
+chmod 600 config.local.toml
+nano config.local.toml
+python camera_smtp.py --config config.local.toml --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --preview-sent
+```
+
+With the correct UID this should preview three images and three messages without SMTP or delivery-state changes. Change the private profile's mode to grouped for a second preview. `--camera testkamera` selects just that alias. Never combine --preview-sent and --send. For new downloaded events, explicit --send uses the selected profile; continue using only the private test SMTP server. Global queue_smtp.py refuses databases containing multiple camera UIDs; the core refuses mixed-camera rows. A pre-existing uncertain event blocks that camera only; a new uncertain outcome stops the current invocation. Missing passwords stop the invocation before sending. One destination per camera; no fan-out or automated retries yet. Six new local tests with synthetic camera identities, distinct JPEG bytes, recipient headers and simulated SMTP transports passed alongside 11 existing queue SMTP tests. Real multi-camera cloud discovery, downloads and SMTP routing, and the continuous service are still unvalidated. LXC and Revierwelt testing remain deferred.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -442,7 +457,9 @@ Expected message/attachment plan: single=3 messages with one attachment each, gr
 - [x] Implement explicit queue SMTP batch and conservative uncertain-delivery state.
 - [x] Validate queue SMTP live with three accepted messages and no resend.
 - [x] Implement configurable single/grouped MIME delivery with Revierwelt guard.
-- [ ] Validate both message plans on the test server and implement bounded retry/recovery and production event filtering.
+- [x] Validate both message plans and exact received attachment hash on the test server.
+- [x] Implement per-camera SMTP profiles and routing receipts with synthetic multi-camera tests.
+- [ ] Validate profile preview on test server, implement UID-based multi-camera cloud/download orchestration and bounded retry/recovery.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.

@@ -4,7 +4,11 @@ This records development milestones, not a published production release.
 
 ## Unreleased — 2026-11-26
 
-### Validated on the reference H4 / Ubuntu test server
+### Reference camera identification (documentation correction)
+
+- The owner confirmed DEATTI as the manufacturer and DL04 as the model designation printed on the camera and retail box on 2026-11-26. The earlier `H4` label in the development history refers to this same reference camera; its origin is not established. It must not be presented as a confirmed manufacturer model or hardware designation. No runtime changes or new compatibility claims.
+
+### Validated on the reference DEATTI DL04 / Ubuntu test server
 
 - 175 tests passed; retention preview reported zero eligible originals, no file changes. Actual old-file deletion remains synthetic-test validated only. Documented 24-hour reference-server soak procedure before repository packaging/LXC transition.
 
@@ -20,7 +24,7 @@ This records development milestones, not a published production release.
 
 - Retry-aware UID-selected original download confirmed live (5120 x 2880, 256,172 bytes, 214 blocks, matching MD5, 10.4 s, estimated 601,949 UDP/IP bytes); immediate repeat opened no relay. Live failure path not exercised.
 
-- Authenticated H4 device-list schema includes integer dynamic_info.latest_active_utc, battery, signal, online_state and power flags. A subsequent live PIR test confirmed that latest_active_utc uses Unix seconds and updated ten seconds after the new event without opening the app or initiating P4P. Periodic contact without PIR and long-term reliability remain unverified; no individual telemetry values or private identifiers recorded here.
+- Authenticated DEATTI DL04 device-list schema includes integer dynamic_info.latest_active_utc, battery, signal, online_state and power flags. A subsequent live PIR test confirmed that latest_active_utc uses Unix seconds and updated ten seconds after the new event without opening the app or initiating P4P. Periodic contact without PIR and long-term reliability remain unverified; no individual telemetry values or private identifiers recorded here.
 
 - Independent alarm SMTP test accepted and received. Full expanded test-suite result not yet reported.
 
@@ -52,7 +56,7 @@ This records development milestones, not a published production release.
 
 - Optional independent TLS alarm SMTP profile, persistent login/API/per-camera incidents, delayed reminders, recovery and rate-limited failed alert retries; 11 standalone tests passed locally. Manual alert test available; automatic health checks and dispatch not integrated yet.
 
-- H4 protocol compatibility and complete KCP receive-queue draining, safe original filenames.
+- DEATTI DL04 protocol compatibility (historical `h4_*` module names) and complete KCP receive-queue draining, safe original filenames.
 - Persistent SQLite event, download, delivery and route receipts; conservative uncertain-delivery state.
 - Per-camera SMTP settings, Revierwelt single-attachment/unique-recipient guard, no mixed-camera batches.
 - Commented local TOML configuration and protected literal .env parser.
@@ -63,7 +67,7 @@ This records development milestones, not a published production release.
 
 - User-approved future feature, after the existing milestones: optional per-camera image footer on a derived SMTP attachment, with configured camera alias, event battery percentage and local capture date/time. Extend the canvas downwards; no overlay, cropping or resizing of the original photo. Keep the downloaded JPEG byte-for-byte intact. Specification: [IMAGE_FOOTER.md](docs/IMAGE_FOOTER.md). Documentation only during the active soak test.
 
-- Monitor actual failed downloads of known outstanding cloud events, not camera polling. Implement optional per-camera seven-day inactivity warning off by default, using latest_active_utc on H4 and no-photo-event fallback for models without the field. The alert label now says original download rather than camera connection; event-level integration is pending.
+- Monitor actual failed downloads of known outstanding cloud events, not camera polling. Implement optional per-camera seven-day inactivity warning off by default, using latest_active_utc on DEATTI DL04 and no-photo-event fallback for models without the field. The alert label now says original download rather than camera connection; event-level integration is pending.
 
 - Continuous service, persistent cursors, initial-start filtering, retry/recovery, multi-day test, native LXC/systemd and final Revierwelt validation.
 - Actual SD transfer through the configured UID path and real multi-camera operation.

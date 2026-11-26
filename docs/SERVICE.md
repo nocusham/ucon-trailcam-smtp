@@ -1,5 +1,7 @@
 # Integrated service: reference-server test
 
+Reference camera: **DEATTI DL04**, as confirmed on the camera and retail box. Historical notes and compatibility module names use `H4` for this same reference device; the origin of that label is unverified.
+
 The first sequential integrated service, trailcam_service.py, uses a single queue lock for the complete invocation. It reuses the cloud device response for relay credentials instead of logging in again for each download. A successful cloud cycle permits one bounded SD batch per enabled camera. Selection is based on individual due times, including across midnight, with up to one hour of capture timestamps (+6 seconds on each edge for matching); no full-day scan. A native camera filename is mandatory in the integrated path. Original MD5 and local receipt checks remain in place. No thumbnail substitution.
 
 Each action is independent and explicit:

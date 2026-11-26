@@ -1,5 +1,7 @@
 # Development history / Entwicklungshistorie
 
+**Reference camera identification — 2026-11-26:** The owner confirmed the manufacturer DEATTI and model DL04 on the camera and packaging. The historical label `H4` below refers to that same test camera. The origin of the label is not established by this archive; it is not a verified alternative model or internal hardware designation. Historical experiment wording is preserved. Current documentation uses DEATTI DL04.
+
 Historical investigation log, archived on 2026-11-26. These entries describe the state **at the time of each experiment**; older conclusions, instructions, planned features and test counts are superseded by later entries and the [current README](../README.md). Do not use this log as a current installation guide. Dates, file sizes and aggregate measurements document the H4 reference tests; actual credentials, private captures, images and device UIDs must remain private.
 
 Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmware modifications or paid cloud storage intended. The UBIA backend is still required for authentication and relay connectivity.

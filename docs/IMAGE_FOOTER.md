@@ -28,7 +28,7 @@ Die Fußzeile wird **unten an das vollständige Bild angehängt**. Sie darf kein
 - Schwarzer, deckender Hintergrund mit weißer, kontrastreicher Schrift. Keine halbtransparente Überlagerung.
 - Schrift und Abstände proportional zur Bildbreite, mit ausreichendem Rand; lange zulässige Kameranamen dürfen nicht zu abgeschnittenem Text führen.
 - Einzeiliger Standardstil, beispielsweise: `testkamera | Akku: 87% | 26.11.2026 14:58:21`.
-- Beispiel für die H4: 5120 x 2880 Pixel plus beispielhaft 120 Pixel Fußzeile ergibt 5120 x 3000 Pixel. Die 120 Pixel sind ein Rechenbeispiel, keine festgelegte Standardhöhe.
+- Beispiel für die DEATTI DL04: 5120 x 2880 Pixel plus beispielhaft 120 Pixel Fußzeile ergibt 5120 x 3000 Pixel. Die 120 Pixel sind ein Rechenbeispiel, keine festgelegte Standardhöhe.
 
 Das heruntergeladene JPEG bleibt bytegenau unverändert. Die Versandkopie muss neu als JPEG kodiert werden; daher ist sie nicht byteidentisch und die dekodierten Pixel können durch JPEG-Kompression geringfügig abweichen. Keine Veränderung des Bildausschnitts oder der Bildauflösung des Fotobereichs. Geeignete JPEG-Qualität und Schriftwahl werden bei der Umsetzung getestet.
 

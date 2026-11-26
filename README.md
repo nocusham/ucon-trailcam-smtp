@@ -2,7 +2,9 @@
 
 Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original SD-card images without modifying camera firmware. The UBIA backend is still required for authentication, event discovery and relay connectivity. Paid cloud storage is not intended; service entitlement and long-term availability are not guaranteed.
 
-**Development status (2026-11-26):** the H4 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested, including a bounded ten-cycle integrated service run. Actual failure recovery, longer-duration operation and production deployment still require validation. Do not treat this version as an unattended production release.
+**Reference camera: DEATTI DL04.** Manufacturer and model designation confirmed by the owner on both the camera and its retail box on 2026-11-26. Earlier development notes use the label `H4`; its origin and status as a vendor or internal hardware designation are unverified. In this repository it refers to the same reference test camera, not a separately validated model. Existing `h4_*` compatibility module names are retained for now.
+
+**Development status (2026-11-26):** the DEATTI DL04 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested, including a bounded ten-cycle integrated service run. Actual failure recovery, longer-duration operation and production deployment still require validation. Do not treat this version as an unattended production release.
 
 ## Current status / Aktueller Stand
 
@@ -14,7 +16,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 | Cloud watch | 6/6 successful polls with one login; new event and duplicate detection confirmed |
 | Camera selection | Exact UID from enabled local camera profile; live cloud query and relay credential discovery confirmed |
 | Cloud camera name | Server API returned the configured app display name; local alias remains independent |
-| SD matching | Three same-day cloud events matched H4 PIR stills with zero offset |
+| SD matching | Three same-day cloud events matched DEATTI DL04 PIR stills with zero offset |
 | Original download | Three 5120 x 2880 JPEGs in one 10.3 s relay session; all MD5 checks passed |
 | SQLite | Persistent event identity, downloaded/sent states and receipts; no duplicate download or send in repeat tests |
 | SMTP single | Three separate messages received on private TLS server; received attachment SHA256 exactly matched the SD original |
@@ -25,7 +27,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 | Proxmox LXC / systemd | Deferred until application validated |
 | Revierwelt | Single-image guard implemented; live delivery deferred |
 
-H4 works with a personal SIM in the reference tests. Cloud event type 1 is a candidate for H4 PIR stills (SD event type 4, photo length 65535); do not generalize to other models without validation. Remote deletion is not implemented. Actual SIM billing, extended sleep behavior, event availability latency, pagination, entitlement and long outage recovery remain unverified.
+The DEATTI DL04 works with a personal SIM in the reference tests. Cloud event type 1 is a candidate for DL04 PIR stills (SD event type 4, photo length 65535); do not generalize to other models without validation. Remote deletion is not implemented. Actual SIM billing, extended sleep behavior, event availability latency, pagination, entitlement and long outage recovery remain unverified.
 
 ## Installation and local configuration
 
@@ -110,7 +112,7 @@ States: pending (awaiting original), downloaded (verified original), uncertain (
 
 ## Protocol findings and measured reference results
 
-The H4 compatibility layer corrects P4P tail permutations, outbound KCP encoding, relay conversation selection, native RDT framing and KCP receive-queue draining, without modifying installed SDK or camera firmware. The app SD flow stops the live stream before photo transfer. The production image source is the SD original, not the cloud snapshot. Cloud preview retrieval is development-only.
+The compatibility layer tested with the DEATTI DL04 (historical `h4_*` module names) corrects P4P tail permutations, outbound KCP encoding, relay conversation selection, native RDT framing and KCP receive-queue draining, without modifying installed SDK or camera firmware. The app SD flow stops the live stream before photo transfer. The production image source is the SD original, not the cloud snapshot. Cloud preview retrieval is development-only.
 
 | Test | Result |
 | --- | --- |
@@ -123,7 +125,7 @@ These are server-side measurements, not SIM billing or independent controlled co
 
 ## Optional error notification channel
 
-An independent TLS SMTP account and private recipient can be configured in [alerts] / [alerts.smtp]. Defaults: login 15 minutes, API 30 minutes, repeated failed SD-original downloads of known outstanding cloud events 24 hours, repeat reminder 24 hours, alarm SMTP retry 60 minutes and optional recovery notice. Disabled by default. Persistent incident and notification state logic exists; automatic health observation/dispatch is not yet wired into the continuous service. No extra active camera reachability probes. Optional per-camera inactivity detection after seven days without reported activity is implemented in the bounded cloud test, disabled by default; automatic mail dispatch remains pending. The H4 device-list field dynamic_info.latest_active_utc is a plausible UTC Unix timestamp in seconds and updated ten seconds after a new PIR photo in a live test without an app or client P4P session. Periodic status reports without PIR remain unverified. For models without this field, a no-photo-event warning is the planned fallback. The manual alert test was accepted and received on the reference server. Manual configuration check and explicit test:
+An independent TLS SMTP account and private recipient can be configured in [alerts] / [alerts.smtp]. Defaults: login 15 minutes, API 30 minutes, repeated failed SD-original downloads of known outstanding cloud events 24 hours, repeat reminder 24 hours, alarm SMTP retry 60 minutes and optional recovery notice. Disabled by default. Persistent incident and notification state logic exists; automatic health observation/dispatch is not yet wired into the continuous service. No extra active camera reachability probes. Optional per-camera inactivity detection after seven days without reported activity is implemented in the bounded cloud test, disabled by default; automatic mail dispatch remains pending. The DEATTI DL04 device-list field dynamic_info.latest_active_utc is a plausible UTC Unix timestamp in seconds and updated ten seconds after a new PIR photo in a live test without an app or client P4P session. Periodic status reports without PIR remain unverified. For models without this field, a no-photo-event warning is the planned fallback. The manual alert test was accepted and received on the reference server. Manual configuration check and explicit test:
 
 ```sh
 python health_alerts.py --config config.local.toml
@@ -140,7 +142,7 @@ Optional [download_retry] in the local TOML sets initial_minutes=5 and max_minut
 
 The live retry-aware SD batch downloaded one 5120 x 2880 original (256,172 bytes, 214/214 blocks, matching MD5, safe camera basename) in 10.4 seconds, with estimated server IPv4/UDP traffic of 601,949 bytes. Repeating the batch immediately selected zero due items and opened no relay. No confirmed failure in that live run.
 
-New bounded cloud_intake.py test uses an independent new database. It records a per-camera startup cutoff (no historical event import), a persisted overlapping cursor (five minutes) and one-hour forward catch-up steps. Events commit before the cursor, so a replay after interruption is deduplicated. H4 candidate photo type 1 only. One account login reused per invocation. HTTP 401/403 resets the session; other errors get persisted backoff (up to 15 minutes). A confirmed login-stage API code 20005 persists a login block; correct credentials and explicitly use --resume-login with the same database. No credential hashes stored. Legacy probes remain manual and do not enforce this block. Only bounded intake is enabled, no P4P or mail. Current implementation stops the remaining cameras in a cycle after an API error; multi-camera fault isolation, pagination, long-gap completeness and periodic device telemetry are still pending.
+New bounded cloud_intake.py test uses an independent new database. It records a per-camera startup cutoff (no historical event import), a persisted overlapping cursor (five minutes) and one-hour forward catch-up steps. Events commit before the cursor, so a replay after interruption is deduplicated. DEATTI DL04 candidate photo type 1 only. One account login reused per invocation. HTTP 401/403 resets the session; other errors get persisted backoff (up to 15 minutes). A confirmed login-stage API code 20005 persists a login block; correct credentials and explicitly use --resume-login with the same database. No credential hashes stored. Legacy probes remain manual and do not enforce this block. Only bounded intake is enabled, no P4P or mail. Current implementation stops the remaining cameras in a cycle after an API error; multi-camera fault isolation, pagination, long-gap completeness and periodic device telemetry are still pending.
 
 ```sh
 python cloud_intake.py --config config.local.toml --queue-db data/events-intake-test.sqlite3 --cycles 3 --interval 60
@@ -170,7 +172,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 
 ## Roadmap / Weitere Entwicklung
 
-- [x] H4 original transfer, cloud event intake, matching, persistent file receipt and SMTP test.
+- [x] DEATTI DL04 original transfer, cloud event intake, matching, persistent file receipt and SMTP test.
 - [x] Per-camera SMTP profiles, protected credentials, UID-based cloud and device discovery.
 - [x] Isolate credential tests from local .env; 108 tests confirmed.
 - [ ] Integrate UID-based real SD transfer and multi-camera processing on the current server.
@@ -183,7 +185,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Continuous service with independent cloud, camera and delivery failure handling; configuration for intervals and retention.
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.
 - [ ] Test wake after extended idle, event reliability, mobile data use, pagination and service entitlement.
-- [ ] Multi-day live test of the H4 on the existing Ubuntu server.
+- [ ] Multi-day live test of the DEATTI DL04 on the existing Ubuntu server.
 - [ ] Native unprivileged Debian 13 LXC, systemd autostart and actual reboot test.
 - [ ] Final Revierwelt delivery test with one original per message.
 - [ ] After completion of the existing goals: optional per-camera image footer appended below the complete original image, never overlaid on it; see [planned image footer](docs/IMAGE_FOOTER.md).

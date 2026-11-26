@@ -6,6 +6,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
+- Integrated ten-cycle run completed 10/10 without failures; one new original (5120 x 2880, 264,906 bytes) in one 9.3-second relay, one new accepted SMTP message, nine idle cycles without relay, no alarms and three sent events without duplicates.
+
 - 154 tests passed. Integrated service downloaded two 5120 x 2880 originals in one 8.5-second relay, verified them and subsequently sent two separate STARTTLS emails (both received, two sent events, no second relay). No alarm due; sent-only repeat, continuous operation and real failure paths remain unverified.
 
 - 145 tests passed; live allowlisted telemetry snapshot stored with cloud_activity source and inactivity disabled. Two pending intake photos remain for integration testing.
@@ -29,6 +31,8 @@ This records development milestones, not a published production release.
 - Single/grouped preview plans confirmed; private grouped live transmission remains untested.
 
 ### Implemented
+
+- Configured-camera image subjects now use UCON, local profile alias, capture date/time in Europe/Berlin with MEZ/MESZ; grouped subjects include count and capture-time range. Attachment bytes and basename unchanged; legacy unconfigured subjects unchanged. Four subject-helper tests passed locally, including DST ambiguity; full routing suite and live delivery pending.
 
 - First sequential integrated service with explicit download/image SMTP/alarm SMTP flags, reused device credentials, narrow due-event SD windows across midnight, strict native filename and independent local mail processing during cloud failure. Nine new core tests and 28 existing alarm/intake/telemetry tests passed locally; service entrypoint syntax checked, live SDK/SMTP integration pending.
 

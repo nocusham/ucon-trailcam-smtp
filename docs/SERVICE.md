@@ -25,9 +25,9 @@ Expect one relay if due, committed originals and local MIME verification, no SMT
 
 ## Live validation (2026-11-26)
 
-Full server suite: 154/154 passed. Integrated single-cycle download and SMTP preview succeeded with two 5120 x 2880 originals (261,777 and 259,019 bytes) in one 8.5-second relay session. A second invocation opened no relay, verified both originals and sent two independent STARTTLS messages; both arrived and SQLite recorded two sent events. No alarm was due. A further repeat with sent-only queue and a bounded continuous run with new PIR events remain to be checked.
+Full server suite: 154/154 passed. Integrated single-cycle download and SMTP preview succeeded with two 5120 x 2880 originals (261,777 and 259,019 bytes) in one 8.5-second relay session. A second invocation opened no relay, verified both originals and sent two independent STARTTLS messages; both arrived and SQLite recorded two sent events. No alarm was due. The subsequent ten-cycle integrated run completed 10/10 without failure: one new PIR event, one 9.3-second relay, one accepted single-image SMTP message, nine idle cycles without relay, no alarms, and three sent events in SQLite. Previously sent events were not resent.
 
-For the next test, keep the private test recipient and the same test database. Run three action flags with --cycles 10 --interval 60, first allow a quiet cycle, then trigger new PIR events. Verify one email per new photo, no relay without due originals, no duplicate mail and no unexpected alarm. Do not run another writer against the same queue during the test. Longer unattended validation follows after this bounded run.
+The next subject-format test uses `camera_smtp.py --preview-sent` against the same test database and day, without --send. This reconstructs the new subject using the configured alias and original capture timestamp (Europe/Berlin, MEZ/MESZ); it does not change or resend earlier messages. For a live check use the private test recipient, trigger a new PIR event and run the integrated service with the three action flags. Longer unattended validation and fault-path testing remain pending.
 
 ## Remaining limitations
 

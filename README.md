@@ -2,7 +2,7 @@
 
 Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original SD-card images without modifying camera firmware. The UBIA backend is still required for authentication, event discovery and relay connectivity. Paid cloud storage is not intended; service entitlement and long-term availability are not guaranteed.
 
-**Development status (2026-11-26):** the H4 reference camera's cloud discovery, SD original download and separate SMTP delivery are live-tested as individual steps. The continuous service, automatic recovery and production deployment are not implemented yet. Do not treat this version as an unattended production release.
+**Development status (2026-11-26):** the H4 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested, including a bounded ten-cycle integrated service run. Actual failure recovery, longer-duration operation and production deployment still require validation. Do not treat this version as an unattended production release.
 
 ## Current status / Aktueller Stand
 
@@ -48,7 +48,7 @@ nano config.local.toml
 
 On updates use `git pull` and rerun tests. Do not overwrite existing local configuration. The fully commented German template [config.example.toml](config.example.toml) explains every field. See [credential setup](docs/CREDENTIALS.md) for literal KEY=value syntax, password sources, file ownership and restart behavior. File values override existing environment variables; never source the .env as shell code. Use a separate password entry for each private SMTP credential as needed. Only the public Revierwelt password "mail" is permitted directly in the profile, restricted to the known server and recipient domain. The test suite must never read the real credential file. Earlier credential assertions were fixed in commit 49f6de4; any exposed password should be rotated.
 
-Each camera profile has an independent UID, enabled flag and SMTP host, port, security, sender, recipient, username, password reference, mode and limit. Names are local aliases, not account device indices. No fallback to a global destination. Revierwelt requires a distinct recipient for each camera and one attachment per message. Private destinations may use grouped mode, but never mix images from different cameras. One recipient per camera is currently supported. Use STARTTLS or implicit TLS with certificate verification for private mail. Revierwelt's TLS support is not confirmed.
+Each camera profile has an independent UID, enabled flag and SMTP host, port, security, sender, recipient, username, password reference, mode and limit. Names are local aliases, not account device indices. Configured-camera image subjects use `UCON testkamera - 15.01.2026 14:52:05 MEZ` (capture date/time in Europe/Berlin with MEZ/MESZ, not server or delivery time). Grouped subjects also include the number of originals and their capture-time range. Original attachment names and bytes are unchanged. Legacy unconfigured SMTP probes retain their original subjects. No fallback to a global destination. Revierwelt requires a distinct recipient for each camera and one attachment per message. Private destinations may use grouped mode, but never mix images from different cameras. One recipient per camera is currently supported. Use STARTTLS or implicit TLS with certificate verification for private mail. Revierwelt's TLS support is not confirmed.
 
 ## Current test workflow (manual, not a daemon)
 
@@ -154,7 +154,7 @@ Persistent intake was live-validated (137 tests passed, 5/5 then 2/2 successful 
 
 ## Integrated service (reference-server test)
 
-The first sequential service is implemented in trailcam_service.py; see [SERVICE.md](docs/SERVICE.md) for staged tests and explicit action flags. It reuses the authenticated device response for due SD-original batches, requires the original camera filename, closes relays before SMTP and independently processes existing downloads and due alarms even if cloud login is blocked. Default one cycle; --loop is explicit. The first integrated reference-server test passed: 154 tests, two original photos in one 8.5-second relay, two separate emails received, both events committed as sent. Sent-only repeat and continuous validation remain pending; do not deploy unattended yet.
+The first sequential service is implemented in trailcam_service.py; see [SERVICE.md](docs/SERVICE.md) for staged tests and explicit action flags. It reuses the authenticated device response for due SD-original batches, requires the original camera filename, closes relays before SMTP and independently processes existing downloads and due alarms even if cloud login is blocked. Default one cycle; --loop is explicit. The first integrated reference-server test passed: 154 tests, two original photos in one 8.5-second relay, two separate emails received, both events committed as sent. A subsequent ten-cycle run completed without errors, detected one new photo, opened one 9.3-second relay, accepted one new SMTP message and retained three sent events without duplicates. Nine idle cycles opened no relay. Long-duration and actual fault validation remain pending; do not deploy unattended yet.
 
 ## Known API errors and recovery plan
 

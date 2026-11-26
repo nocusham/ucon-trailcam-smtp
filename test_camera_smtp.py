@@ -52,6 +52,9 @@ class CameraRoutingTests(unittest.TestCase):
                              (p.host, p.port, p.security, p.username, secret))
             self.assertEqual(str(msg['From']), p.sender)
             self.assertEqual(str(msg['To']), p.recipient)
+            expected_subject = ('UCON two - 1 Originalbild - 01.01.1970 01:03:20 MEZ'
+                                if p.uid == 'second' else 'UCON one - 01.01.1970 01:01:40 MEZ')
+            self.assertEqual(str(msg['Subject']), expected_subject)
             attachment, = msg.iter_attachments()
             expected = self.second_path if p.uid == 'second' else self.fixture.path
             self.assertEqual(attachment.get_payload(decode=True), expected.read_bytes())

@@ -10,6 +10,7 @@ from contextlib import closing
 from email.utils import getaddresses
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from mail_subject import camera_subject
 
 
 class DeliveryError(Exception):
@@ -35,7 +36,7 @@ def ready_rows(db, begin, end, limit, state='downloaded', camera_uid=None):
                       (*params, limit)).fetchall()
 
 
-def prepare(row, load_image, build_message, sender, recipient):
+def prepare(row, load_image, build_message, sender, recipient, *, camera_name=None):
     uid, ident, stamp, raw, sd, path, digest, size, width, height = row
     event = json.loads(raw)
     if (not isinstance(event, dict) or event.get('itemid') != ident
@@ -55,7 +56,9 @@ def prepare(row, load_image, build_message, sender, recipient):
             or attachments[0].get_payload(decode=True) != data):
         raise DeliveryError('MIME attachment differs from verified original')
     when = dt.datetime.fromtimestamp(stamp, dt.timezone.utc).isoformat()
-    msg.replace_header('Subject', f'Ucon Wildkamera - {filename} - {when}')
+    subject = (camera_subject(camera_name, [stamp]) if camera_name is not None
+               else f'Ucon Wildkamera - {filename} - {when}')
+    msg.replace_header('Subject', subject)
     return msg
 
 
@@ -65,7 +68,7 @@ def validate_destination(mode, host, recipient):
         raise DeliveryError('Revierwelt requires SMTP_MODE=single')
 
 
-def message_batches(prepared, mode):
+def message_batches(prepared, mode, *, camera_name=None):
     if mode not in ('single', 'grouped'):
         raise DeliveryError('Invalid SMTP mode')
     if mode == 'single':
@@ -85,7 +88,9 @@ def message_batches(prepared, mode):
             msg.add_attachment(attachment.get_payload(decode=True), maintype='image',
                                subtype='jpeg', filename=attachment.get_filename())
     msg.get_body(preferencelist=('plain',)).set_content('\n'.join(sections))
-    msg.replace_header('Subject', f'Ucon Wildkamera - {len(rows)} Originalbilder')
+    subject = (camera_subject(camera_name, [row[2] for row in rows], grouped=True)
+               if camera_name is not None else f'Ucon Wildkamera - {len(rows)} Originalbilder')
+    msg.replace_header('Subject', subject)
     if len(list(msg.iter_attachments())) != len(rows):
         raise DeliveryError('Unexpected grouped attachment count')
     return [(rows, msg)]
@@ -135,15 +140,19 @@ def process(db, rows, *, load_image, build_message, sender, recipient, send=None
     if len({row[0] for row in rows}) > 1:
         raise DeliveryError('Mixed-camera SMTP batch refused; select a camera profile')
     # Verify the exact bytes attached to the message before any SMTP operation.
-    prepared = [(row, prepare(row, load_image, build_message, sender, recipient)) for row in rows]
+    camera_name = route.get('name') if route is not None else None
+    prepared = [(row, prepare(row, load_image, build_message, sender, recipient,
+                              camera_name=camera_name)) for row in rows]
     for row, _ in prepared:
         stamp = dt.datetime.fromtimestamp(row[2], dt.timezone.utc).isoformat()
         emit(f'Original verified: {stamp} | {row[8]}x{row[9]} | {row[7]} bytes')
-    batches = message_batches(prepared, mode)
+    batches = message_batches(prepared, mode, camera_name=camera_name)
     completed = messages = 0
     emit(f'SMTP plan: mode={mode}, messages={len(batches)}, images={len(prepared)}')
     for i, (group, msg) in enumerate(batches, 1):
         emit(f'Message {i}/{len(batches)}: attachments={len(list(msg.iter_attachments()))}')
+        if camera_name is not None:
+            emit(f"Subject: {msg['Subject']}")
         if send is None:
             continue
         # All events belonging to this message transition together.

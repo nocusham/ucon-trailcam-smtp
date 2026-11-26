@@ -71,9 +71,17 @@ def record_download(path, uid, ident, stamp, sd, dest, details):
                    (uid, ident, sd, str(dest.resolve()), *details))
 
 
-def download_batch(session, path, uid, rows, begin, end, events, output, limit, download, validate):
+def download_batch(session, path, uid, rows, begin, end, events, output, limit, download, validate,
+                   *, retry_ids=None, on_failure=None):
     results = match_events([r[1] for r in rows], events)
     pending = [(r, m) for r, m in zip(rows, results) if eligible(r, begin, end)]
+    if retry_ids is not None:
+        rank = {ident: i for i, ident in enumerate(retry_ids)}
+        pending = sorted(((r, m) for r, m in pending if r[0] in rank), key=lambda pair: rank[pair[0][0]])
+    if on_failure is not None:
+        for r, m in pending:
+            if m[1] != 'matched':
+                on_failure(r[0], m[1])
     selected = [(r, m) for r, m in pending if m[1] == 'matched'][:limit]
     missing = sum(m[1] != 'matched' for r, m in pending)
     completed = 0
@@ -84,8 +92,13 @@ def download_batch(session, path, uid, rows, begin, end, events, output, limit, 
         folder.mkdir(mode=0o700, parents=True, exist_ok=True)
         attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=folder))
         # A unique attempt directory prevents overwrite after interruption.
-        dest = download(session, event, 3, attempt / f'event4_{sd}_original.jpg',
-                        preserve_filename=True)
+        try:
+            dest = download(session, event, 3, attempt / f'event4_{sd}_original.jpg',
+                            preserve_filename=True)
+        except TimeoutError:
+            if on_failure is not None:
+                on_failure(ident, 'download_timeout')
+            raise
         details = digest_file(dest, validate)
         record_download(path, uid, ident, stamp, sd, dest, details)
         completed += 1

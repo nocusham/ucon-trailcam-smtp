@@ -132,6 +132,10 @@ python health_alerts.py --config config.local.toml --send-test
 
 The second command requires enabled=true and a configured private alert destination. No camera/cloud activity or queue updates. See [health alert configuration and semantics](docs/ALERTS.md).
 
+## Retry-aware original download test
+
+Optional [download_retry] in the local TOML sets initial_minutes=5 and max_minutes=360. Use the existing configured SD batch command with the additional --retry-due flag. The SQLite register persists next due time and actual failures per pending photo. A bounded batch with no due originals skips the relay; actual list/transfer timeouts and missing/ambiguous matches are recorded, other exceptions are not yet classified. A confirmed repeated failure of the same outstanding event spanning the camera alarm threshold creates a per-camera incident. No email is sent in this manual test. A different successful photo cannot clear older failed pending originals. Eight new retry-core tests and eleven existing alarm tests passed locally; full CLI/SDK path and server suite still require validation. See [ALERTS.md](docs/ALERTS.md).
+
 ## Known API errors and recovery plan
 
 | Observation | Implemented now | Planned service behavior |
@@ -153,7 +157,8 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [x] Implement optional independent alarm SMTP configuration and persistent incident notification core (11 local tests).
 - [x] Validate manual alert SMTP live (test mail received).
 - [ ] Wire observation/dispatch into the service for outstanding original download failures, no extra active camera health checks; implement optional disabled-by-default inactivity warning using validated last-activity telemetry, with no-photo fallback for models lacking the field.
-- [ ] Persistent event cursor, initial-start policy, freshness filtering and bounded retries with login-specific handling.
+- [x] Persistent download retry core with explicit retry-aware SD batch test (core tested locally; live integration pending).
+- [ ] Persistent event cursor, initial-start policy, freshness filtering and login-specific retry handling; integrate automatic alert dispatch.
 - [ ] Continuous service with independent cloud, camera and delivery failure handling; configuration for intervals and retention.
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.
 - [ ] Test wake after extended idle, event reliability, mobile data use, pagination and service entitlement.

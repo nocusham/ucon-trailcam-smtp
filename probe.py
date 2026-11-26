@@ -1,6 +1,10 @@
 """One-shot, read-only Ucon compatibility probe for your own camera."""
 import argparse
 import asyncio
+import sqlite3
+import tomllib
+from download_retry import parse_retry, init_retry, due_ids, reserve, record_failure, sync_download_health
+from health_alerts import load_alerts
 import contextlib
 import datetime as dt
 from ucon_auth import read_credentials
@@ -178,6 +182,7 @@ def main():
     parser.add_argument('--download-queue', type=Path,
                         help='Explicit original batch test; no SMTP')
     parser.add_argument('--batch-limit', type=int, default=3)
+    parser.add_argument('--retry-due', action='store_true', help='Explicit retry-aware batch; records failures but sends no mail')
     parser.add_argument('--match-queue', type=Path,
                         help='Read-only match of queued cloud events to H4 SD photos; no download')
     parser.add_argument('--native-filename', action='store_true',
@@ -210,6 +215,8 @@ def main():
             or args.sd_flow != 'app' or args.match_queue is not None or args.download_photo
             or args.no_live_wait or args.no_audio):
         parser.error('--download-queue requires --events --day --sd-flow app; no other download or match mode')
+    if args.retry_due and (args.download_queue is None or args.config is None):
+        parser.error('--retry-due requires configured camera and --download-queue')
     if args.match_queue is not None and (not args.events or args.download_photo):
         parser.error('--match-queue requires --events and disallows downloads')
     if args.download_photo and not args.events:
@@ -243,6 +250,9 @@ def main():
     logging.disable(logging.CRITICAL)
     stage = 'account login / device discovery'
     resources = contextlib.ExitStack()
+    retry_db = None
+    retry_ids = None
+    on_failure = None
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             if args.camera_uid is not None:
@@ -280,6 +290,20 @@ def main():
             check_existing(args.download_queue, device.device_uid, batch_rows, begin, end, validate_image)
             pending = sum(eligible(row, begin, end) for row in batch_rows)
             print(f'Batch pending eligible originals: {pending}; limit={args.batch_limit}')
+            if args.retry_due:
+                with args.config.open('rb') as source:
+                    retry_policy = parse_retry(tomllib.load(source).get('download_retry'))
+                retry_threshold = load_alerts(args.config).threshold('camera')
+                retry_db = resources.enter_context(contextlib.closing(sqlite3.connect(args.download_queue, timeout=10)))
+                init_retry(retry_db)
+                now = int(time.time())
+                sync_download_health(retry_db, device.device_uid, now, retry_threshold)
+                retry_ids = due_ids(retry_db, device.device_uid, batch_rows, begin, end, now, args.batch_limit)
+                pending = len(retry_ids)
+                print(f'Retry selection: due={pending}; initial={retry_policy.initial_minutes}m; cap={retry_policy.max_minutes}m')
+                def on_failure(ident, reason):
+                    record_failure(retry_db, device.device_uid, ident, int(time.time()), reason, retry_policy)
+
             if not pending:
                 print('No eligible pending originals; no relay session, no SMTP.')
                 return 0
@@ -334,6 +358,8 @@ def main():
         if args.events or args.sdk_events:
             print(f'Query UTC: {dt.datetime.fromtimestamp(begin, dt.timezone.utc).isoformat()}'
               f' to {dt.datetime.fromtimestamp(end, dt.timezone.utc).isoformat()}')
+        if retry_db is not None:
+            reserve(retry_db, device.device_uid, retry_ids, int(time.time()), retry_policy)
         try:
             with (contextlib.redirect_stdout(io.StringIO()),
                   contextlib.redirect_stderr(io.StringIO()),
@@ -373,7 +399,8 @@ def main():
                                                            device.device_uid, batch_rows,
                                                            batch_begin, batch_end, events,
                                                            args.output_dir, args.batch_limit,
-                                                           download_photo, validate_image)
+                                                           download_photo, validate_image,
+                                                           retry_ids=retry_ids, on_failure=on_failure)
                         elif args.download_photo:
                             stage = 'experimental JPEG download'
                             photos = [e for e in events if e.length == 65535]
@@ -398,7 +425,14 @@ def main():
                                            reference_size=args.reference_size,
                                            reference_sha256=args.reference_sha256,
                                            preserve_filename=args.native_filename)
+        except TimeoutError:
+            if retry_db is not None and stage == 'camera relay session / SD event listing':
+                for ident in retry_ids:
+                    on_failure(ident, 'relay_timeout')
+            raise
         finally:
+            if retry_db is not None:
+                sync_download_health(retry_db, device.device_uid, int(time.time()), retry_threshold)
             print(f'Relay / SD query elapsed: {time.monotonic() - started:.1f} s')
             session.report()
             for note in getattr(session, 'stage_notes', []):

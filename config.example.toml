@@ -91,3 +91,11 @@ to = "admin@example.invalid"
 username = "alerts@example.invalid"
 # Verweis auf den privaten Passworteintrag in .env.
 password_env = "ALERT_SMTP_PASSWORD"
+
+# Wiederholungsintervalle für ausstehende Originaldownloads (optional).
+# Gilt im expliziten --retry-due-Test und später im Dauerbetrieb.
+[download_retry]
+# Wartezeit nach dem ersten fehlgeschlagenen Abruf, in Minuten (1–1440).
+initial_minutes = 5
+# Obergrenze des exponentiellen Backoffs, in Minuten (>= initial_minutes).
+max_minutes = 360

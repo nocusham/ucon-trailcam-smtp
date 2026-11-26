@@ -112,3 +112,42 @@ mode = "{mode}"
             path.write_text(bad)
             with self.assertRaises(DeliveryError):
                 load_profiles(path)
+
+    def test_public_revierwelt_password_and_exclusive_source(self):
+        path = Path(self.fixture.tmp.name) / 'profiles.toml'
+        config = '''[[cameras]]
+name = "one"
+uid = "own"
+[cameras.smtp]
+host = "smtp.revierwelt.de"
+port = 5025
+from = "s@example.invalid"
+to = "r@revierwelt.de"
+username = "public-user"
+password = "mail"
+'''
+        path.write_text(config)
+        p, = load_profiles(path)
+        self.assertEqual(p.password, 'mail')
+        self.assertNotIn('password', p.route())
+        self.assertNotIn('mail\'', repr(p).split('password_env=')[1])
+        send = Mock()
+        self.assertEqual(self.route([p], send, send_enabled=True, environ={}), 0)
+        self.assertEqual(send.call_args.args[-1], 'mail')
+        for bad in (config + 'password_env = "PASS1"\n',
+                    config.replace('smtp.revierwelt.de', 'smtp.example.invalid'),
+                    config.replace('password = "mail"', 'password = "secret"')):
+            path.write_text(bad)
+            with self.assertRaises(DeliveryError):
+                load_profiles(path)
+
+    def test_camera_password_loaded_from_file(self):
+        path = Path(self.fixture.tmp.name) / '.env'
+        path.write_text('PASS1=local-secret\n')
+        path.chmod(0o600)
+        from unittest.mock import patch
+        import os
+        send = Mock()
+        with patch.dict(os.environ, {'UCON_SECRETS_FILE': str(path)}, clear=True):
+            self.assertEqual(self.route([self.a], send, send_enabled=True), 0)
+        self.assertEqual(send.call_args.args[-1], 'local-secret')

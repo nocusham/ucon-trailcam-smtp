@@ -6,11 +6,12 @@ import re
 import sqlite3
 import tomllib
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from queue_smtp import DeliveryError, ready_rows, process, validate_destination
+from local_credentials import read_secret_values
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class Camera:
     password_env: str
     mode: str
     limit: int
+    password: str = field(default="", repr=False)
 
     def route(self):
         return {key: getattr(self, key) for key in
@@ -68,7 +70,7 @@ def load_profiles(path):
         uids.add(uid)
         smtp = entry.get('smtp')
         if not isinstance(smtp, dict) or set(smtp) - {'host', 'port', 'security', 'from', 'to',
-                                                     'username', 'password_env', 'mode', 'limit'}:
+                                                     'username', 'password_env', 'password', 'mode', 'limit'}:
             raise DeliveryError('Unknown or missing SMTP options')
         host = string(smtp, 'host')
         if not re.fullmatch(r'[A-Za-z0-9.:-]+', host):
@@ -83,15 +85,20 @@ def load_profiles(path):
             raise DeliveryError('Invalid SMTP port or batch limit')
         sender, recipient = mailbox(string(smtp, 'from')), mailbox(string(smtp, 'to'))
         username, password_env = string(smtp, 'username', optional=True), string(smtp, 'password_env', optional=True)
-        if bool(username) != bool(password_env) or (password_env and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', password_env)):
-            raise DeliveryError('SMTP username requires a password environment variable')
+        password = string(smtp, 'password', optional=True)
+        if password and (password != 'mail' or host.lower().rstrip('.') != 'smtp.revierwelt.de'
+                         or not recipient.lower().endswith('@revierwelt.de')):
+            raise DeliveryError('Literal SMTP password allowed only for the public Revierwelt credential')
+        if (password and password_env or bool(username) != bool(password_env or password)
+                or (password_env and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', password_env))):
+            raise DeliveryError('SMTP username requires exactly one password source')
         validate_destination(mode, host, recipient)
         if recipient.lower().endswith('@revierwelt.de'):
             if recipient.lower() in rw:
                 raise DeliveryError('Duplicate Revierwelt recipient')
             rw.add(recipient.lower())
         profiles.append(Camera(name, uid, enabled, host, port, security, sender, recipient,
-                               username, password_env, mode, limit))
+                               username, password_env, mode, limit, password))
     return profiles
 
 
@@ -99,7 +106,8 @@ def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=Fa
                 load_image, build_message, send_message, environ=None, emit=print):
     if preview_sent and send_enabled:
         raise DeliveryError('Sent preview cannot send')
-    environ = os.environ if environ is None else environ
+    if environ is None:
+        environ = read_secret_values() if send_enabled else {}
     state = 'sent' if preview_sent else 'downloaded'
     selected = [p for p in profiles if p.enabled]
     known = {p.uid for p in selected}
@@ -117,10 +125,10 @@ def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=Fa
             continue
         items = ready_rows(db, begin, end, p.limit, state, camera_uid=p.uid)
         password = None
-        if send_enabled and items and p.password_env:
-            password = environ.get(p.password_env)
+        if send_enabled and items and p.username:
+            password = p.password or environ.get(p.password_env)
             if not password:
-                raise DeliveryError('Missing configured SMTP password environment variable')
+                raise DeliveryError('Missing configured SMTP password')
         jobs.append((p, items, password))
     failed = False
     for p, items, password in jobs:

@@ -1,14 +1,15 @@
-"""Read Ucon credentials from the process environment or interactive prompts."""
+"""Read Ucon credentials from a private file, environment or interactive prompts."""
 import getpass
-import os
+from local_credentials import read_secret_values
 
 
-def read_credentials():
-    account = os.environ.get('UCON_ACCOUNT', '').strip()
-    if not account:
+def read_credentials(*, interactive=True):
+    values = read_secret_values()
+    account = values.get('UCON_ACCOUNT', '').strip()
+    if not account and interactive:
         account = input('Ucon account: ').strip()
-    password = os.environ.get('UCON_PASSWORD', '')
-    if not password:
+    password = values.get('UCON_PASSWORD', '')
+    if not password and interactive:
         password = getpass.getpass('Ucon password: ')
     if not account or not password:
         raise ValueError('Account and password are required')

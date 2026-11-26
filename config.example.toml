@@ -1,20 +1,56 @@
-# Copy to config.local.toml, chmod 600, and replace placeholders locally.
-# Passwords are read from named environment variables only.
+# Ucon Trailcam SMTP – lokale Konfiguration
+# Vorlage einmalig als config.local.toml kopieren, chmod 600 setzen.
+# Bei Updates bestehende Konfiguration behalten und neue Felder manuell ergänzen.
+# config.local.toml und .env werden von Git ignoriert.
+# Vertrauliche Passwörter in .env hinterlegen, nicht in dieser Datei.
+# Pro Kamera einen eigenen [[cameras]]-Abschnitt anlegen.
+
 [[cameras]]
+# Frei wählbarer eindeutiger Name: 1–64 Buchstaben (ASCII), Ziffern, - oder _.
 name = "testkamera"
+
+# Dauerhafte Geräte-UID aus Ucon bzw. der lokalen Ereignisdatenbank (kein App-Index).
 uid = "REPLACE_WITH_CAMERA_UID"
+
+# true = SMTP-Verarbeitung aktiv; false = für dieses Profil kein Versand.
+# Weitere Dienstfunktionen werden später ergänzt.
 enabled = true
 
 [cameras.smtp]
+# SMTP-Hostname oder IP-Adresse, ohne URL-Schema.
 host = "smtp.example.invalid"
+
+# TCP-Port (1–65535). Standard je security: 25 / 587 / 465.
 port = 587
+
+# Verschlüsselung: starttls (Standard), tls (direktes TLS/SSL), none (unverschlüsselt).
+# Kein automatischer Rückfall auf unverschlüsseltes SMTP.
 security = "starttls"
+
+# Absenderadresse; genau eine E-Mail-Adresse ohne Anzeigenamen.
 from = "sender@example.invalid"
+
+# Empfängeradresse; genau eine E-Mail-Adresse. Revierwelt: pro Kamera eindeutig.
 to = "recipient@example.invalid"
+
+# SMTP-Anmeldename. Ohne SMTP-Authentifizierung leer lassen oder weglassen.
 username = "sender@example.invalid"
+
+# Name des Passworteintrags in .env (oder der vorhandenen Umgebungsvariable).
+# Mehrere Kameras dürfen denselben Eintrag nutzen. Ohne Authentifizierung weglassen.
 password_env = "SMTP_PASSWORD"
+
+# Optionaler Klartext-Sonderfall: nur öffentliches Passwort "mail" für
+# smtp.revierwelt.de und Empfänger @revierwelt.de. Dann password_env weglassen.
+# password = "mail"
+
+# single (Standard): genau ein Bild je E-Mail; Pflicht bei Revierwelt.
+# grouped: mehrere Bilder derselben Kamera je E-Mail.
 mode = "single"
+
+# Maximale Originalbilder je Versandlauf (1–10, Standard 3), kein Download-Limit.
 limit = 3
 
-# Add another [[cameras]] block with a different UID and its own SMTP table.
-# Revierwelt recipients must be unique and mode must be single.
+# Weitere Kamera: gesamten [[cameras]]-Block einschließlich [cameras.smtp]
+# kopieren, eindeutigen Namen/UID und eigene Versandparameter setzen.
+# Keine echten Zugangsdaten oder Kamera-UIDs in die öffentliche Vorlage schreiben.

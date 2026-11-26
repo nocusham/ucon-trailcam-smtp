@@ -10,6 +10,7 @@ from pathlib import Path
 
 from cloud_image import ImageError, MAX_IMAGE_BYTES, validate_image
 from event_metadata import load_metadata, metadata_text
+from local_credentials import read_secret_values
 
 MIME_SUBTYPE = {'jpg': 'jpeg', 'png': 'png', 'webp': 'webp', 'gif': 'gif',
                 'bmp': 'bmp', 'tiff': 'tiff'}
@@ -62,17 +63,18 @@ def send_message(msg, host, port, security, username=None, password=None):
 
 
 def read_smtp_settings():
-    host = os.environ.get('SMTP_HOST', '').strip()
-    sender = os.environ.get('SMTP_FROM', '').strip()
-    recipient = os.environ.get('SMTP_TO', '').strip()
-    security = os.environ.get('SMTP_SECURITY', 'starttls').lower()
+    values = read_secret_values()
+    host = values.get('SMTP_HOST', '').strip()
+    sender = values.get('SMTP_FROM', '').strip()
+    recipient = values.get('SMTP_TO', '').strip()
+    security = values.get('SMTP_SECURITY', 'starttls').lower()
     if security not in ('tls', 'starttls', 'none') or not all((host, sender, recipient)):
         raise ValueError('Set SMTP_HOST, SMTP_FROM, SMTP_TO and SMTP_SECURITY=starttls, tls or none')
-    port = int(os.environ.get('SMTP_PORT', {'tls': '465', 'starttls': '587', 'none': '25'}[security]))
+    port = int(values.get('SMTP_PORT', {'tls': '465', 'starttls': '587', 'none': '25'}[security]))
     if not 1 <= port <= 65535:
         raise ValueError('Invalid SMTP_PORT')
-    username = os.environ.get('SMTP_USERNAME', '').strip()
-    password = os.environ.get('SMTP_PASSWORD')
+    username = values.get('SMTP_USERNAME', '').strip()
+    password = values.get('SMTP_PASSWORD')
     if username and not password:
         password = getpass.getpass('SMTP password: ')
     if username and not password:

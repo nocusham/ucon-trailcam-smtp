@@ -22,7 +22,7 @@ python -m pip install -r requirements.txt
 python -m unittest -v
 ```
 
-Debian 13 supplies Python 3.13; the SDK requires Python 3.12+. Python 3.13 on the actual LXC and the pinned SDK installation still need a live test. If dependency installation fails, capture the actual build error rather than changing package versions blindly. Run the application as ucon, not root. For a manual authenticated session read UCON_ACCOUNT and UCON_PASSWORD from local interactive prompts (or set the existing environment variables); never publish them. No background daemon is installed in this phase.
+Debian 13 supplies Python 3.13; the SDK requires Python 3.12+. Python 3.13 on the actual LXC and the pinned SDK installation still need a live test. If dependency installation fails, capture the actual build error rather than changing package versions blindly. Run the application as ucon, not root. Configure persistent private credentials using [CREDENTIALS.md](CREDENTIALS.md); interactive prompts are available for manual probes. The future service must use noninteractive credential loading. No background daemon is installed in this phase.
 
 ## SQLite discovery-only test
 

@@ -65,8 +65,9 @@ enabled = false
 login_minutes = 15
 # Fehlerdauer in Minuten für Cloud-API, 1–10080 (Standard 30).
 api_minutes = 30
-# Bestätigte Nichterreichbarkeit einer Kamera in Stunden, 1–720 (Standard 24).
-# Keine Bilder allein gelten nicht als Störung.
+# Wiederholt fehlgeschlagener Originaldownload eines bekannten Cloud-Ereignisses
+# in Stunden, 1–720 (Standard 24). Keine zusätzlichen aktiven Erreichbarkeitsprüfungen.
+# Keine Bilder allein gelten nicht als Downloadstörung.
 camera_hours = 24
 # Mindestabstand erfolgreicher Alarmmeldungen derselben Störung in Stunden, 1–720.
 repeat_hours = 24

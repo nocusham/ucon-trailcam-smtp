@@ -181,7 +181,7 @@ def build_alert(settings, notice=None):
         msg.set_content('Dies ist ein manueller SMTP-Alarmtest. Keine Kamerastörung festgestellt.')
     else:
         state = 'Entwarnung' if notice.recovered_at is not None else 'Störung'
-        label = {'login': 'Anmeldung', 'api': 'Cloud-API', 'camera': 'Kameraverbindung'}[notice.category]
+        label = {'login': 'Anmeldung', 'api': 'Cloud-API', 'camera': 'Originaldownload'}[notice.category]
         msg['Subject'] = f'Wildkamera: {state} – {notice.label} / {label}'
         body = (f'{state}: {notice.label} / {label}\nErster Fehler: {utc(notice.first_failure)}\n'
                 f'Letzter Fehler: {utc(notice.last_failure)}\nFehlgeschlagene Prüfungen: {notice.failures}\n')

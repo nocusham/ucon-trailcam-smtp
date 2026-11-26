@@ -6,6 +6,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
+- Independent alarm SMTP test accepted and received. Full expanded test-suite result not yet reported.
+
 - 108 unit tests passed with local .env present; credential test isolation fixed (49f6de4).
 - Persistent private .env login, mode 600, and UID-based cloud query/device discovery confirmed.
 - Cloud device_name returned the app display name; local alias independent of UID.
@@ -28,6 +30,8 @@ This records development milestones, not a published production release.
 - Current README separated from historical development log.
 
 ### Pending
+
+- Monitor actual failed downloads of known outstanding cloud events, not camera polling. Investigate Ucon last-contact metadata; optional per-camera seven-day no-photo warning off by default if no reliable last-contact field exists. The alert label now says original download rather than camera connection; event-level integration is pending.
 
 - Continuous service, persistent cursors, initial-start filtering, retry/recovery, multi-day test, native LXC/systemd and final Revierwelt validation.
 - Actual SD transfer through the configured UID path and real multi-camera operation.

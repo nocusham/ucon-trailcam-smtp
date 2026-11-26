@@ -123,7 +123,7 @@ These are server-side measurements, not SIM billing or independent controlled co
 
 ## Optional error notification channel
 
-An independent TLS SMTP account and private recipient can be configured in [alerts] / [alerts.smtp]. Defaults: login 15 minutes, API 30 minutes, confirmed repeated camera connection failures 24 hours, repeat reminder 24 hours, alarm SMTP retry 60 minutes and optional recovery notice. Disabled by default. Persistent incident and notification state logic exists; automatic health observation/dispatch is not yet wired into the continuous service. No absence-of-photos alarm. Manual configuration check and explicit test:
+An independent TLS SMTP account and private recipient can be configured in [alerts] / [alerts.smtp]. Defaults: login 15 minutes, API 30 minutes, repeated failed SD-original downloads of known outstanding cloud events 24 hours, repeat reminder 24 hours, alarm SMTP retry 60 minutes and optional recovery notice. Disabled by default. Persistent incident and notification state logic exists; automatic health observation/dispatch is not yet wired into the continuous service. No extra active camera reachability probes. Optional per-camera inactivity warning after seven days without new photo events is planned, disabled by default, conditional on investigating a reliable last-contact field. The manual alert test was accepted and received on the reference server. Manual configuration check and explicit test:
 
 ```sh
 python health_alerts.py --config config.local.toml
@@ -151,7 +151,8 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [x] Isolate credential tests from local .env; 108 tests confirmed.
 - [ ] Integrate UID-based real SD transfer and multi-camera processing on the current server.
 - [x] Implement optional independent alarm SMTP configuration and persistent incident notification core (11 local tests).
-- [ ] Validate alert SMTP live and wire observation/dispatch into the service; optional active camera health checks.
+- [x] Validate manual alert SMTP live (test mail received).
+- [ ] Wire observation/dispatch into the service for outstanding original download failures, no extra active camera health checks; investigate last-contact field and optional disabled-by-default inactivity warning.
 - [ ] Persistent event cursor, initial-start policy, freshness filtering and bounded retries with login-specific handling.
 - [ ] Continuous service with independent cloud, camera and delivery failure handling; configuration for intervals and retention.
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.

@@ -328,6 +328,14 @@ The successful original metadata response also contains an ASCII basename starti
 
 Repeat the original and app flows with the same exact event, separate new output directories and `--native-filename`. Compare SHA256, MD5 status, media counters and traffic. The previous failed app measurement is not a successful download cost. Revierwelt testing is deferred until the entire application is complete; the user's TLS mail test including all six requested text fields succeeded.
 
+## Z12: original download with live stream stopped
+
+The user confirmed a successful live H4 download with the receive-queue fix, app SD flow and native filename. All 207 blocks of the 247692-byte original arrived, the metadata MD5 matched, and SHA256 matched the earlier Z5/Z10 downloads. The camera-reported safe basename was retained. The client drained 321 KCP messages with zero receive errors, no queued KCP message and no undrained application bytes at completion. No live media frames were decoded during photo metadata or data transfer. Server-side session traffic was 537551 bytes in 7.6 seconds, versus 837800 bytes in 14.4 seconds for Z10 (35.8% lower traffic and 47.2% shorter duration). These are individual server-side measurements, not SIM billing or an isolated estimate of the effect of AVCTRL alone; the receive-loop change also improves processing. The full private Linux PCAP covers a longer window and contains 616719 IPv4 UDP bytes, including traffic outside the client measurement. Initial settings needed five transmissions per command before ACK; intermittent initial transport failures remain an open issue.
+
+## Upstream SDK contribution plan (after project validation)
+
+As checked on 2026-11-26, upstream main and the most recent GitHub/PyPI release v0.1.16 both date to 2026-09-19 (commit 327939db193116269fd06c6c86a25ae4affa44ad, "Match APK SD entry handshake"). Keep the pinned dependency while validating the application. At the end, discuss small, independently tested changes with the SDK maintainer: drain the full KCP receive queue (including already buffered frames on generator re-entry), corrected power-of-two P4P tail permutations, outbound relay KCP encoding, binding conversation validation, native SD control/file frame parsing, metadata-driven download with MD5 and safe native filename, and the verified H4 AVCTRL stop/list/download sequence. Keep device-specific behavior isolated where necessary; validate across supported models before generalizing. The first candidate is the generic receive-queue defect, with a synthetic regression case releasing multiple responses in one UDP datagram. No upstream issue, fork, PR or release has been created. No raw PCAPs, credentials, identifiers or photos should be published. GitHub reports no recognized root license for the SDK; clarify licensing and contribution terms with the maintainer before redistribution of modified SDK code. The application-specific SMTP, Revierwelt, SQLite and scheduling logic stays in this repository.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -346,7 +354,9 @@ Repeat the original and app flows with the same exact event, separate new output
 - [ ] Independently verify no camera wake/data usage caused by backend queries and measure event availability latency.
 - [ ] Verify notification reliability and any separate service-entitlement limits.
 - [x] Demonstrate file transfer without continuous live video in the official Android app.
-- [ ] Validate Python SD download with live video stopped.
+- [x] Validate Python SD download with live video stopped (Z12).
+- [ ] Repeat successful original retrieval across idle sessions and resolve initial ACK failures.
+- [ ] Discuss upstream SDK contributions after application validation.
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.
 - [ ] If no passive event signal is available, evaluate configurable low-frequency polling with backoff, overlapping query windows and no concurrent sessions; leave unattended polling disabled until measured.
 - [ ] Optional: Android notification webhook only for configurations where notifications are actually available.

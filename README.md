@@ -177,6 +177,25 @@ Next live tests: use ordinary original retrieval with no reference overrides, fi
 
 With the corrected P4P codec and no reference overrides, all three live downloads succeeded. The activity original (275548 bytes, 230 blocks) took 12.2 s, the network-wake original (257267 bytes, 215 blocks) 11.6 s, and the activity thumbnail (6121 bytes, six blocks) 14.1 s. All matched the camera's metadata MD5 and were saved locally. The relay/listing returned all 27 reported records each time. These are observed relay-session durations, not battery or mobile-data measurements. No personal credentials, filenames, hashes or media are published here. The next step is a persistent deduplicated delivery queue and SMTP, followed by measured polling behavior.
 
+## Traffic measurements and experimental live-stream reduction
+
+The relay SDK starts receiving live frames automatically after binding. Skipping the wait does not itself stop the stream. The new probe counts all successful UDP sendto/recvfrom calls on relay sockets, by phase, including discovery, wake and logout. It reports payload bytes plus an estimated 28 bytes per IPv4 UDP datagram. It excludes account HTTPS traffic, link-layer overhead, packets not delivered to the socket, and packets arriving after socket close. This is server-side traffic, not a measurement of the camera SIM's billed traffic. Decoded video and audio/metadata bytes are separate application-level counters.
+
+Compare the following one-shot read-only tests on the same day and event, with the app closed:
+
+```sh
+python probe.py --events --day YYYY-MM-DD --download-photo original --output-dir media/baseline
+python probe.py --events --day YYYY-MM-DD --download-photo original --no-live-wait --output-dir media/early
+python probe.py --events --day YYYY-MM-DD --download-photo original --no-live-wait --sd-flow app --output-dir media/av
+python probe.py --events --day YYYY-MM-DD --download-photo original --no-live-wait --sd-flow app --no-audio --output-dir media/av-muted
+```
+
+Use separate directories to avoid overwriting or rejecting previously saved images. All successful downloads still require MD5. The corrected AVCTRL 2 is taken from the app playback sequence, not a confirmed stop-video command; with_audio=0 is a session-level request, not a persistent camera setting. The early and AVCTRL modes have not been live-validated. Measure remaining media frames and traffic before claiming savings. No guessed stop-video or recording-disable command is sent.
+
+## Remote deletion and retention
+
+SDK 0.1.16 exposes listing, calendar, metadata, file data and SD status, but no single-file deletion method. Remote deletion is not verified on H4. Do not use format or recording-disable as a substitute. If the official app offers deletion specifically on the SD card (not the local album), capture a deletion of a disposable test event after local backup and verify that only that event disappeared. No deletion code is implemented. Future retention must be opt-in, operate only on verified locally archived and successfully delivered events, preserve unknown/undelivered records, and verify the exact target and outcome. A seven-day retention policy could be layered on that capability if supported; otherwise preserve the camera's normal overwrite behavior and deduplicate locally.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

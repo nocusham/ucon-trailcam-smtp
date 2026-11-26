@@ -4,14 +4,17 @@ from p4p_camera_sdk.sdcard import build_list_event, parse_event_record
 from p4p_camera_sdk.sdcard_client import SdCardEvent
 
 
-def list_events_staged(session, begin, end, flow='no-av'):
+def list_events_staged(session, begin, end, flow='no-av', *, wait_live=True, with_audio=True):
     """Wait for settings response before issuing the observed SD sequence.
 
     Capture: settings + companion, response 961, AVCTRL, list + companion.
     Do not repeat requests automatically, or change persistent settings.
     """
     notes = session.stage_notes = []
-    session.wait_for_live_stream()
+    if wait_live:
+        session.wait_for_live_stream()
+    else:
+        notes.append('Experimental: no initial live-frame wait; camera may still stream.')
     session.phase = 'settings init'
     session.send_ioctrl_batch(0, [(960, bytes(4)), (8474, bytes(4))])
     start = time.monotonic()
@@ -28,7 +31,8 @@ def list_events_staged(session, begin, end, flow='no-av'):
         pass
     if flow == 'app':
         session.phase = 'playback init'
-        session.send_avctrl(2, playrecord=0, streamindex=0, with_audio=1,
+        notes.append(f'Experimental AVCTRL 2, with_audio={int(with_audio)}')
+        session.send_avctrl(2, playrecord=0, streamindex=0, with_audio=int(with_audio),
                             st_time_day=0, param=0)
         for _ in session.poll_ioctrl(timeout=0.03):
             pass

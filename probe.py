@@ -12,6 +12,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from h4_events import list_events_staged
 from h4_transport import TransportTrace, kcp_segments
+from h4_traffic import TrafficStats, SocketModuleProxy
 from h4_download import native_frames, download_photo, MAX_SIZE
 from pathlib import Path
 import time
@@ -35,6 +36,7 @@ class DiagnosticRelay(RelaySession):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.phase = 'initial'
+        self.traffic = TrafficStats(lambda: self.phase)
         self.frames = Counter()
         self.headers = Counter()
         self.sent = Counter()
@@ -85,6 +87,8 @@ class DiagnosticRelay(RelaySession):
         for iotype, data in super().poll_ioctrl(timeout=timeout):
             self.frames[(self.phase, iotype)] += 1
             self.last_frame[(self.phase, iotype)] = time.monotonic() - self.started
+            if iotype in (0x10011, 0x10013):
+                self.traffic.frames[(self.phase, 'video' if iotype == 0x10011 else 'audio/metadata')] += len(data)
             if iotype != 0x10011:
                 self.lengths[(self.phase, iotype, len(data))] += 1
             if iotype == 257:
@@ -102,6 +106,7 @@ class DiagnosticRelay(RelaySession):
             yield iotype, data
 
     def report(self):
+        self.traffic.report()
         print(f'Encoded outbound P4P/KCP packets: {self.encoded_packets}')
         print('Recovered native IOCTRL responses: ' + str(dict(self.recovered)))
         print('Relay binding replies: ' + str(dict(self.binding_replies)))
@@ -147,6 +152,14 @@ def main():
     window.add_argument('--day', type=dt.date.fromisoformat, help='Calendar day YYYY-MM-DD')
     parser.add_argument('--sd-flow', choices=('app', 'no-av'), default='no-av',
                         help='H4 no-AV default or experimental app sequence')
+    parser.add_argument('--no-live-wait', action='store_true',
+                        help='Experimental: send settings immediately after relay binding')
+    parser.add_argument('--no-audio', action='store_true',
+                        help='Experimental: AVCTRL with_audio=0 (requires --sd-flow app)')
+    parser.add_argument('--traffic-stats', action='store_true',
+                        help='Traffic statistics are now always printed for relay sessions')
+    parser.add_argument('--output-dir', type=Path, default=Path('media'),
+                        help='Local JPEG directory; existing files are never overwritten')
     parser.add_argument('--download-photo', choices=('thumbnail', 'original'),
                         help='Download one latest activity photo after a successful event list')
     parser.add_argument('--photo-time', type=dt.datetime.fromisoformat,
@@ -161,8 +174,12 @@ def main():
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
-    if args.download_photo and (not args.events or args.sd_flow != 'no-av'):
-        parser.error('--download-photo requires --events with the no-av flow')
+    if args.download_photo and not args.events:
+        parser.error('--download-photo requires --events')
+    if (args.no_live_wait or args.no_audio) and not args.events:
+        parser.error('Experimental stream options require --events')
+    if args.no_audio and args.sd_flow != 'app':
+        parser.error('--no-audio requires --sd-flow app')
     if args.photo_time is not None:
         if not args.download_photo or args.photo_time.utcoffset() is None:
             parser.error('--photo-time requires --download-photo and an explicit UTC offset')
@@ -234,13 +251,15 @@ def main():
             return plain
 
         print('H4 compatibility: corrected P4P tail permutations; encoded outbound KCP; native RDT control recovery')
-        print(f'SD flow: {args.sd_flow}; KCP receive window: {args.kcp_window}')
+        print(f'SD flow: {args.sd_flow}; KCP receive window: {args.kcp_window}; '
+              f'wait for live: {not args.no_live_wait}; AVCTRL audio: {not args.no_audio}')
         if args.events or args.sdk_events:
             print(f'Query UTC: {dt.datetime.fromtimestamp(begin, dt.timezone.utc).isoformat()}'
               f' to {dt.datetime.fromtimestamp(end, dt.timezone.utc).isoformat()}')
         try:
             with (contextlib.redirect_stdout(io.StringIO()),
                   contextlib.redirect_stderr(io.StringIO()),
+                  patch.object(sdk_relay, 'socket', SocketModuleProxy(session.traffic)),
                   patch.object(sdk_crypto, 'encode', encode),
                   patch.object(sdk_crypto, 'decode', decode),
                   patch.object(sdk_relay, 'encode', encode),
@@ -266,7 +285,9 @@ def main():
                     elif args.sdk_events:
                         events = SdCardClient(session).list_events(begin, end)
                     else:
-                        events = list_events_staged(session, begin, end, flow=args.sd_flow)
+                        events = list_events_staged(session, begin, end, flow=args.sd_flow,
+                                                   wait_live=not args.no_live_wait,
+                                                   with_audio=not args.no_audio)
                         if args.download_photo:
                             stage = 'experimental JPEG download'
                             photos = [e for e in events if e.length == 65535]
@@ -283,7 +304,7 @@ def main():
                                 raise RuntimeError('No photo candidate')
                             event = max(photos, key=lambda e: e.start_time)
                             kind = 2 if args.download_photo == 'thumbnail' else 3
-                            destination = Path('media') / f'event{event.event_type}_{event.start_time}_{args.download_photo}.jpg'
+                            destination = args.output_dir / f'event{event.event_type}_{event.start_time}_{args.download_photo}.jpg'
                             if destination.exists():
                                 raise FileExistsError('Local destination already exists')
                             session.stage_notes.append(f'Photo candidate: timestamp={event.start_time}, event_type={event.event_type}, file_type={kind}, length={event.length}, src_event={event.src_event}, src_status={event.src_status}')

@@ -279,6 +279,29 @@ file media/cloud/*
 
 Twelve local cloud tests passed with mock HTTP transport, synthetic real images and SDK credential stubs. Live storage access, actual image size and resolution remain to be verified. The HTTP transport versions are pinned to the locally tested versions for TLS server-name support. Pillow is a new dependency.
 
+## Successful cloud snapshot and original-image requirement
+
+All 45 unit tests passed on the user's server. The live provider-independent cloud download succeeded over the API-supplied HTTP URL, with a fully decoded 640x360 JPEG of 5948 bytes. The uploaded comparison image from the Android SD download decodes at 2048x1152 and 277913 bytes. Both display the same capture timestamp. The uploaded comparison may have been resized by the app or attachment pipeline; earlier wire-reconstructed originals were 5120x2880, so do not infer the native resolution from this attachment. Blur is explained by protective film on the lens, not a transfer defect.
+
+The user requires full SD originals for production SMTP; cloud thumbnails are adequate for development/testing only. Cloud events remain the preferred trigger source. Do not silently substitute a thumbnail for an unavailable original in production. The original retrieval worker and persistent delivery queue are still missing. P4P reliability and stream-stop testing remain separate tasks.
+
+### Manual SMTP test / Manueller SMTP-Test
+
+`smtp_probe.py` validates a local image with the same full decoder and adds it unchanged as an attachment. Without `--send` it only validates, with no SMTP connection. For a manual real test use your own server and addresses; STARTTLS (587) or implicit TLS (465) with certificate verification are supported. SMTP authentication is optional for an authorized TLS relay; if a username is configured and SMTP_PASSWORD is not set, the password is prompted locally.
+
+```sh
+export SMTP_HOST='smtp.example.org'
+export SMTP_PORT=587
+export SMTP_SECURITY=starttls
+export SMTP_FROM='camera@example.org'
+export SMTP_TO='recipient@example.org'
+export SMTP_USERNAME='camera@example.org'
+python smtp_probe.py /path/to/test-image.jpg
+python smtp_probe.py /path/to/test-image.jpg --send
+```
+
+For an authorized relay without authentication, unset SMTP_USERNAME and SMTP_PASSWORD. Do not commit credentials. The test sends one email, does not query the camera or cloud, and does not retry automatically. SMTP acceptance is not proof of inbox delivery; check the inbox before repeating after an uncertain result. Four SMTP mock tests and twelve existing cloud tests passed locally (16 total, with SDK credential stubs for cloud tests); actual SMTP delivery has not been tested. The supplied cloud JPEG also passed the local validation-only command. No user media or credentials are committed.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -302,7 +325,8 @@ Twelve local cloud tests passed with mock HTTP transport, synthetic real images 
 - [ ] If no passive event signal is available, evaluate configurable low-frequency polling with backoff, overlapping query windows and no concurrent sessions; leave unattended polling disabled until measured.
 - [ ] Optional: Android notification webhook only for configurations where notifications are actually available.
 - [ ] Implement SQLite-backed event and delivery queue; deduplicate by camera and event/file identity; exclude verified network-wake events by default.
-- [ ] Implement SMTP with TLS certificate verification; retry failures and document possible duplicates after uncertain delivery.
+- [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
+- [ ] Validate live SMTP delivery and implement persistent delivery queue with retry/uncertain-delivery handling.
 - [ ] Add tests with synthetic fixtures, Docker and setup documentation in German and English.
 
 ## References

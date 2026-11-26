@@ -5,6 +5,7 @@ import datetime as dt
 import re
 from pathlib import Path
 from importlib.metadata import version
+from functools import partial
 from urllib.parse import urlsplit
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from cloud_image import ImageError, reference_scheme, select_latest, fetch_image
 from event_metadata import select_event, save_metadata
 from event_queue import ingest_events, QueueError
 from cloud_watch import watch
+from camera_selection import SelectionError, select_device, profile_uid, relay_credentials
 
 
 class ApiError(Exception):
@@ -47,7 +49,7 @@ async def post_json(client, path, headers, body, stage):
     return data
 
 
-async def authenticate(client, account, password, index):
+async def discover_devices(client, account, password):
     # Match the pinned SDK's Ucon login, host and account discovery.
     app_uuid = str(uuid4())
     headers = {
@@ -68,13 +70,24 @@ async def authenticate(client, account, password, index):
                    f"source=app&app=ucon&ver=2.0.10&uuid={login.get('uuid', app_uuid)}&lang=en")}
     devices = (await post_json(client, '/api/v2/user/device_list', headers, {},
                                'device discovery')).get('infos')
-    if not isinstance(devices, list) or not 0 <= index < len(devices):
-        raise ApiError('device discovery: index unavailable')
-    device = devices[index]
-    uid = device.get('device_uid') if isinstance(device, dict) else None
-    if not isinstance(uid, str) or not uid:
-        raise ApiError('device discovery: missing selected device identifier')
-    return headers, uid
+    return headers, devices
+
+
+async def authenticate(client, account, password, index, *, camera_uid=None):
+    headers, devices = await discover_devices(client, account, password)
+    try:
+        device = select_device(devices, index, uid=camera_uid)
+    except SelectionError as exc:
+        raise ApiError(str(exc)) from None
+    return headers, device['device_uid']
+
+
+async def get_device_by_uid(account, password, uid):
+    """Use one authenticated device-list response for UID and relay password."""
+    from p4p_camera_sdk.credentials import DeviceCredentials
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        _, devices = await discover_devices(client, account, password)
+    return DeviceCredentials(*relay_credentials(select_device(devices, uid=uid)))
 
 
 async def list_cloud_events(client, headers, uid, begin, end):
@@ -87,8 +100,8 @@ async def list_cloud_events(client, headers, uid, begin, end):
     return result
 
 
-async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None, event_time=None, export_event=None, queue_db=None):
-    headers, uid = await authenticate(client, account, password, index)
+async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None, event_time=None, export_event=None, queue_db=None, camera_uid=None):
+    headers, uid = await authenticate(client, account, password, index, camera_uid=camera_uid)
     result = await list_cloud_events(client, headers, uid, begin, end)
     items = result['items']
     if queue_db is not None:
@@ -184,18 +197,20 @@ async def run(args, account, password, begin, end):
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
         if args.watch:
             return await watch(client, account, password, args.index, args.queue_db,
-                               authenticate=authenticate, list_events=list_cloud_events,
+                               authenticate=partial(authenticate, camera_uid=args.camera_uid), list_events=list_cloud_events,
                                api_error=ApiError, cycles=args.cycles, interval=args.interval,
                                hours=args.hours, overlap=args.overlap)
         return await query_events(client, account, password, args.index, begin, end, schema=args.schema,
                                   image_dir=args.output_dir if args.download_image else None,
                                   event_time=int(args.event_time.timestamp()) if args.event_time else None,
-                                  export_event=args.export_event, queue_db=args.queue_db)
+                                  export_event=args.export_event, queue_db=args.queue_db, camera_uid=args.camera_uid)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--index', type=int, default=0)
+    parser.add_argument('--index', type=int, default=None, help='Legacy diagnostic camera index')
+    parser.add_argument('--config', type=Path, help='Local camera profile configuration')
+    parser.add_argument('--camera', help='Enabled configured camera name')
     window = parser.add_mutually_exclusive_group()
     window.add_argument('--day', type=dt.date.fromisoformat)
     window.add_argument('--hours', type=int, default=24)
@@ -228,6 +243,16 @@ def main():
         parser.error('--export-event requires --event-time to identify the correct event')
     if args.event_time is not None and not (args.export_event or args.download_image):
         parser.error('--event-time requires --export-event or --download-image')
+    if bool(args.config) != bool(args.camera) or (args.config and args.index is not None):
+        parser.error('Use --config and --camera together, without --index')
+    args.camera_uid = None
+    if args.config:
+        from camera_smtp import load_profiles
+        try:
+            args.camera_uid = profile_uid(load_profiles(args.config), args.camera)
+        except Exception:
+            parser.error('Invalid configuration or camera missing/disabled')
+    args.index = 0 if args.index is None else args.index
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
     if version('p4p-camera-sdk') != '0.1.16':

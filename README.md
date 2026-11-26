@@ -426,6 +426,19 @@ With the correct UID this should preview three images and three messages without
 
 The single-camera profile preview passed for three verified originals. The project now reads a protected local .env file directly, without executing shell code or exporting its values to the environment. See [credential setup](docs/CREDENTIALS.md). Private Ucon and SMTP passwords remain in .env; only the public Revierwelt password "mail" may be specified literally in a camera SMTP profile for the matching host and recipient domain. The German configuration template explains every supported field; existing config.local.toml is not overwritten. Both local files remain ignored by Git. The private credential reader checks ownership and mode (400/600), rejects symlinks and malformed/duplicate entries, and reads literal values with file precedence over existing environment variables. Eight new tests plus existing Ucon and queue routing tests passed locally (29 tests). The actual server login with .env, the legacy SMTP settings integration and eventual systemd/reboot behavior still need validation. No LXC setup or Revierwelt test yet.
 
+## Persistent credentials confirmed; stable camera selection
+
+All 102 tests passed on the Ubuntu test server, Ucon login succeeded after unsetting the previously exported account and passwords, and both local files have mode 600. The user ordered a WOLFANG WT08-WB (Ucon) and Xega XG-23 (UBox) for later validation. Keep H4 as the sole live reference until the first live system is ready. UBox credentials are separate; shared backend/protocol compatibility is a hypothesis, not a confirmed fact.
+
+Cloud and SD probes now accept `--config config.local.toml --camera NAME` instead of a device index. The selected enabled profile is resolved by exact UID in the authenticated device list; missing or duplicate matching UIDs fail closed. For SD sessions the UID and relay password are taken from the same device record, using the existing authenticated Ucon API. No fallback to another camera. Legacy index-based diagnostics remain available, but cannot be combined with the configured selection. Five standalone selection tests passed locally (order, missing/duplicate UID, legacy index, disabled/missing alias and relay credential binding). Full CLI and actual SDK integration still need test-server validation.
+
+```sh
+python cloud_probe.py --config config.local.toml --camera GS-TEST-01 --hours 24
+python probe.py --config config.local.toml --camera GS-TEST-01
+```
+
+The second command is login/discovery only; neither opens a P4P session or sends mail. The same selection flags can be combined with the existing explicit SD or watch options. Do not add or enable unvalidated camera models yet. This is a preparatory step; multi-camera orchestration, bounded retry handling, continuous operation, Proxmox and Revierwelt live validation remain outstanding.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -463,7 +476,9 @@ The single-camera profile preview passed for three verified originals. The proje
 - [x] Implement configurable single/grouped MIME delivery with Revierwelt guard.
 - [x] Validate both message plans and exact received attachment hash on the test server.
 - [x] Implement per-camera SMTP profiles and routing receipts with synthetic multi-camera tests.
-- [ ] Validate profile preview on test server, implement UID-based multi-camera cloud/download orchestration and bounded retry/recovery.
+- [x] Validate profile preview and persistent Ucon credentials on test server.
+- [x] Implement explicit UID-based camera selection for cloud and SD probes.
+- [ ] Validate configured probe selection and implement multi-camera orchestration and bounded retry/recovery.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.

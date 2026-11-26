@@ -4,6 +4,8 @@ import asyncio
 import contextlib
 import datetime as dt
 from ucon_auth import read_credentials
+from camera_selection import profile_uid
+from cloud_probe import get_device_by_uid
 import io
 import logging
 from collections import Counter
@@ -151,7 +153,9 @@ class DiagnosticRelay(RelaySession):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--index', type=int, default=0)
+    parser.add_argument('--index', type=int, default=None, help='Legacy diagnostic camera index')
+    parser.add_argument('--config', type=Path, help='Local camera profile configuration')
+    parser.add_argument('--camera', help='Enabled configured camera name')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--events', action='store_true', help='Explicitly request SD events (may wake camera)')
     modes.add_argument('--sdk-events', action='store_true', help='Legacy SDK event sequence (known bad command constants; diagnostic only)')
@@ -188,6 +192,16 @@ def main():
                         help='KCP receive window; default SDK 256, Android observed 512')
     parser.add_argument('--tz', default='Europe/Berlin', help='Time zone for --day (default Europe/Berlin)')
     args = parser.parse_args()
+    if bool(args.config) != bool(args.camera) or (args.config and args.index is not None):
+        parser.error('Use --config and --camera together, without --index')
+    args.camera_uid = None
+    if args.config:
+        from camera_smtp import load_profiles
+        try:
+            args.camera_uid = profile_uid(load_profiles(args.config), args.camera)
+        except Exception:
+            parser.error('Invalid configuration or camera missing/disabled')
+    args.index = 0 if args.index is None else args.index
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
     if not 1 <= args.batch_limit <= 10:
@@ -231,8 +245,15 @@ def main():
     resources = contextlib.ExitStack()
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            device = asyncio.run(CredentialClient(account, password).get_device(index=args.index))
+            if args.camera_uid is not None:
+                device = asyncio.run(get_device_by_uid(account, password, args.camera_uid))
+            else:
+                device = asyncio.run(CredentialClient(account, password).get_device(index=args.index))
         print('Account login and device discovery successful.')
+        if args.camera_uid is not None:
+            if device.device_uid != args.camera_uid:
+                raise RuntimeError('Configured camera mismatch')
+            print('Configured camera UID verified.')
         if not (args.events or args.sdk_events or args.sd_status):
             return 0
         stage = 'camera relay session / SD status' if args.sd_status else 'camera relay session / SD event listing'

@@ -4,7 +4,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmwa
 
 ## Status / Projektstand
 
-Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): motion recordings did not generate app notifications in the initial test configuration; a later PIR test on 2026-11-26 did produce an almost immediate Android notification with thumbnail, according to the user (no paid storage subscription reported). Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). A live activity original was independently reconstructed from the Python wire capture and matched the corrected Android reference byte-for-byte. The corrected codec and normal metadata-driven activity thumbnail/original and network-wake original downloads passed live tests W/X/Y, with matching MD5 on all three files. SMTP is not implemented yet.
+Target: H4 LTE trail camera, Ucon Android app, using a personal SIM since at least the tests on 2026-11-25 (user correction), no paid cloud-storage subscription reported. Field observation (2026-11-25): motion recordings did not generate app notifications in the initial test configuration; a later PIR test on 2026-11-26 did produce an almost immediate Android notification with thumbnail, according to the user (no paid storage subscription reported). Initially SD recordings became visible only after actively connecting; later Android PIR notifications included a snapshot. Whether a server can obtain the event metadata directly remains unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). A live activity original was independently reconstructed from the Python wire capture and matched the corrected Android reference byte-for-byte. The corrected codec and normal metadata-driven activity thumbnail/original and network-wake original downloads passed live tests W/X/Y, with matching MD5 on all three files. SMTP is not implemented yet.
 
 ## First test (Linux, Python 3.12+)
 
@@ -208,13 +208,29 @@ The staged list now fails closed on missing, incomplete or inconsistent replies 
 
 ## New PIR notification and tests Z5–Z7 (2026-11-26)
 
-A fresh PIR event produced an almost immediate Android notification with a thumbnail (user observation, no paid cloud-storage subscription reported). The accompanying capture ends about 31 seconds before the corresponding PIR timestamp, so the notification transport itself is not captured. This supersedes the earlier assumption that notifications are unavailable. Repeat with the app in the background, after the camera has returned to its normal idle state, and capture all relevant Android traffic including Google Play Services; do not open live view or SD playback until after the notification is received. Investigate the provider event API or an Android notification webhook before designing unattended polling. Availability after the trial SIM/service period and with a personal SIM is not established.
+A fresh PIR event produced an almost immediate Android notification with a thumbnail (user observation, no paid cloud-storage subscription reported). The accompanying capture ends about 31 seconds before the corresponding PIR timestamp, so the notification transport itself is not captured. This supersedes the earlier assumption that notifications are unavailable. Repeat with the app in the background, after the camera has returned to its normal idle state, and capture all relevant Android traffic including Google Play Services; do not open live view or SD playback until after the notification is received. Investigate the provider event API or an Android notification webhook before designing unattended polling. Personal SIM operation is now confirmed by the user (including the previous day's tests); availability after any separate trial service entitlement expires is unknown.
 
 The same trace confirms sensitivity values low=1, medium=2, high=3. Each change sends request 20 (13 bytes) and two requests 22 (40 bytes each), with replies 21 and 23. In request 20 offsets 6 and 7 carry the chosen value; in 22 offset 6 carries it and offset 0 differs (1/0). The meaning of the companion commands is not fully established; no setting-write functionality is added. Another AVCTRL 2 / SD list / photo transfer succeeded in the app with no sustained live media: both captured JPEGs (262330 and 5223 bytes) match their metadata MD5.
 
 Z5 downloaded the new activity original, 247692 bytes, 207/207 blocks, MD5 verified. Relay session duration 13.2 s; IPv4/UDP estimate 859066 bytes, of which 195961 bytes were counted before the metadata phase (250626 including metadata). These are server socket measurements, not SIM billing. Z6 failed before settings: 0/1152 incoming KCP segments matched the accepted conversation, zero outgoing KCP packets, 550570 bytes. Z7 failed before listing: 1152/1152 matching segments, no ACK for the initial settings requests despite nine transmissions each, 567786 bytes. Neither experimental stream-stop command was reached.
 
 Across six private PCAPs, seven successful captured relay sessions all echo the requested four conversation bytes (stream request offset 88, compact alive offset 24, KCP header offset 0). The probe now records the proposed conversation from the pinned SDK builder and rejects compact alive replies that do not match. This is an H4-specific fail-closed guard, not a proven resolution of Z6; no failed-session capture yet proves whether the reply was stale or the relay sent data for a different conversation. Z7's lack of acknowledgements despite matching conversation remains unresolved. Do not guess a replacement routing tag or automatically retry. Run unit tests and repeat Z6/Z7 with the same explicit event timestamp, separate output directories, and a pause between sessions to reduce possible overlap. If failure persists, capture the failed session including discovery and logout. No raw captures, credentials, device IDs, private media or hashes are published.
+
+## Push capture and Z8/Z9 (2026-11-26)
+
+The user confirms personal SIM operation since the previous day's tests. A second PIR notification appeared with a snapshot. The private Android capture covers about 47 seconds and 230 IP packets, with no observed P4P UDP traffic on ports 20001/10240. At relative +14.197 s an established TLS connection to mtalk.google.com:5228 received 1155 TCP payload bytes; at +14.240 s a DNS query for ubiasnap-eu-uk.oss-eu-west-1.aliyuncs.com began, followed by TLS on port 443 and several kilobytes of incoming encrypted application data at +14.483 s. Google's FCM network documentation confirms the mtalk host/port. The timing strongly supports FCM delivery followed by an OSS snapshot fetch, but TLS prevents inspection of the actual message, URL or image. This capture measures phone-side traffic, not the camera SIM. The screenshot's embedded time precedes the probable push traffic by roughly nine seconds; clocks and display latency are not independently synchronized.
+
+Z8 accepted the correct conversation, received settings, sent AVCTRL 2 and list requests with ACKs, then all KCP data stopped after +6.83 s; no 257. Z9 had a matching conversation but no settings ACK and never reached AVCTRL. Z8 used 276679 bytes and Z9 567512 bytes (failed-session server-side estimates). No further P4P parameter changes without a failed-session wire capture.
+
+### Experimental cloud event query (no camera session)
+
+The related UBox project documents an authenticated cloud event-list endpoint (https://github.com/mahumadad/ubox-p4p/blob/main/docs/ENDPOINTS.md). The new `cloud_probe.py` tests that path on the **existing pinned Ucon API host**, using the same login and selected account device. It sends only HTTPS login, device discovery and one list query. It does not contact the relay, retrieve images, register push tokens or change camera settings. This route is not yet verified on Ucon or without paid storage.
+
+```sh
+python cloud_probe.py --day 2026-11-26
+```
+
+Existing UCON_ACCOUNT/UCON_PASSWORD variables are supported. The probe reports counts, matching-device timestamps and presence of HTTPS image references, not IDs, tokens, URLs or raw response bodies. Unmatched/unverified items are ignored. A zero result or API rejection is not proof that no other notification API exists. No automatic polling is enabled. If event listing works without waking the camera, it may enable backend-only polling and event-triggered SD downloads. FCM itself requires app-instance registration; no direct FCM listener is implemented. Synthetic mock-transport tests are included.
 
 ## Roadmap
 
@@ -226,9 +242,12 @@ Across six private PCAPs, seven successful captured relay sessions all echo the 
 - [x] Validate live reference thumbnail download byte-for-byte against Android capture.
 - [x] Independently verify live activity original against corrected Android wire reference.
 - [x] Validate corrected codec and normal metadata-driven activity thumbnail/original downloads live.
-- [ ] Test wake from sleep and personal SIM compatibility.
+- [x] Confirm personal SIM operation with SD photo retrieval and Android notifications.
+- [ ] Measure wake from extended idle and check notification availability over time.
 - [x] Observe a PIR notification on Android without a reported paid cloud-storage subscription.
-- [ ] Identify notification transport and test availability when idle, after trial expiration and with personal SIM.
+- [x] Identify probable FCM/OSS notification transport from Android capture.
+- [ ] Validate account-scoped HTTPS event query without waking the camera.
+- [ ] Verify notification reliability and any separate service-entitlement limits.
 - [x] Demonstrate file transfer without continuous live video in the official Android app.
 - [ ] Validate Python SD download with live video stopped.
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.

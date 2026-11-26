@@ -55,3 +55,38 @@ limit = 3
 # Weitere Kamera: gesamten [[cameras]]-Block einschließlich [cameras.smtp]
 # kopieren, eindeutigen Namen/UID und eigene Versandparameter setzen.
 # Keine echten Zugangsdaten oder Kamera-UIDs in die öffentliche Vorlage schreiben.
+
+# Optionaler globaler Alarmkanal (unabhängig von allen Kamera-SMTP-Profilen).
+# Noch kein automatischer Dienst; zunächst nur manueller Alarm-SMTP-Test.
+[alerts]
+# true = Alarmkanal aktivieren, false = keine Alarm-E-Mails (Standard).
+enabled = false
+# Fehlerdauer in Minuten für Login-Fehler, 1–10080 (Standard 15).
+login_minutes = 15
+# Fehlerdauer in Minuten für Cloud-API, 1–10080 (Standard 30).
+api_minutes = 30
+# Bestätigte Nichterreichbarkeit einer Kamera in Stunden, 1–720 (Standard 24).
+# Keine Bilder allein gelten nicht als Störung.
+camera_hours = 24
+# Mindestabstand erfolgreicher Alarmmeldungen derselben Störung in Stunden, 1–720.
+repeat_hours = 24
+# Mindestabstand nach fehlgeschlagenem Alarmversand in Minuten, 1–10080.
+retry_minutes = 60
+# true = Entwarnung nach einer erfolgreichen Prüfung einer gemeldeten Störung.
+recovery = true
+
+[alerts.smtp]
+# Eigener SMTP-Server für Fehlerberichte, möglichst unabhängig vom Bildversand.
+host = "smtp.example.invalid"
+# TCP-Port 1–65535; Standard 587 bei STARTTLS bzw. 465 bei TLS.
+port = 587
+# starttls oder tls; für Fehlerberichte ist verschlüsselter SMTP vorgeschrieben.
+security = "starttls"
+# Absenderadresse (genau eine E-Mail-Adresse).
+from = "alerts@example.invalid"
+# Privater Alarmempfänger (genau eine Adresse, kein Revierwelt-Empfänger).
+to = "admin@example.invalid"
+# SMTP-Benutzername; ohne Anmeldung beide folgenden Felder weglassen.
+username = "alerts@example.invalid"
+# Verweis auf den privaten Passworteintrag in .env.
+password_env = "ALERT_SMTP_PASSWORD"

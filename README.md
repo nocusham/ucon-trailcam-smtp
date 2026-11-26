@@ -121,6 +121,17 @@ The H4 compatibility layer corrects P4P tail permutations, outbound KCP encoding
 
 These are server-side measurements, not SIM billing or independent controlled comparisons. Intermittent initial settings ACK failures are still possible.
 
+## Optional error notification channel
+
+An independent TLS SMTP account and private recipient can be configured in [alerts] / [alerts.smtp]. Defaults: login 15 minutes, API 30 minutes, confirmed repeated camera connection failures 24 hours, repeat reminder 24 hours, alarm SMTP retry 60 minutes and optional recovery notice. Disabled by default. Persistent incident and notification state logic exists; automatic health observation/dispatch is not yet wired into the continuous service. No absence-of-photos alarm. Manual configuration check and explicit test:
+
+```sh
+python health_alerts.py --config config.local.toml
+python health_alerts.py --config config.local.toml --send-test
+```
+
+The second command requires enabled=true and a configured private alert destination. No camera/cloud activity or queue updates. See [health alert configuration and semantics](docs/ALERTS.md).
+
 ## Known API errors and recovery plan
 
 | Observation | Implemented now | Planned service behavior |
@@ -139,6 +150,8 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [x] Per-camera SMTP profiles, protected credentials, UID-based cloud and device discovery.
 - [x] Isolate credential tests from local .env; 108 tests confirmed.
 - [ ] Integrate UID-based real SD transfer and multi-camera processing on the current server.
+- [x] Implement optional independent alarm SMTP configuration and persistent incident notification core (11 local tests).
+- [ ] Validate alert SMTP live and wire observation/dispatch into the service; optional active camera health checks.
 - [ ] Persistent event cursor, initial-start policy, freshness filtering and bounded retries with login-specific handling.
 - [ ] Continuous service with independent cloud, camera and delivery failure handling; configuration for intervals and retention.
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.
@@ -154,6 +167,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 
 - [German annotated camera configuration](config.example.toml)
 - [Credential setup (Deutsch)](docs/CREDENTIALS.md)
+- [Optional health alerts (Deutsch)](docs/ALERTS.md)
 - [Deferred native Proxmox LXC plan](docs/LXC.md)
 - [Full historical development and protocol analysis](docs/DEVELOPMENT_HISTORY.md)
 - [Development changelog](CHANGELOG.md)

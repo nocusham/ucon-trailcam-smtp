@@ -18,6 +18,8 @@ This records development milestones, not a published production release.
 
 ### Implemented
 
+- Optional independent TLS alarm SMTP profile, persistent login/API/per-camera incidents, delayed reminders, recovery and rate-limited failed alert retries; 11 standalone tests passed locally. Manual alert test available; automatic health checks and dispatch not integrated yet.
+
 - H4 protocol compatibility and complete KCP receive-queue draining, safe original filenames.
 - Persistent SQLite event, download, delivery and route receipts; conservative uncertain-delivery state.
 - Per-camera SMTP settings, Revierwelt single-attachment/unique-recipient guard, no mixed-camera batches.

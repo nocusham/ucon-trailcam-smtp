@@ -191,7 +191,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Final Revierwelt delivery test with one original per message.
 - [ ] After completion of the existing goals: optional per-camera image footer appended below the complete original image, never overlaid on it; see [planned image footer](docs/IMAGE_FOOTER.md).
 - [ ] After first live system: validate WOLFANG WT08-WB (Ucon) and real multi-camera operation.
-- [ ] Afterwards investigate Xega XG-23 (UBox), separate account authentication and potential shared protocol/backend; compatibility is unconfirmed.
+- [ ] Afterwards investigate Xega XG-23 (UBox), with separate account authentication, provider-scoped failure handling and a validated SD-original transfer. See [UBox research and camera compatibility test plan](docs/UBOX_RESEARCH.md); compatibility is unconfirmed.
 - [ ] Discuss small upstream SDK fixes with the maintainer after application validation; clarify licensing before redistribution.
 
 ## Documentation / Dokumentation
@@ -201,6 +201,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [Optional health alerts (Deutsch)](docs/ALERTS.md)
 - [Deferred native Proxmox LXC plan](docs/LXC.md)
 - [Planned optional image footer (Deutsch)](docs/IMAGE_FOOTER.md)
+- [UBox protocol research and additional-camera test plan](docs/UBOX_RESEARCH.md)
 - [Full historical development and protocol analysis](docs/DEVELOPMENT_HISTORY.md)
 - [Development changelog](CHANGELOG.md)
 

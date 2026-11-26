@@ -65,6 +65,8 @@ This records development milestones, not a published production release.
 
 ### Pending
 
+- Reviewed mahumadad/ubox-p4p at `6f9f87fc31da4eb86531a81b08b3b1ffa4db5fa8`: matching REST routes, distinct UBox portal/app context, shared P4P codec ancestry via the pinned SDK, transport differences that may help diagnose relay stalls, and open SD retrieval / Xega 4G compatibility issues. Added [UBOX_RESEARCH.md](docs/UBOX_RESEARCH.md) with source links, provider-isolation design and staged WOLFANG/Xega tests. Documentation only; no model compatibility or causal fix claimed.
+
 - User-approved restructuring requirement: English throughout the maintained repository and GitHub presentation (documentation, code, configuration comments, CLI/help/logs, tests, deployment and release material). Preserve deliberate user-facing localization and existing behavior; review before production release. See [REPOSITORY_LAYOUT.md](docs/REPOSITORY_LAYOUT.md). No runtime changes during the soak test.
 
 - User-approved future feature, after the existing milestones: optional per-camera image footer on a derived SMTP attachment, with configured camera alias, event battery percentage and local capture date/time. Extend the canvas downwards; no overlay, cropping or resizing of the original photo. Keep the downloaded JPEG byte-for-byte intact. Specification: [IMAGE_FOOTER.md](docs/IMAGE_FOOTER.md). Documentation only during the active soak test.

@@ -186,6 +186,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.
 - [ ] Test wake after extended idle, event reliability, mobile data use, pagination and service entitlement.
 - [ ] Multi-day live test of the DEATTI DL04 on the existing Ubuntu server.
+- [ ] Restructure the repository for production/test separation and use English consistently throughout the maintained project, including documentation, code, configuration comments, CLI help, logs, tests and deployment files; see [repository layout and language policy](docs/REPOSITORY_LAYOUT.md).
 - [ ] Native unprivileged Debian 13 LXC, systemd autostart and actual reboot test.
 - [ ] Final Revierwelt delivery test with one original per message.
 - [ ] After completion of the existing goals: optional per-camera image footer appended below the complete original image, never overlaid on it; see [planned image footer](docs/IMAGE_FOOTER.md).

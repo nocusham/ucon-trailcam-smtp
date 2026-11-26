@@ -65,6 +65,8 @@ This records development milestones, not a published production release.
 
 ### Pending
 
+- User-approved restructuring requirement: English throughout the maintained repository and GitHub presentation (documentation, code, configuration comments, CLI/help/logs, tests, deployment and release material). Preserve deliberate user-facing localization and existing behavior; review before production release. See [REPOSITORY_LAYOUT.md](docs/REPOSITORY_LAYOUT.md). No runtime changes during the soak test.
+
 - User-approved future feature, after the existing milestones: optional per-camera image footer on a derived SMTP attachment, with configured camera alias, event battery percentage and local capture date/time. Extend the canvas downwards; no overlay, cropping or resizing of the original photo. Keep the downloaded JPEG byte-for-byte intact. Specification: [IMAGE_FOOTER.md](docs/IMAGE_FOOTER.md). Documentation only during the active soak test.
 
 - Monitor actual failed downloads of known outstanding cloud events, not camera polling. Implement optional per-camera seven-day inactivity warning off by default, using latest_active_utc on DEATTI DL04 and no-photo-event fallback for models without the field. The alert label now says original download rather than camera connection; event-level integration is pending.

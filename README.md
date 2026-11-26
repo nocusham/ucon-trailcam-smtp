@@ -259,6 +259,10 @@ The test upgrades the supplied HTTP URL to HTTPS, preserving the path and query.
 
 All 42 tests passed on the server, but the first live image test was refused by the local allowlist/URL-format check before any storage GET. The exact reason is not yet known. The diagnostic now reports only scheme, DNS hostname (if syntactically safe), port and presence of userinfo/fragment, without the path, signed query, username or password. Review the hostname before sharing. The existing strict allowlist, HTTPS requirement and redirect refusal are unchanged. Repeat the same download command to identify the origin; no unknown host is contacted. One additional synthetic test verifies diagnostic redaction.
 
+## Cloud event bucket identified
+
+All 43 tests passed on the server. The origin diagnostic identified the event API's HTTP image URL host as `ucon-eu-uk.oss-eu-west-1.aliyuncs.com`, using the default port, without userinfo or a fragment. This differs from the Android notification capture's `ubiasnap-eu-uk.oss-eu-west-1.aliyuncs.com`. Both exact hosts are now allowed; no wildcard or other bucket is accepted. The supplied host, path and signed query are preserved when upgrading to HTTPS, with certificate verification and no plaintext fallback or redirects. Two additional mock tests check the new host and rejection of unrelated buckets. All 12 cloud tests passed locally. Live download and image resolution remain unverified. Repeat the same download command.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

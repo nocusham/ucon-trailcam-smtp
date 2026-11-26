@@ -1,4 +1,4 @@
-"""Bounded, HTTPS-only test download from the observed Ucon snapshot host."""
+"""Bounded, HTTPS-only test download from the observed Ucon snapshot hosts."""
 import hashlib
 import re
 from urllib.parse import urlsplit, urlunsplit
@@ -6,6 +6,8 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 
 SNAPSHOT_HOST = 'ubiasnap-eu-uk.oss-eu-west-1.aliyuncs.com'
+CLOUD_EVENT_HOST = 'ucon-eu-uk.oss-eu-west-1.aliyuncs.com'
+ALLOWED_IMAGE_HOSTS = frozenset((SNAPSHOT_HOST, CLOUD_EVENT_HOST))
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 
@@ -51,7 +53,7 @@ def secure_image_url(value):
         raise ImageError('Cloud image: missing HTTP(S) reference')
     try:
         parts = urlsplit(value)
-        if (parts.hostname != SNAPSHOT_HOST or parts.username is not None
+        if (parts.hostname not in ALLOWED_IMAGE_HOSTS or parts.username is not None
                 or parts.password is not None or parts.fragment
                 or parts.port not in (None, 80 if parts.scheme == 'http' else 443)):
             raise ImageError('Cloud image: unverified storage host or URL format; '
@@ -59,7 +61,7 @@ def secure_image_url(value):
     except ValueError:
         raise ImageError('Cloud image: invalid URL format; '
                          + reference_origin(value)) from None
-    return urlunsplit(('https', SNAPSHOT_HOST, parts.path, parts.query, ''))
+    return urlunsplit(('https', parts.hostname, parts.path, parts.query, ''))
 
 
 def select_latest(items, uid):

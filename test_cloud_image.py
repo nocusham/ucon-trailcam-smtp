@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 import httpx
-from cloud_image import ImageError, SNAPSHOT_HOST, secure_image_url, select_latest, fetch_image, reference_origin
+from cloud_image import ImageError, SNAPSHOT_HOST, CLOUD_EVENT_HOST, secure_image_url, select_latest, fetch_image, reference_origin
 
 
 class CloudImageTests(unittest.IsolatedAsyncioTestCase):
@@ -60,3 +60,24 @@ class CloudImageTests(unittest.IsolatedAsyncioTestCase):
         for private in ('secret', 'private', 'hidden', 'signature='):
             self.assertNotIn(private, str(error.exception))
         self.assertIn('port=invalid', reference_origin('http://example.invalid:bad/a'))
+
+    def test_event_bucket_preserved_without_wildcard(self):
+        original = f'http://{CLOUD_EVENT_HOST}/a%2Fb.jpg?sig=a%2B%2F&x=1'
+        self.assertEqual(secure_image_url(original), 'https' + original[4:])
+        with self.assertRaises(ImageError):
+            secure_image_url('https://other.oss-eu-west-1.aliyuncs.com/a')
+
+    async def test_download_from_event_bucket(self):
+        item = {'et_utc': 3, 'img_url': f'http://{CLOUD_EVENT_HOST}/a?sig=a%2B'}
+        payload = bytes.fromhex('ffd8ffe00002ffd9')
+        def respond(request):
+            self.assertEqual(request.url.host, CLOUD_EVENT_HOST)
+            self.assertEqual(request.url.scheme, 'https')
+            self.assertEqual(request.url.query, b'sig=a%2B')
+            self.assertNotIn('X-Ubia-Auth-Usertoken', request.headers)
+            return httpx.Response(200, content=payload)
+        with tempfile.TemporaryDirectory() as tmp:
+            async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+                dest, size, _ = await fetch_image(client, item, Path(tmp))
+                self.assertEqual(dest.read_bytes(), payload)
+                self.assertEqual(size, len(payload))

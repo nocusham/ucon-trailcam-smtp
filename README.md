@@ -379,6 +379,20 @@ sqlite3 -readonly data/events-batch-test.sqlite3 'SELECT state,count(*) FROM eve
 
 Only copy to a new test database; repeat the probe without recreating the copy. Keep the old historical event pending. No production database or Revierwelt usage; continue on the existing Ubuntu test server.
 
+## Live batch download and explicit queue SMTP test
+
+All 77 unit tests passed on the user's test server. Three original JPEGs (247692, 254930, 261261 bytes; all 5120x2880) downloaded in one 10.3-second P4P session, 638/638 blocks, exact metadata MD5 and native filenames, no decoded live frames during photo transfer. Total estimated server IPv4/UDP bytes 1235998, not SIM billing. Three downloaded and one historical pending row remained; repeating the same batch opened no relay session.
+
+The next explicit test uses the existing batch DB on the Ubuntu server. No Ucon login or P4P connection is needed. Select the day and up to three downloaded rows. Revalidate exact attachment bytes against SHA256, size and dimensions and verify the matching event receipt and metadata before sending any message. Existing SMTP configuration and original basenames and six metadata fields are reused. The current SMTP image loader limits attachments to 8 MiB. The test queue is intended for the existing single-camera test and not production.
+
+```sh
+python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --limit 3
+python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --limit 3 --send
+sqlite3 -readonly data/events-batch-test.sqlite3 'SELECT state,count(*) FROM events GROUP BY state;'
+```
+
+Use only the previously validated private TLS mail server and test recipient. No Revierwelt tests until the complete application is ready. Without --send there is no SMTP connection or delivery state change. With --send, commit an uncertain state and delivery receipt (message ID, start time) immediately before sending; mark sent and record acceptance time only after the SMTP helper returns normally. A crash, timeout or any SMTP exception leaves uncertain, even if the server never received the message; the selected day's batch stops and further runs refuse to send until manual review. No automatic resend or resolution yet. A successful server acceptance is not proof of inbox delivery. The same per-database advisory lock is used as the download batch. Expected final state is sent=3, pending=1, and repeating the command should open no SMTP connection. Do not recreate the DB or reset sent rows for a repeat test. Six local tests of the new processing core passed using real SQLite and JPEGs with injected image/message helpers and mocked SMTP; complete CLI, shared settings refactor and live delivery are not yet validated.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -410,7 +424,9 @@ Only copy to a new test database; repeat the probe without recreating the copy. 
 - [x] Implement read-only SD timestamp correlation test.
 - [x] Validate live SD correlation for three same-day records.
 - [x] Implement bounded original download batch and persistent file receipts.
-- [ ] Validate live batch download, retries, delivery states and event-type filtering.
+- [x] Validate live batch download and skip already downloaded originals.
+- [x] Implement explicit queue SMTP batch and conservative uncertain-delivery state.
+- [ ] Validate queue SMTP live and implement bounded retry/recovery and production event filtering.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.

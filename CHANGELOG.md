@@ -6,6 +6,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
+- 175 tests passed; retention preview reported zero eligible originals, no file changes. Actual old-file deletion remains synthetic-test validated only. Documented 24-hour reference-server soak procedure before repository packaging/LXC transition.
+
 - 167 tests passed; normal SMTP path after retry refinement live validated (4/4 cycles, one original and SMTP acceptance with configured camera alias and local capture-time subject, three idle cycles without relay, no alarms). Actual transport faults were simulated only.
 
 - Integrated ten-cycle run completed 10/10 without failures; one new original (5120 x 2880, 264,906 bytes) in one 9.3-second relay, one new accepted SMTP message, nine idle cycles without relay, no alarms and three sent events without duplicates.

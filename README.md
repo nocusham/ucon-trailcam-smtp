@@ -244,6 +244,17 @@ python cloud_probe.py --day 2026-11-26 --schema
 
 The next architectural step is a persistent backend event cursor/deduplication queue with bounded overlapping queries and a separate SD retrieval worker. Keep end timestamp semantics and the observed one-second discrepancy in mind; do not require exact equality between cloud and SD event timestamps. Validate stable event identifiers and whether thumbnails are available before choosing the retrieval method.
 
+## Cloud snapshot reference discovery
+
+All 38 existing unit tests passed on the user's server. The live schema response contains two own-camera event records, each with a 374-character HTTP img_url, integer img_expire, itemid, bucket, end_point, img, type, battery, and other fields. The initial zero HTTPS references resulted from filtering by scheme, not missing URLs. The exact semantics and expiry units are not yet verified. The probe now counts HTTP(S) references and offers an explicit one-shot download of the latest unambiguous own-camera event.
+
+```sh
+python cloud_probe.py --day 2026-11-26 --download-image
+file media/cloud/*.jpg
+```
+
+The test upgrades the supplied HTTP URL to HTTPS, preserving the path and query. It restricts requests to the exact snapshot host observed in the private Android notification capture, uses a separate TLS-verified HTTP client without account headers or redirects, caps downloaded image bytes at 8 MiB, checks JPEG SOI/EOI, and never overwrites files. No plaintext fallback, signed URL logging or automatic polling. If the host differs, the test stops pending verification. Boundary checks are not a full JPEG decode or a server-provided checksum. A live image fetch and its resolution are not yet confirmed. Local synthetic tests validate transport and selection behavior.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

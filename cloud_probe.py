@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import datetime as dt
 import re
+from pathlib import Path
 from importlib.metadata import version
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -11,6 +12,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from p4p_camera_sdk.credentials import HOST, USER_AGENT, encode_password
 from ucon_auth import read_credentials
+from cloud_image import ImageError, reference_scheme, select_latest, fetch_image
 
 
 class ApiError(Exception):
@@ -40,7 +42,7 @@ async def post_json(client, path, headers, body, stage):
     return data
 
 
-async def query_events(client, account, password, index, begin, end, *, schema=False):
+async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None):
     # Match the pinned SDK's Ucon login, host and account discovery.
     app_uuid = str(uuid4())
     headers = {
@@ -75,6 +77,13 @@ async def query_events(client, account, password, index, begin, end, *, schema=F
         raise ApiError('cloud event list: missing items array')
     if schema:
         print_event_schema(result, uid)
+    if image_dir is not None:
+        item = select_latest(items, uid)
+        print('Cloud image test: HTTPS only, no account headers or redirects.')
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False) as image_client:
+            dest, size, digest = await fetch_image(image_client, item, image_dir)
+        print(f'Cloud JPEG boundary check passed: {size} bytes; SHA256={digest}')
+        print(f'Cloud JPEG saved locally: {dest}')
     return summarize(items, uid)
 
 
@@ -142,17 +151,15 @@ def summarize(items, uid):
         if type(stamp) is not int or not 0 <= stamp <= 4102444800:
             stamp = None
         image = item.get('img_url')
-        try:
-            has_image = isinstance(image, str) and urlsplit(image).scheme == 'https' and bool(urlsplit(image).hostname)
-        except ValueError:
-            has_image = False
+        has_image = reference_scheme(image) is not None
         rows.append((stamp, has_image))
     return rows, unverified
 
 
 async def run(args, account, password, begin, end):
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
-        return await query_events(client, account, password, args.index, begin, end, schema=args.schema)
+        return await query_events(client, account, password, args.index, begin, end, schema=args.schema,
+                                  image_dir=args.output_dir if args.download_image else None)
 
 
 def main():
@@ -164,6 +171,9 @@ def main():
     parser.add_argument('--tz', default='Europe/Berlin')
     parser.add_argument('--schema', action='store_true',
                         help='Show event field names, types and string classifications only')
+    parser.add_argument('--download-image', action='store_true',
+                        help='Try one latest matching cloud image over HTTPS')
+    parser.add_argument('--output-dir', type=Path, default=Path('media/cloud'))
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
@@ -182,18 +192,20 @@ def main():
         account, password = read_credentials()
         print('Experimental cloud event query; no P4P/UDP camera session.')
         rows, unverified = asyncio.run(run(args, account, password, begin, end))
-    except ApiError as exc:
+    except (ApiError, ImageError) as exc:
         print(str(exc))
         return 1
     except Exception as exc:
         print(f'Cloud probe failed: {type(exc).__name__}. Details suppressed.')
         return 1
-    print(f'Matching-device events: {len(rows)}; HTTPS image references: {sum(has for _, has in rows)}')
+    print(f'Matching-device events: {len(rows)}; HTTP(S) image references: {sum(has for _, has in rows)}')
     print(f'Unverified/unmatched items ignored: {unverified}')
     for stamp, has_image in sorted(rows, key=lambda row: row[0] if row[0] is not None else -1):
         when = dt.datetime.fromtimestamp(stamp, dt.timezone.utc).isoformat() if stamp is not None else 'unknown'
         print(f'{when} | image reference: {"yes" if has_image else "no"}')
-    print('No image URL, token, device ID or raw API response printed. No image downloaded.')
+    print('No image URL, token, device ID or raw API response printed.')
+    if not args.download_image:
+        print('No image downloaded.')
     return 0
 
 

@@ -17,6 +17,12 @@ uid = "REPLACE_WITH_CAMERA_UID"
 # Legacy-Diagnose per --index bleibt separat; der Dauerbetrieb folgt später.
 enabled = true
 
+# Optional: Warnung bei ausbleibender gemeldeter Aktivität; standardmäßig aus.
+# Nutzt latest_active_utc, bei Modellen ohne Feld konservativ Fotoereignisse.
+inactivity_warning = false
+# Frist in Tagen (1–365), Standard 7; keine zusätzliche P4P-Verbindung.
+inactivity_days = 7
+
 [cameras.smtp]
 # SMTP-Hostname oder IP-Adresse, ohne URL-Schema.
 host = "smtp.example.invalid"

@@ -28,7 +28,7 @@ class AlertSettings:
 
     def threshold(self, category):
         return {'login': self.login_minutes * 60, 'api': self.api_minutes * 60,
-                'camera': self.camera_hours * 3600}[category]
+                'camera': self.camera_hours * 3600, 'inactivity': 0}[category]
 
 
 def parse_alerts(raw):
@@ -99,8 +99,8 @@ def init_health(db):
 
 def observe(db, category, scope, *, healthy, now, code=None, blocked=False):
     """Record actual checks only. A blocked login is a confirmed rejected credential."""
-    if (category not in ('login', 'api', 'camera') or not isinstance(scope, str) or not scope
-            or (category != 'camera' and scope != 'ucon') or type(healthy) is not bool
+    if (category not in ('login', 'api', 'camera', 'inactivity') or not isinstance(scope, str) or not scope
+            or (category in ('login', 'api') and scope != 'ucon') or type(healthy) is not bool
             or type(now) is not int or now < 0 or (code is not None and type(code) is not int)
             or (blocked and (healthy or category != 'login' or code != 20005))):
         raise ValueError('Invalid health observation')
@@ -138,7 +138,7 @@ class Notice:
     recovered_at: int | None
 
 
-def due_notices(db, settings, now, cameras):
+def due_notices(db, settings, now, cameras, *, inactivity_scopes=()):
     """Camera map contains enabled UID -> safe local alias only."""
     if not settings.enabled:
         return []
@@ -146,7 +146,9 @@ def due_notices(db, settings, now, cameras):
                       'recovered_at,last_attempt,last_notice FROM health_incidents ORDER BY first_failure,category,scope')
     result = []
     for cat, scope, first, last, count, code, blocked, recovery, attempt, notice in rows:
-        if cat == 'camera' and scope not in cameras:
+        if cat in ('camera', 'inactivity') and scope not in cameras:
+            continue
+        if cat == 'inactivity' and scope not in inactivity_scopes:
             continue
         if attempt is not None and now - attempt < settings.retry_minutes * 60:
             continue
@@ -161,7 +163,7 @@ def due_notices(db, settings, now, cameras):
                 continue
             if notice is not None and now - notice < settings.repeat_hours * 3600:
                 continue
-        result.append(Notice(cat, scope, cameras[scope] if cat == 'camera' else 'Ucon',
+        result.append(Notice(cat, scope, cameras[scope] if cat in ('camera', 'inactivity') else 'Ucon',
                              first, last, count, code, recovery))
     return result
 
@@ -181,10 +183,13 @@ def build_alert(settings, notice=None):
         msg.set_content('Dies ist ein manueller SMTP-Alarmtest. Keine Kamerastörung festgestellt.')
     else:
         state = 'Entwarnung' if notice.recovered_at is not None else 'Störung'
-        label = {'login': 'Anmeldung', 'api': 'Cloud-API', 'camera': 'Originaldownload'}[notice.category]
+        label = {'login': 'Anmeldung', 'api': 'Cloud-API', 'camera': 'Originaldownload', 'inactivity': 'Ausbleibende Aktivität'}[notice.category]
         msg['Subject'] = f'Wildkamera: {state} – {notice.label} / {label}'
         body = (f'{state}: {notice.label} / {label}\nErster Fehler: {utc(notice.first_failure)}\n'
                 f'Letzter Fehler: {utc(notice.last_failure)}\nFehlgeschlagene Prüfungen: {notice.failures}\n')
+        if notice.category == 'inactivity':
+            body += ('Neue Aktivität gemeldet.\n' if notice.recovered_at is not None else
+                     'Keine aktuelle Aktivität gemeldet; dies ist kein Nachweis, dass die Kamera offline ist.\n')
         if notice.code is not None:
             body += f'API-Code: {notice.code}\n'
         if notice.recovered_at is not None:
@@ -193,10 +198,10 @@ def build_alert(settings, notice=None):
     return msg
 
 
-def dispatch_due(db, settings, now, cameras, send, *, emit=print):
+def dispatch_due(db, settings, now, cameras, send, *, emit=print, inactivity_scopes=()):
     """Single service worker under its DB lock; commit attempt before network I/O."""
     accepted = failed = 0
-    for n in due_notices(db, settings, now, cameras):
+    for n in due_notices(db, settings, now, cameras, inactivity_scopes=inactivity_scopes):
         with db:
             db.execute('UPDATE health_incidents SET last_attempt=? WHERE category=? AND scope=?',
                        (now, n.category, n.scope))

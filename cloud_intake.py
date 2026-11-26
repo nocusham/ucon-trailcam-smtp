@@ -6,6 +6,7 @@ from contextlib import closing
 from pathlib import Path
 
 from health_alerts import init_health, observe
+from camera_telemetry import REFRESH_SECONDS, init_telemetry, record_snapshot
 
 
 MAX_STEP = 3600
@@ -55,11 +56,14 @@ def photo_items(items, uid, begin, end):
 
 
 class Intake:
-    def __init__(self, db, uids, *, discover, query, store, api_error, interval=60, emit=print):
+    def __init__(self, db, uids, *, discover, query, store, api_error, interval=60, emit=print,
+                 refresh_devices=None, on_devices=None):
         self.db, self.uids = db, tuple(uids)
         self.discover, self.query, self.store = discover, query, store
         self.api_error, self.interval, self.emit = api_error, interval, emit
         self.session = None
+        self.refresh_devices, self.on_devices = refresh_devices, on_devices
+        self.last_refresh = None
 
     def backoff(self, now):
         failures, = self.db.execute('SELECT failures FROM cloud_runtime WHERE id=1').fetchone()
@@ -76,11 +80,19 @@ class Intake:
         if now < due:
             self.emit('Cloud retry not due; no cloud requests.')
             return 'deferred'
+        fresh_devices = False
+        covered = set()
         try:
             if self.session is None:
                 self.session = await self.discover()
+                fresh_devices = True
                 observe(db, 'login', 'ucon', healthy=True, now=now)
             headers, devices = self.session
+            if (not fresh_devices and self.refresh_devices is not None
+                    and (self.last_refresh is None or now - self.last_refresh >= REFRESH_SECONDS)):
+                devices = await self.refresh_devices(headers)
+                self.session = (headers, devices)
+                fresh_devices = True
             if not isinstance(devices, list):
                 raise self.api_error('device discovery: invalid list', stage='device discovery')
             for uid in self.uids:
@@ -98,6 +110,8 @@ class Intake:
                 # Store commits first. If interrupted before cursor commit, overlap/dedup replay is safe.
                 with db:
                     db.execute('UPDATE cloud_cursors SET last_end=? WHERE camera_uid=?', (end, uid))
+                if end == now:
+                    covered.add(uid)
                 self.emit(f'Cloud intake: new={added}, known={known}, pending={pending}, window={end-begin}s')
         except self.api_error as exc:
             stage = getattr(exc, 'stage', None)
@@ -114,6 +128,10 @@ class Intake:
             self.backoff(now)
             self.emit('Cloud check failed; retry state retained. Details suppressed.')
             return 'blocked' if login_blocked(db) else 'error'
+        if fresh_devices:
+            if self.on_devices is not None:
+                self.on_devices(devices, now, covered)
+            self.last_refresh = now
         observe(db, 'api', 'ucon', healthy=True, now=now)
         with db:
             db.execute('UPDATE cloud_runtime SET failures=0,next_due=0 WHERE id=1')
@@ -123,7 +141,7 @@ class Intake:
 async def run(args):
     import httpx
     from camera_smtp import load_profiles
-    from cloud_probe import ApiError, discover_devices, list_cloud_events
+    from cloud_probe import ApiError, discover_devices, list_cloud_events, list_devices
     from event_queue import open_queue, ingest_events
     from queue_download import batch_lock
     from ucon_auth import read_credentials
@@ -135,18 +153,29 @@ async def run(args):
         pass
     with batch_lock(args.queue_db), closing(open_queue(args.queue_db)) as db:
         init_intake(db, [p.uid for p in profiles], int(time.time()))
+        init_telemetry(db)
         if args.resume_login:
             resume_login(db)
         if login_blocked(db):
             print('Login blocked (20005); correct credentials and use --resume-login. No cloud requests.')
             return 1
         account, password = read_credentials(interactive=False)
+        def on_devices(devices, now, covered):
+            for p in profiles:
+                device, = [d for d in devices if isinstance(d, dict) and d.get('device_uid') == p.uid]
+                photo, = db.execute("SELECT MAX(et_utc) FROM events WHERE camera_uid=? AND et_utc<=? "
+                                    "AND json_extract(metadata_json,'$.type')=1", (p.uid, now)).fetchone()
+                status = record_snapshot(db, p.uid, device, now, enabled=p.inactivity_warning,
+                                         days=p.inactivity_days, photo_utc=photo,
+                                         coverage_end=now if p.uid in covered else None)
+                print(f'Camera {p.name}: cloud telemetry saved; inactivity={status}')
         async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
             intake = Intake(db, [p.uid for p in profiles],
                             discover=lambda: discover_devices(client, account, password),
                             query=lambda h, u, b, e: list_cloud_events(client, h, u, b, e),
                             store=lambda u, items: ingest_events(args.queue_db, u, items),
-                            api_error=ApiError, interval=args.interval)
+                            api_error=ApiError, interval=args.interval,
+                            refresh_devices=lambda h: list_devices(client, h), on_devices=on_devices)
             results = []
             for i in range(args.cycles):
                 status = await intake.cycle(int(time.time()))

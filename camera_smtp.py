@@ -29,6 +29,8 @@ class Camera:
     mode: str
     limit: int
     password: str = field(default="", repr=False)
+    inactivity_warning: bool = False
+    inactivity_days: int = 7
 
     def route(self):
         return {key: getattr(self, key) for key in
@@ -62,10 +64,14 @@ def load_profiles(path):
     profiles = []
     names, uids, rw = set(), set(), set()
     for entry in data['cameras']:
-        if not isinstance(entry, dict) or set(entry) - {'name', 'uid', 'enabled', 'smtp'}:
+        if not isinstance(entry, dict) or set(entry) - {'name', 'uid', 'enabled', 'smtp', 'inactivity_warning', 'inactivity_days'}:
             raise DeliveryError('Unknown camera option')
         name, uid = string(entry, 'name'), string(entry, 'uid')
         enabled = entry.get('enabled', True)
+        inactivity_warning = entry.get('inactivity_warning', False)
+        inactivity_days = entry.get('inactivity_days', 7)
+        if type(inactivity_warning) is not bool or type(inactivity_days) is not int or not 1 <= inactivity_days <= 365:
+            raise DeliveryError('Invalid camera inactivity options')
         if type(enabled) is not bool or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', name):
             raise DeliveryError('Invalid camera name or enabled flag')
         if name in names or uid in uids:
@@ -102,7 +108,7 @@ def load_profiles(path):
                 raise DeliveryError('Duplicate Revierwelt recipient')
             rw.add(recipient.lower())
         profiles.append(Camera(name, uid, enabled, host, port, security, sender, recipient,
-                               username, password_env, mode, limit, password))
+                               username, password_env, mode, limit, password, inactivity_warning, inactivity_days))
     return profiles
 
 

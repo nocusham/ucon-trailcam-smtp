@@ -133,3 +133,25 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
     def test_clock_rollback_rejected(self):
         with self.assertRaisesRegex(ValueError, 'Clock moved'):
             window(self.db, 'a', 999)
+
+    async def test_refresh_only_every_15_minutes_and_no_stale_callback(self):
+        snapshots = []
+        refreshes = []
+
+        async def refresh(headers):
+            refreshes.append(headers)
+            return [{'device_uid': 'a'}]
+
+        self.worker.refresh_devices = refresh
+        self.worker.on_devices = lambda devices, now, covered: snapshots.append((now, covered))
+        await self.worker.cycle(1000)
+        await self.worker.cycle(1060)
+        self.assertEqual(snapshots, [(1000, set())])
+        self.api_error = ApiError('failed', stage='cloud event list', http_status=503)
+        await self.worker.cycle(1900)
+        self.assertEqual(snapshots, [(1000, set())])
+        self.api_error = None
+        await self.worker.cycle(2020)
+        self.assertEqual(snapshots, [(1000, set()), (2020, {'a'})])
+        self.assertEqual(len(refreshes), 2)
+        self.assertEqual(self.logins, 1)

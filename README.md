@@ -123,7 +123,7 @@ These are server-side measurements, not SIM billing or independent controlled co
 
 ## Optional error notification channel
 
-An independent TLS SMTP account and private recipient can be configured in [alerts] / [alerts.smtp]. Defaults: login 15 minutes, API 30 minutes, repeated failed SD-original downloads of known outstanding cloud events 24 hours, repeat reminder 24 hours, alarm SMTP retry 60 minutes and optional recovery notice. Disabled by default. Persistent incident and notification state logic exists; automatic health observation/dispatch is not yet wired into the continuous service. No extra active camera reachability probes. Optional per-camera inactivity warning after seven days without reported activity is planned, disabled by default. The H4 device-list field dynamic_info.latest_active_utc is a plausible UTC Unix timestamp in seconds and updated ten seconds after a new PIR photo in a live test without an app or client P4P session. Periodic status reports without PIR remain unverified. For models without this field, a no-photo-event warning is the planned fallback. The manual alert test was accepted and received on the reference server. Manual configuration check and explicit test:
+An independent TLS SMTP account and private recipient can be configured in [alerts] / [alerts.smtp]. Defaults: login 15 minutes, API 30 minutes, repeated failed SD-original downloads of known outstanding cloud events 24 hours, repeat reminder 24 hours, alarm SMTP retry 60 minutes and optional recovery notice. Disabled by default. Persistent incident and notification state logic exists; automatic health observation/dispatch is not yet wired into the continuous service. No extra active camera reachability probes. Optional per-camera inactivity detection after seven days without reported activity is implemented in the bounded cloud test, disabled by default; automatic mail dispatch remains pending. The H4 device-list field dynamic_info.latest_active_utc is a plausible UTC Unix timestamp in seconds and updated ten seconds after a new PIR photo in a live test without an app or client P4P session. Periodic status reports without PIR remain unverified. For models without this field, a no-photo-event warning is the planned fallback. The manual alert test was accepted and received on the reference server. Manual configuration check and explicit test:
 
 ```sh
 python health_alerts.py --config config.local.toml
@@ -148,6 +148,10 @@ python cloud_intake.py --config config.local.toml --queue-db data/events-intake-
 
 Use a fresh path for the first run, never an old historical or production queue. Trigger a new PIR after the start, then repeat against the same path to check the persisted cursor. Nine core tests with synthetic API/store and real SQLite passed locally. One additional HTTP mock test checks structured login errors; full SDK/CLI and real cloud test are pending.
 
+## Passive telemetry test
+
+Persistent intake was live-validated (137 tests passed, 5/5 then 2/2 successful cycles, two distinct pending events, unchanged startup cutoff). It now stores allowlisted latest telemetry per enabled camera in camera_telemetry at login and every 15 minutes using the same authenticated cloud session. Per-camera optional inactivity_warning=false and inactivity_days=7 (1–365) precede [cameras.smtp]. Two fresh stale observations prepare a separate inactivity incident. The fallback for cameras lacking the field starts only with current photo queries and resets after observation gaps; model compatibility and API completeness remain unverified. Invalid/missing known activity metadata never means offline. No P4P or mail in this test; automatic dispatch must explicitly gate inactivity on fresh cloud observations. Eight new tests and twenty existing alarm/intake tests passed locally. See [ALERTS.md](docs/ALERTS.md).
+
 ## Known API errors and recovery plan
 
 | Observation | Implemented now | Planned service behavior |
@@ -168,7 +172,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Integrate UID-based real SD transfer and multi-camera processing on the current server.
 - [x] Implement optional independent alarm SMTP configuration and persistent incident notification core (11 local tests).
 - [x] Validate manual alert SMTP live (test mail received).
-- [ ] Wire observation/dispatch into the service for outstanding original download failures, no extra active camera health checks; implement optional disabled-by-default inactivity warning using validated last-activity telemetry, with no-photo fallback for models lacking the field.
+- [ ] Wire observation/dispatch into the service for outstanding original download failures, no extra active camera health checks; validate passive telemetry and wire the optional disabled-by-default inactivity state into automatic dispatch.
 - [x] Persistent download retry core with explicit retry-aware SD batch test (core tested locally; live integration pending).
 - [x] Persistent intake cursor, startup cutoff, bounded catch-up and login-specific retry block in bounded test (nine core tests).
 - [ ] Validate bounded intake live, complete service integration, freshness/pagination validation and automatic alert dispatch.

@@ -70,9 +70,12 @@ async def discover_devices(client, account, password):
     headers = {**headers, 'X-Ubia-Auth-Usertoken': token,
                'X-Ubiaapi-Callcontext': (
                    f"source=app&app=ucon&ver=2.0.10&uuid={login.get('uuid', app_uuid)}&lang=en")}
-    devices = (await post_json(client, '/api/v2/user/device_list', headers, {},
-                               'device discovery')).get('infos')
-    return headers, devices
+    return headers, await list_devices(client, headers)
+
+
+async def list_devices(client, headers):
+    return (await post_json(client, '/api/v2/user/device_list', headers, {},
+                            'device discovery')).get('infos')
 
 
 async def authenticate(client, account, password, index, *, camera_uid=None):

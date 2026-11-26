@@ -6,6 +6,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
+- 137 tests passed; persistent cloud intake live validated (5/5 and 2/2 cycles across restart, two unique pending events, unchanged startup cutoff).
+
 - Retry-aware UID-selected original download confirmed live (5120 x 2880, 256,172 bytes, 214 blocks, matching MD5, 10.4 s, estimated 601,949 UDP/IP bytes); immediate repeat opened no relay. Live failure path not exercised.
 
 - Authenticated H4 device-list schema includes integer dynamic_info.latest_active_utc, battery, signal, online_state and power flags. A subsequent live PIR test confirmed that latest_active_utc uses Unix seconds and updated ten seconds after the new event without opening the app or initiating P4P. Periodic contact without PIR and long-term reliability remain unverified; no individual telemetry values or private identifiers recorded here.
@@ -23,6 +25,8 @@ This records development milestones, not a published production release.
 - Single/grouped preview plans confirmed; private grouped live transmission remains untested.
 
 ### Implemented
+
+- Passive cloud telemetry snapshot every 15 minutes and at login; optional per-camera inactivity detection off by default, activity timestamp preferred, conservative photo fallback for models without it. Eight new tests plus twenty existing alarm/intake tests passed locally. Automatic dispatch and actual telemetry CLI validation pending.
 
 - Bounded persistent cloud intake with per-camera startup cutoff/cursor, overlapping catch-up, persistent API backoff and explicit login-block release after code 20005. Nine core tests passed locally; additional HTTP mock test and actual SDK/CLI integration await full server validation. No automatic mail or relay operation.
 

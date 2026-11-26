@@ -155,6 +155,64 @@ class DiagnosticRelay(RelaySession):
                 print(f'  SD response too short: {header[1]} bytes, repeats={repeats}')
 
 
+@contextlib.contextmanager
+def relay_compat(session):
+    """Scoped H4 SDK patches; caller owns one sequential relay session."""
+    started = session.started
+    original_wrap = sdk_relay.wrap_relay_kcp
+    original_decode = sdk_relay.try_decode
+    original_parse = sdk_relay.parse_rlystreamrsp
+    original_streamreq = sdk_relay.build_rlystreamreq
+
+    def observed_streamreq(uid, password, conv4, local_ip='0.0.0.0', local_port=0):
+        session.requested_conv = bytes(conv4)
+        return original_streamreq(uid, password, conv4, local_ip, local_port)
+
+    def compact_binding(plain):
+        if not is_alive_response(plain):
+            session.binding_replies['ignored candidate or unexpected reply'] += 1
+            return None
+        if not matches_requested_conv(plain, session.requested_conv):
+            session.binding_replies['ignored nonmatching conversation'] += 1
+            return None
+        reply = original_parse(plain)
+        if reply is not None:
+            session.binding_replies['accepted compact alive'] += 1
+            session.binding_conv = int.from_bytes(reply['conv'], 'little')
+        return reply
+
+    def encoded_wrap(raw, routing_tag):
+        session.encoded_packets += 1
+        session.transport.observe('out', bytes(raw), time.monotonic() - started)
+        return encode(original_wrap(raw, routing_tag))
+
+    def observed_decode(raw):
+        plain = original_decode(raw)
+        if len(plain) >= 16 and plain[:4] == bytes.fromhex('07181000'):
+            kind = int.from_bytes(plain[8:12], 'little')
+            elapsed = time.monotonic() - started
+            session.relay_rx[kind] += 1
+            session.relay_last[kind] = elapsed
+            if kind == 0x0042140a:
+                session.transport.observe('in', plain[16:], elapsed)
+                for conv, *_ in kcp_segments(plain[16:]):
+                    session.inbound_conv[conv] += 1
+        return plain
+
+    with (contextlib.redirect_stdout(io.StringIO()),
+          contextlib.redirect_stderr(io.StringIO()),
+          patch.object(sdk_relay, 'socket', SocketModuleProxy(session.traffic)),
+          patch.object(sdk_crypto, 'encode', encode),
+          patch.object(sdk_crypto, 'decode', decode),
+          patch.object(sdk_relay, 'encode', encode),
+          patch.object(sdk_relay, 'decode', decode),
+          patch.object(sdk_relay, 'wrap_relay_kcp', encoded_wrap),
+          patch.object(sdk_relay, 'try_decode', observed_decode),
+          patch.object(sdk_relay, 'build_rlystreamreq', observed_streamreq),
+          patch.object(sdk_relay, 'parse_rlystreamrsp', compact_binding)):
+        yield
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--index', type=int, default=None, help='Legacy diagnostic camera index')
@@ -312,46 +370,6 @@ def main():
         session = DiagnosticRelay(device.device_uid, device.device_password)
         started = time.monotonic()
         session.started = started
-        original_wrap = sdk_relay.wrap_relay_kcp
-        original_decode = sdk_relay.try_decode
-        original_parse = sdk_relay.parse_rlystreamrsp
-        original_streamreq = sdk_relay.build_rlystreamreq
-
-        def observed_streamreq(uid, password, conv4, local_ip='0.0.0.0', local_port=0):
-            session.requested_conv = bytes(conv4)
-            return original_streamreq(uid, password, conv4, local_ip, local_port)
-
-        def compact_binding(plain):
-            if not is_alive_response(plain):
-                session.binding_replies['ignored candidate or unexpected reply'] += 1
-                return None
-            if not matches_requested_conv(plain, session.requested_conv):
-                session.binding_replies['ignored nonmatching conversation'] += 1
-                return None
-            reply = original_parse(plain)
-            if reply is not None:
-                session.binding_replies['accepted compact alive'] += 1
-                session.binding_conv = int.from_bytes(reply['conv'], 'little')
-            return reply
-
-        def encoded_wrap(raw, routing_tag):
-            session.encoded_packets += 1
-            session.transport.observe('out', bytes(raw), time.monotonic() - started)
-            return encode(original_wrap(raw, routing_tag))
-
-        def observed_decode(raw):
-            plain = original_decode(raw)
-            if len(plain) >= 16 and plain[:4] == bytes.fromhex('07181000'):
-                kind = int.from_bytes(plain[8:12], 'little')
-                elapsed = time.monotonic() - started
-                session.relay_rx[kind] += 1
-                session.relay_last[kind] = elapsed
-                if kind == 0x0042140a:
-                    session.transport.observe('in', plain[16:], elapsed)
-                    for conv, *_ in kcp_segments(plain[16:]):
-                        session.inbound_conv[conv] += 1
-            return plain
-
         print('H4 compatibility: corrected P4P tail permutations; encoded outbound KCP; native RDT control recovery')
         print(f'SD flow: {args.sd_flow}; KCP receive window: {args.kcp_window}; '
               f'wait for live: {not args.no_live_wait}; AVCTRL audio: {not args.no_audio}')
@@ -361,17 +379,7 @@ def main():
         if retry_db is not None:
             reserve(retry_db, device.device_uid, retry_ids, int(time.time()), retry_policy)
         try:
-            with (contextlib.redirect_stdout(io.StringIO()),
-                  contextlib.redirect_stderr(io.StringIO()),
-                  patch.object(sdk_relay, 'socket', SocketModuleProxy(session.traffic)),
-                  patch.object(sdk_crypto, 'encode', encode),
-                  patch.object(sdk_crypto, 'decode', decode),
-                  patch.object(sdk_relay, 'encode', encode),
-                  patch.object(sdk_relay, 'decode', decode),
-                  patch.object(sdk_relay, 'wrap_relay_kcp', encoded_wrap),
-                  patch.object(sdk_relay, 'try_decode', observed_decode),
-                  patch.object(sdk_relay, 'build_rlystreamreq', observed_streamreq),
-                  patch.object(sdk_relay, 'parse_rlystreamrsp', compact_binding)):
+            with relay_compat(session):
                 with session:
                     if args.kcp_window != 256:
                         session.kcp.set_window_size(128, args.kcp_window)

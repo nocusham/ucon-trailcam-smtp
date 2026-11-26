@@ -122,7 +122,10 @@ def native_photo_filename(body):
 
 
 def download_photo(session, event, file_type, destination, *,
-                   reference_size=None, reference_sha256=None, preserve_filename=False):
+                   reference_size=None, reference_sha256=None, preserve_filename=False,
+                   require_native_filename=False):
+    if require_native_filename and (not preserve_filename or file_type != 3):
+        raise ValueError('Native filename requirement applies to originals only')
     if (reference_size is None) != (reference_sha256 is None):
         raise ValueError('Reference size and hash must be supplied together')
     if reference_size is not None and file_type != 3:
@@ -164,6 +167,8 @@ def download_photo(session, event, file_type, destination, *,
             destination = destination.with_name(name)
             notes.append('Using camera-reported photo basename.')
         else:
+            if require_native_filename:
+                raise ValueError('Missing or unsafe native filename; original refused')
             notes.append('Missing or unsafe camera filename; using generated basename.')
     if destination.exists():
         raise FileExistsError('Local destination already exists')

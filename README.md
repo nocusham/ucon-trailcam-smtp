@@ -152,6 +152,10 @@ Use a fresh path for the first run, never an old historical or production queue.
 
 Persistent intake was live-validated (137 tests passed, 5/5 then 2/2 successful cycles, two distinct pending events, unchanged startup cutoff). It now stores allowlisted latest telemetry per enabled camera in camera_telemetry at login and every 15 minutes using the same authenticated cloud session. Per-camera optional inactivity_warning=false and inactivity_days=7 (1–365) precede [cameras.smtp]. Two fresh stale observations prepare a separate inactivity incident. The fallback for cameras lacking the field starts only with current photo queries and resets after observation gaps; model compatibility and API completeness remain unverified. Invalid/missing known activity metadata never means offline. No P4P or mail in this test; automatic dispatch must explicitly gate inactivity on fresh cloud observations. Eight new tests and twenty existing alarm/intake tests passed locally. See [ALERTS.md](docs/ALERTS.md).
 
+## Integrated service (reference-server test)
+
+The first sequential service is implemented in trailcam_service.py; see [SERVICE.md](docs/SERVICE.md) for staged tests and explicit action flags. It reuses the authenticated device response for due SD-original batches, requires the original camera filename, closes relays before SMTP and independently processes existing downloads and due alarms even if cloud login is blocked. Default one cycle; --loop is explicit. The first integrated reference-server test is still pending; do not deploy unattended yet.
+
 ## Known API errors and recovery plan
 
 | Observation | Implemented now | Planned service behavior |

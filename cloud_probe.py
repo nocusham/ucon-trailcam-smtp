@@ -79,11 +79,12 @@ async def query_events(client, account, password, index, begin, end, *, schema=F
         print_event_schema(result, uid)
     if image_dir is not None:
         item = select_latest(items, uid)
-        print('Cloud image test: HTTPS only, no account headers or redirects.')
-        async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False) as image_client:
-            dest, size, digest = await fetch_image(image_client, item, image_dir)
-        print(f'Cloud JPEG boundary check passed: {size} bytes; SHA256={digest}')
-        print(f'Cloud JPEG saved locally: {dest}')
+        print('Cloud image test: API URL, public destinations only, no account headers.')
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False,
+                                     limits=httpx.Limits(max_keepalive_connections=0)) as image_client:
+            dest, size, digest, width, height = await fetch_image(image_client, item, image_dir)
+        print(f'Cloud image decoded: {width}x{height}, {size} bytes; SHA256={digest}')
+        print(f'Cloud image saved locally: {dest}')
     return summarize(items, uid)
 
 
@@ -172,7 +173,7 @@ def main():
     parser.add_argument('--schema', action='store_true',
                         help='Show event field names, types and string classifications only')
     parser.add_argument('--download-image', action='store_true',
-                        help='Try one latest matching cloud image over HTTPS')
+                        help='Try one latest matching cloud image from its API URL')
     parser.add_argument('--output-dir', type=Path, default=Path('media/cloud'))
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:

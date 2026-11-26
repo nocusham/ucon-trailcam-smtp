@@ -263,6 +263,22 @@ All 42 tests passed on the server, but the first live image test was refused by 
 
 All 43 tests passed on the server. The origin diagnostic identified the event API's HTTP image URL host as `ucon-eu-uk.oss-eu-west-1.aliyuncs.com`, using the default port, without userinfo or a fragment. This differs from the Android notification capture's `ubiasnap-eu-uk.oss-eu-west-1.aliyuncs.com`. Both exact hosts are now allowed; no wildcard or other bucket is accepted. The supplied host, path and signed query are preserved when upgrading to HTTPS, with certificate verification and no plaintext fallback or redirects. Two additional mock tests check the new host and rejection of unrelated buckets. All 12 cloud tests passed locally. Live download and image resolution remain unverified. Repeat the same download command.
 
+## Provider-independent cloud image retrieval
+
+This supersedes the earlier host allowlist and HTTPS-upgrade experiments. At the user's request, the probe accepts HTTP(S) image URLs supplied by the authenticated event API without restricting the storage provider, and retains the supplied scheme, host, path and query (normal HTTP URL parsing applies). HTTP is unencrypted: the signed URL and image may be visible or modified in transit; a warning is emitted. HTTPS uses certificate verification. Account credentials and headers are never forwarded. Up to three redirects are allowed, each with public-address validation and no HTTPS downgrade. DNS answers are checked for nonpublic addresses and the connection uses a validated numeric address with original HTTP Host and TLS server name. This is a safeguard, not a substitute for server egress controls.
+
+Before saving, Pillow checks the actual image structure and fully decodes the pixels, irrespective of the URL suffix or Content-Type. Supported single-frame formats are JPEG, PNG, WebP, GIF, BMP and TIFF, with 8 MiB and 40 megapixel limits. The filename extension follows the decoded format; invalid or incomplete images are rejected and existing files are not overwritten. No SMTP processing is implemented yet. A valid image is not proof of authenticity, especially over HTTP. Image payloads are not modified.
+
+```sh
+git pull
+python -m pip install -r requirements.txt
+python -m unittest -v
+python cloud_probe.py --day 2026-11-26 --download-image
+file media/cloud/*
+```
+
+Twelve local cloud tests passed with mock HTTP transport, synthetic real images and SDK credential stubs. Live storage access, actual image size and resolution remain to be verified. The HTTP transport versions are pinned to the locally tested versions for TLS server-name support. Pillow is a new dependency.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

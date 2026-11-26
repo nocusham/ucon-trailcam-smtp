@@ -255,6 +255,10 @@ file media/cloud/*.jpg
 
 The test upgrades the supplied HTTP URL to HTTPS, preserving the path and query. It restricts requests to the exact snapshot host observed in the private Android notification capture, uses a separate TLS-verified HTTP client without account headers or redirects, caps downloaded image bytes at 8 MiB, checks JPEG SOI/EOI, and never overwrites files. No plaintext fallback, signed URL logging or automatic polling. If the host differs, the test stops pending verification. Boundary checks are not a full JPEG decode or a server-provided checksum. A live image fetch and its resolution are not yet confirmed. Local synthetic tests validate transport and selection behavior.
 
+## Cloud snapshot host diagnostic
+
+All 42 tests passed on the server, but the first live image test was refused by the local allowlist/URL-format check before any storage GET. The exact reason is not yet known. The diagnostic now reports only scheme, DNS hostname (if syntactically safe), port and presence of userinfo/fragment, without the path, signed query, username or password. Review the hostname before sharing. The existing strict allowlist, HTTPS requirement and redirect refusal are unchanged. Repeat the same download command to identify the origin; no unknown host is contacted. One additional synthetic test verifies diagnostic redaction.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

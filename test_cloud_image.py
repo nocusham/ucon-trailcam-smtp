@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 import httpx
-from cloud_image import ImageError, SNAPSHOT_HOST, secure_image_url, select_latest, fetch_image
+from cloud_image import ImageError, SNAPSHOT_HOST, secure_image_url, select_latest, fetch_image, reference_origin
 
 
 class CloudImageTests(unittest.IsolatedAsyncioTestCase):
@@ -48,3 +48,15 @@ class CloudImageTests(unittest.IsolatedAsyncioTestCase):
                     with self.assertRaises(ImageError):
                         await fetch_image(client, item, Path(tmp))
             self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_origin_diagnostic_does_not_leak_signed_url(self):
+        url = 'http://user:secret@example.invalid:81/private.jpg?signature=hidden#private'
+        expected = ('scheme=http; host=example.invalid; port=81; '
+                    'userinfo=True; fragment=True')
+        self.assertEqual(reference_origin(url), expected)
+        with self.assertRaises(ImageError) as error:
+            secure_image_url(url)
+        self.assertIn(expected, str(error.exception))
+        for private in ('secret', 'private', 'hidden', 'signature='):
+            self.assertNotIn(private, str(error.exception))
+        self.assertIn('port=invalid', reference_origin('http://example.invalid:bad/a'))

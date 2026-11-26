@@ -1,5 +1,6 @@
 """Bounded, HTTPS-only test download from the observed Ucon snapshot host."""
 import hashlib
+import re
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -24,6 +25,27 @@ def reference_scheme(value):
     return None
 
 
+def reference_origin(value):
+    """Report only URL origin and structural flags; never path/query/userinfo."""
+    if not isinstance(value, str):
+        return 'missing reference'
+    try:
+        parts = urlsplit(value)
+        host = parts.hostname or ''
+        if not re.fullmatch(r'[a-zA-Z0-9.-]{1,253}', host):
+            host = '[redacted]'
+        try:
+            port = str(parts.port) if parts.port is not None else 'default'
+        except ValueError:
+            port = 'invalid'
+        scheme = parts.scheme if parts.scheme in ('http', 'https') else '[redacted]'
+        return (f'scheme={scheme}; host={host}; port={port}; '
+                f'userinfo={parts.username is not None or parts.password is not None}; '
+                f'fragment={bool(parts.fragment)}')
+    except ValueError:
+        return 'invalid URL structure'
+
+
 def secure_image_url(value):
     if reference_scheme(value) is None:
         raise ImageError('Cloud image: missing HTTP(S) reference')
@@ -32,9 +54,11 @@ def secure_image_url(value):
         if (parts.hostname != SNAPSHOT_HOST or parts.username is not None
                 or parts.password is not None or parts.fragment
                 or parts.port not in (None, 80 if parts.scheme == 'http' else 443)):
-            raise ImageError('Cloud image: unverified storage host or URL format')
+            raise ImageError('Cloud image: unverified storage host or URL format; '
+                             + reference_origin(value))
     except ValueError:
-        raise ImageError('Cloud image: invalid URL format') from None
+        raise ImageError('Cloud image: invalid URL format; '
+                         + reference_origin(value)) from None
     return urlunsplit(('https', SNAPSHOT_HOST, parts.path, parts.query, ''))
 
 

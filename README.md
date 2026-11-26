@@ -342,6 +342,16 @@ The user confirmed SMTP with all six metadata fields, and wants Revierwelt teste
 
 A native, unprivileged Proxmox LXC deployment is planned; see [LXC test setup](docs/LXC.md). The cloud probe now offers an explicit discovery-only `--queue-db` mode. SQLite stores valid matching records by camera UID and itemid with their six metadata fields; repeated calls do not reset state or create duplicates. Conflicting IDs/timestamps roll back, and no download or SMTP worker runs. Four standalone synthetic SQLite tests passed locally. The complete SDK integration and LXC are not yet tested. Do not use the historical test database for production delivery.
 
+## Bounded cloud polling on existing test server
+
+Live SQLite intake and duplicate detection are confirmed: two own-device records inserted, then zero new and two known, with two pending rows. Continue development on the existing Ubuntu test server. Create the Proxmox LXC only after application functionality is validated.
+
+```sh
+python cloud_probe.py --watch --hours 24 --cycles 6 --interval 60 --overlap 300 --queue-db data/events-watch-test.sqlite3
+```
+
+The first poll queries 24 hours; subsequent successful queries overlap the previous successful end by five minutes. Session credentials and device selection are reused, HTTP 401/403 trigger a new login on the next attempt, and the selected device must not change. Other API errors retain the session and cursor, with exponential backoff capped at 900 seconds. API-specific expiration codes are not yet known. The run ends after six attempts (or Ctrl+C); any failed attempt produces exit status 1 at completion. The cursor is in memory and a restart begins with the configured historical window. No guarantee of lossless ingestion across long outages, pagination or late events outside the overlap. No automatic downloads or SMTP. Test DB is not a production queue. Four standalone polling tests passed locally with real SQLite and simulated API callbacks; the refactored HTTP integration has not been live tested.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -367,7 +377,9 @@ A native, unprivileged Proxmox LXC deployment is planned; see [LXC test setup](d
 - [ ] If no passive event signal is available, evaluate configurable low-frequency polling with backoff, overlapping query windows and no concurrent sessions; leave unattended polling disabled until measured.
 - [ ] Optional: Android notification webhook only for configurations where notifications are actually available.
 - [x] Implement initial discovery-only SQLite intake and duplicate detection.
-- [ ] Validate live intake and extend to persistent download/delivery states and event-type filtering.
+- [x] Validate live SQLite intake and duplicate detection.
+- [x] Implement bounded cloud polling test with session reuse and overlap.
+- [ ] Validate live polling and extend to persistent download/delivery states and event-type filtering.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.

@@ -15,6 +15,7 @@ from ucon_auth import read_credentials
 from cloud_image import ImageError, reference_scheme, select_latest, fetch_image
 from event_metadata import select_event, save_metadata
 from event_queue import ingest_events, QueueError
+from cloud_watch import watch
 
 
 class ApiError(Exception):
@@ -27,7 +28,9 @@ async def post_json(client, path, headers, body, stage):
     except httpx.HTTPError as exc:
         raise ApiError(f'{stage}: transport failure ({type(exc).__name__})') from None
     if response.status_code != 200:
-        raise ApiError(f'{stage}: HTTP {response.status_code}')
+        error = ApiError(f'{stage}: HTTP {response.status_code}')
+        error.http_status = response.status_code
+        raise error
     try:
         payload = response.json()
     except ValueError:
@@ -44,7 +47,7 @@ async def post_json(client, path, headers, body, stage):
     return data
 
 
-async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None, event_time=None, export_event=None, queue_db=None):
+async def authenticate(client, account, password, index):
     # Match the pinned SDK's Ucon login, host and account discovery.
     app_uuid = str(uuid4())
     headers = {
@@ -71,12 +74,23 @@ async def query_events(client, account, password, index, begin, end, *, schema=F
     uid = device.get('device_uid') if isinstance(device, dict) else None
     if not isinstance(uid, str) or not uid:
         raise ApiError('device discovery: missing selected device identifier')
+    return headers, uid
+
+
+async def list_cloud_events(client, headers, uid, begin, end):
     result = await post_json(client, '/api/user/qry/cloudvideo/list/v2', headers,
                              {'device_uids': [uid], 'begin': begin, 'end': end},
                              'cloud event list')
     items = result.get('items')
     if not isinstance(items, list):
         raise ApiError('cloud event list: missing items array')
+    return result
+
+
+async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None, event_time=None, export_event=None, queue_db=None):
+    headers, uid = await authenticate(client, account, password, index)
+    result = await list_cloud_events(client, headers, uid, begin, end)
+    items = result['items']
     if queue_db is not None:
         added, known, rejected, pending = ingest_events(queue_db, uid, items)
         print(f'Queue: new={added}, known={known}, rejected={rejected}, pending={pending}')
@@ -168,6 +182,11 @@ def summarize(items, uid):
 
 async def run(args, account, password, begin, end):
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        if args.watch:
+            return await watch(client, account, password, args.index, args.queue_db,
+                               authenticate=authenticate, list_events=list_cloud_events,
+                               api_error=ApiError, cycles=args.cycles, interval=args.interval,
+                               hours=args.hours, overlap=args.overlap)
         return await query_events(client, account, password, args.index, begin, end, schema=args.schema,
                                   image_dir=args.output_dir if args.download_image else None,
                                   event_time=int(args.event_time.timestamp()) if args.event_time else None,
@@ -192,7 +211,15 @@ def main():
                         help='Save six selected event fields to a new JSON file')
     parser.add_argument('--queue-db', type=Path,
                         help='Discovery only: persist matching events in a test SQLite database')
+    parser.add_argument('--watch', action='store_true', help='Bounded discovery-only polling test')
+    parser.add_argument('--cycles', type=int, default=6)
+    parser.add_argument('--interval', type=int, default=60)
+    parser.add_argument('--overlap', type=int, default=300)
     args = parser.parse_args()
+    if args.watch and (args.queue_db is None or args.day or args.schema or args.download_image or args.export_event or args.event_time):
+        parser.error('--watch requires --queue-db and rolling --hours; no other operations')
+    if not 1 <= args.cycles <= 1000 or not 10 <= args.interval <= 900 or not 0 <= args.overlap <= 86400:
+        parser.error('cycles 1–1000, interval 10–900 seconds, overlap 0–86400 seconds')
     if args.queue_db is not None and (args.download_image or args.export_event):
         parser.error('--queue-db cannot be combined with image download or event export')
     if args.event_time is not None and (args.event_time.utcoffset() is None or args.event_time.microsecond):
@@ -217,7 +244,13 @@ def main():
     try:
         account, password = read_credentials()
         print('Experimental cloud event query; no P4P/UDP camera session.')
-        rows, unverified = asyncio.run(run(args, account, password, begin, end))
+        result = asyncio.run(run(args, account, password, begin, end))
+        if args.watch:
+            return result
+        rows, unverified = result
+    except KeyboardInterrupt:
+        print('Stopped by user; committed queue entries retained.')
+        return 130
     except (ApiError, ImageError, QueueError) as exc:
         print(str(exc))
         return 1

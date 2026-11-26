@@ -1,4 +1,6 @@
-# Proxmox VE LXC test environment
+# Proxmox VE LXC deployment plan
+
+**Deferred:** continue all development and tests on the existing Ubuntu test server. Create the LXC only after application functionality is validated.
 
 Target: native Python service in an unprivileged Debian 13 LXC under Proxmox VE 9.x (user's host reports 9.2.32). No Docker, nesting, privileged container, or device passthrough required for this stage. Suggested starting allocation: 1–2 vCPU, 1 GiB RAM, 8–16 GiB root disk; standard bridged IPv4 networking with DNS and internet access. Adjust storage for original photos and retention later. Do not enable port forwarding or public inbound services. The container must be able to initiate HTTPS, HTTP snapshot downloads, UDP relay traffic and SMTP to the configured mail server. Allow stateful responses, DNS and package updates. The provider/backend may change destinations.
 

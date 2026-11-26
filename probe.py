@@ -22,7 +22,7 @@ from p4p_camera_sdk.relay import RelaySession
 import p4p_camera_sdk.relay as sdk_relay
 import p4p_camera_sdk.p4p_crypto as sdk_crypto
 from h4_crypto import encode, decode
-from h4_compat import recover_control, is_alive_response
+from h4_compat import recover_control, is_alive_response, matches_requested_conv
 from p4p_camera_sdk.sdcard_client import SdCardClient
 from p4p_camera_sdk.sdcard import (
     IOTYPE_GET_SD_STATUS_REQ, IOTYPE_GET_SD_STATUS_RSP, build_get_sd_status,
@@ -50,6 +50,7 @@ class DiagnosticRelay(RelaySession):
         self.native_download = False
         self.binding_replies = Counter()
         self.binding_conv = None
+        self.requested_conv = None
         self.inbound_conv = Counter()
 
     def _drain_frames(self):
@@ -221,10 +222,18 @@ def main():
         original_wrap = sdk_relay.wrap_relay_kcp
         original_decode = sdk_relay.try_decode
         original_parse = sdk_relay.parse_rlystreamrsp
+        original_streamreq = sdk_relay.build_rlystreamreq
+
+        def observed_streamreq(uid, password, conv4, local_ip='0.0.0.0', local_port=0):
+            session.requested_conv = bytes(conv4)
+            return original_streamreq(uid, password, conv4, local_ip, local_port)
 
         def compact_binding(plain):
             if not is_alive_response(plain):
                 session.binding_replies['ignored candidate or unexpected reply'] += 1
+                return None
+            if not matches_requested_conv(plain, session.requested_conv):
+                session.binding_replies['ignored nonmatching conversation'] += 1
                 return None
             reply = original_parse(plain)
             if reply is not None:
@@ -266,6 +275,7 @@ def main():
                   patch.object(sdk_relay, 'decode', decode),
                   patch.object(sdk_relay, 'wrap_relay_kcp', encoded_wrap),
                   patch.object(sdk_relay, 'try_decode', observed_decode),
+                  patch.object(sdk_relay, 'build_rlystreamreq', observed_streamreq),
                   patch.object(sdk_relay, 'parse_rlystreamrsp', compact_binding)):
                 with session:
                     if args.kcp_window != 256:

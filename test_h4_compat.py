@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from h4_compat import recover_control, is_alive_response
+from h4_compat import recover_control, is_alive_response, matches_requested_conv
 
 
 class ControlRecoveryTests(unittest.TestCase):
@@ -41,6 +41,15 @@ class ControlRecoveryTests(unittest.TestCase):
         self.assertTrue(is_alive_response(alive))
         self.assertFalse(is_alive_response(candidate))
         self.assertFalse(is_alive_response(alive + bytes(1)))
+
+    def test_binding_must_match_requested_conversation(self):
+        alive = bytearray(struct.pack('<III', 0x00101807, 20, 0x00421406) + bytes(24))
+        alive[24:28] = b'abcd'
+        self.assertTrue(matches_requested_conv(bytes(alive), b'abcd'))
+        self.assertFalse(matches_requested_conv(bytes(alive), b'efgh'))
+        self.assertFalse(matches_requested_conv(bytes(alive), None))
+        self.assertFalse(matches_requested_conv(bytes(alive), b'abc'))
+        self.assertFalse(matches_requested_conv(bytes(alive) + b'!', b'abcd'))
 
 
 if __name__ == '__main__':

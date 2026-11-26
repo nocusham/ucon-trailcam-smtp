@@ -33,3 +33,13 @@ def is_alive_response(plain):
     """H4 KCP binding comes from the compact 36-byte alive reply only."""
     return (len(plain) == 36 and plain[:4] == b'\x07\x18\x10\x00'
             and struct.unpack_from('<I', plain, 8)[0] == 0x00421406)
+
+
+def matches_requested_conv(plain, requested):
+    """H4 captures echo the four proposed conversation bytes at alive offset 24.
+
+    Fail closed if the request is not known or the reply belongs to a
+    different conversation. Do not infer a routing tag from a data packet.
+    """
+    return (is_alive_response(plain) and requested is not None
+            and len(requested) == 4 and plain[24:28] == requested)

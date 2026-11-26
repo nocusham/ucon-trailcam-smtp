@@ -90,7 +90,7 @@ python probe.py --config config.local.toml --camera testkamera \
   --output-dir media/batch-test
 ```
 
-Matching is unique within ±2 seconds, excluding SD network-wake type 3. No thumbnail fallback. Each complete original is checked against metadata MD5, fully decoded and saved with a safe native basename where available. SHA256, size and dimensions are committed with the downloaded state. On a repeated run verified already-downloaded files are skipped. The configured UID login/discovery is live-tested; the configured UID combined with actual SD transfer still needs an integrated test. Legacy app-flow batch transfer itself is live-confirmed.
+Matching is unique within ±2 seconds, excluding SD network-wake type 3. No thumbnail fallback. Each complete original is checked against metadata MD5, fully decoded and saved with a safe native basename where available. SHA256, size and dimensions are committed with the downloaded state. On a repeated run verified already-downloaded files are skipped. The configured UID login/discovery and actual SD transfer are live-confirmed. Legacy app-flow batch transfer itself is live-confirmed.
 
 ### 4. Camera-specific SMTP preview and explicit send
 
@@ -154,7 +154,7 @@ Persistent intake was live-validated (137 tests passed, 5/5 then 2/2 successful 
 
 ## Integrated service (reference-server test)
 
-The first sequential service is implemented in trailcam_service.py; see [SERVICE.md](docs/SERVICE.md) for staged tests and explicit action flags. It reuses the authenticated device response for due SD-original batches, requires the original camera filename, closes relays before SMTP and independently processes existing downloads and due alarms even if cloud login is blocked. Default one cycle; --loop is explicit. The first integrated reference-server test is still pending; do not deploy unattended yet.
+The first sequential service is implemented in trailcam_service.py; see [SERVICE.md](docs/SERVICE.md) for staged tests and explicit action flags. It reuses the authenticated device response for due SD-original batches, requires the original camera filename, closes relays before SMTP and independently processes existing downloads and due alarms even if cloud login is blocked. Default one cycle; --loop is explicit. The first integrated reference-server test passed: 154 tests, two original photos in one 8.5-second relay, two separate emails received, both events committed as sent. Sent-only repeat and continuous validation remain pending; do not deploy unattended yet.
 
 ## Known API errors and recovery plan
 

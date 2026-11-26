@@ -6,6 +6,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
+- 154 tests passed. Integrated service downloaded two 5120 x 2880 originals in one 8.5-second relay, verified them and subsequently sent two separate STARTTLS emails (both received, two sent events, no second relay). No alarm due; sent-only repeat, continuous operation and real failure paths remain unverified.
+
 - 145 tests passed; live allowlisted telemetry snapshot stored with cloud_activity source and inactivity disabled. Two pending intake photos remain for integration testing.
 
 - 137 tests passed; persistent cloud intake live validated (5/5 and 2/2 cycles across restart, two unique pending events, unchanged startup cutoff).

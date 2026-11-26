@@ -32,6 +32,8 @@ This records development milestones, not a published production release.
 
 ### Implemented
 
+- Proven pre-submission SMTP setup failures restore downloaded state and persist per-camera exponential retry cooldown (5–60 minutes). Ambiguous submissions remain uncertain; QUIT failure after acceptance no longer blocks delivery. Seven transport/SQLite tests passed locally; two additional queue integration tests pending server validation.
+
 - Configured-camera image subjects now use UCON, local profile alias, capture date/time in Europe/Berlin with MEZ/MESZ; grouped subjects include count and capture-time range. Attachment bytes and basename unchanged; legacy unconfigured subjects unchanged. Four subject-helper tests passed locally, including DST ambiguity; full routing suite and live delivery pending.
 
 - First sequential integrated service with explicit download/image SMTP/alarm SMTP flags, reused device credentials, narrow due-event SD windows across midnight, strict native filename and independent local mail processing during cloud failure. Nine new core tests and 28 existing alarm/intake/telemetry tests passed locally; service entrypoint syntax checked, live SDK/SMTP integration pending.

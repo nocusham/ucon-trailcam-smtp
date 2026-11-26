@@ -62,3 +62,5 @@ Der Alarmversand muss später bei erfolgreicher aktueller Cloud-Abfrage explizit
 ## Erster integrierter Dienst
 
 trailcam_service.py wertet mit --send-alerts und aktiviertem Alarmkanal fällige Meldungen auch bei Cloud-Sperre aus. Ohne Flag nur Vorschau; Bildversand und Originaldownload separat freigeben. Inaktivitätsversand ist auf frische cloud_activity-Snapshots bei erfolgreicher Cloud-Abfrage beschränkt; der Foto-Rückfall bleibt bis zur Vollständigkeitsprüfung beobachtend. Referenzserver-Test siehe [SERVICE.md](SERVICE.md). Automatische Ausführung noch nicht live validiert.
+
+SMTP setup failures before message submission now have persistent per-camera retry cooldown and preserve the downloaded original. Ambiguous submissions remain uncertain and require operator review. No separate image-SMTP alarm category yet; the independent alarm SMTP retains its own retry logic.

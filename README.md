@@ -200,3 +200,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [Development changelog](CHANGELOG.md)
 
 References: [p4p_camera_sdk](https://github.com/ArtemKiyashko/p4p_camera_sdk) (pinned 0.1.16), [ubox-p4p](https://github.com/mahumadad/ubox-p4p) (related protocol research, not validated as a substitute). Unofficial project; not affiliated with Ucon, UBIA or Revierwelt. No vendor firmware, private captures or personal images bundled.
+
+### SMTP setup retry
+
+A typed SafeSMTPFailure is emitted only for failures before smtplib.send_message is invoked (connection, TLS, authentication). The verified original remains downloaded; the unsubmitted receipt is rolled back atomically with a per-camera cooldown persisted in smtp_retries (5, 10, 20, 40, then 60 minutes maximum). No retry after ambiguous submission; uncertain state still requires manual review. Once SMTP accepts the message, a subsequent QUIT failure does not undo acceptance. Explicit negative replies within send_message are still conservatively treated as uncertain in this implementation. Successful delivery clears the retry cooldown. No new config required; no SMTP-specific alarm category yet. See SERVICE.md. Seven isolated transport/SQLite tests passed locally; two queue integration tests await full server suite.

@@ -11,6 +11,7 @@ from pathlib import Path
 from cloud_image import ImageError, MAX_IMAGE_BYTES, validate_image
 from event_metadata import load_metadata, metadata_text
 from local_credentials import read_secret_values
+from smtp_transport import transmit
 
 MIME_SUBTYPE = {'jpg': 'jpeg', 'png': 'png', 'webp': 'webp', 'gif': 'gif',
                 'bmp': 'bmp', 'tiff': 'tiff'}
@@ -43,23 +44,7 @@ def build_message(sender, recipient, image, event=None):
 
 
 def send_message(msg, host, port, security, username=None, password=None):
-    context = ssl.create_default_context()
-    if security == 'tls':
-        connection = smtplib.SMTP_SSL(host, port, timeout=30, context=context)
-    elif security in ('starttls', 'none'):
-        connection = smtplib.SMTP(host, port, timeout=30)
-    else:
-        raise ValueError('Unsupported SMTP security mode')
-    with connection as client:
-        if security == 'starttls':
-            client.ehlo()
-            client.starttls(context=context)
-            client.ehlo()
-        if username:
-            client.login(username, password)
-        refused = client.send_message(msg)
-        if refused:
-            raise RuntimeError('SMTP recipient refused')
+    return transmit(msg, host, port, security, username, password)
 
 
 def read_smtp_settings():

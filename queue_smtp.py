@@ -11,6 +11,8 @@ from email.utils import getaddresses
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from mail_subject import camera_subject
+from smtp_transport import SafeSMTPFailure
+from smtp_retry import retry_due, rollback_unsent, clear_retry
 
 
 class DeliveryError(Exception):
@@ -139,6 +141,9 @@ def process(db, rows, *, load_image, build_message, sender, recipient, send=None
             mode='single', route=None):
     if len({row[0] for row in rows}) > 1:
         raise DeliveryError('Mixed-camera SMTP batch refused; select a camera profile')
+    if send is not None and rows and not retry_due(db, rows[0][0], int(time.time())):
+        emit('SMTP retry not due; no SMTP connection.')
+        return 1
     # Verify the exact bytes attached to the message before any SMTP operation.
     camera_name = route.get('name') if route is not None else None
     prepared = [(row, prepare(row, load_image, build_message, sender, recipient,
@@ -159,10 +164,19 @@ def process(db, rows, *, load_image, build_message, sender, recipient, send=None
         begin_delivery(db, group, str(msg['Message-ID']), route)
         try:
             send(msg)
-            finish_delivery(db, group)
+        except SafeSMTPFailure:
+            delay = rollback_unsent(db, group, str(msg['Message-ID']), int(time.time()))
+            emit(f'SMTP setup failed before submission; state=downloaded; retry in {delay}s.')
+            return 1
         except (Exception, KeyboardInterrupt) as exc:
             emit(f'SMTP outcome uncertain ({type(exc).__name__}); stopped. Check inbox before manual resolution.')
             return 1
+        try:
+            finish_delivery(db, group)
+        except (Exception, KeyboardInterrupt) as exc:
+            emit(f'SMTP acceptance not committed ({type(exc).__name__}); stopped. Check inbox before manual resolution.')
+            return 1
+        clear_retry(db, group[0][0])
         completed += len(group)
         messages += 1
         emit(f'SMTP accepted; state=sent: images={len(group)}')

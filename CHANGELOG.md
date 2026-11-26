@@ -6,7 +6,7 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
-- Authenticated H4 device-list schema includes integer dynamic_info.latest_active_utc, battery, signal, online_state and power flags. Last-contact semantics and update behavior remain to be verified; no telemetry values or private identifiers recorded here.
+- Authenticated H4 device-list schema includes integer dynamic_info.latest_active_utc, battery, signal, online_state and power flags. A subsequent live PIR test confirmed that latest_active_utc uses Unix seconds and updated ten seconds after the new event without opening the app or initiating P4P. Periodic contact without PIR and long-term reliability remain unverified; no individual telemetry values or private identifiers recorded here.
 
 - Independent alarm SMTP test accepted and received. Full expanded test-suite result not yet reported.
 
@@ -33,7 +33,7 @@ This records development milestones, not a published production release.
 
 ### Pending
 
-- Monitor actual failed downloads of known outstanding cloud events, not camera polling. Investigate Ucon last-contact metadata; optional per-camera seven-day no-photo warning off by default if no reliable last-contact field exists. The alert label now says original download rather than camera connection; event-level integration is pending.
+- Monitor actual failed downloads of known outstanding cloud events, not camera polling. Implement optional per-camera seven-day inactivity warning off by default, using latest_active_utc on H4 and no-photo-event fallback for models without the field. The alert label now says original download rather than camera connection; event-level integration is pending.
 
 - Continuous service, persistent cursors, initial-start filtering, retry/recovery, multi-day test, native LXC/systemd and final Revierwelt validation.
 - Actual SD transfer through the configured UID path and real multi-camera operation.

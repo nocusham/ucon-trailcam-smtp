@@ -69,3 +69,47 @@ class StagedTests(unittest.TestCase):
                                     flow='app', wait_live=False, with_audio=False)
         self.assertEqual(session.av_kwargs['with_audio'], 0)
         self.assertEqual(len(events), 2)
+
+    def test_stop_after_complete_list(self):
+        session = FakeSession()
+        events = list_events_staged(session, 1699999999, 1700000100,
+                                    flow='stop-after-list')
+        self.assertEqual(session.calls, ['live', (960, 8474),
+                                         (256, 960), ('av', 2)])
+        self.assertEqual(len(events), 2)
+
+    def test_empty_response_distinct_from_timeout(self):
+        class EmptySession(FakeSession):
+            def poll_ioctrl(self, timeout):
+                self.polls += 1
+                if self.polls == 1:
+                    yield 961, bytes(368)
+                elif self.polls == 3:
+                    yield 257, bytes(12)
+        session = EmptySession()
+        self.assertEqual(list_events_staged(session, 1, 2), [])
+        self.assertIn('SD response confirmed empty for requested time range.',
+                      session.stage_notes)
+
+    def test_no_response_fails(self):
+        class MissingSession(FakeSession):
+            def poll_ioctrl(self, timeout):
+                self.polls += 1
+                if self.polls == 1:
+                    yield 961, bytes(368)
+        with self.assertRaises(TimeoutError):
+            list_events_staged(MissingSession(), 1, 2)
+
+    def test_incomplete_response_fails(self):
+        class PartialSession(FakeSession):
+            def poll_ioctrl(self, timeout):
+                self.polls += 1
+                if self.polls == 1:
+                    yield 961, bytes(368)
+                elif self.polls == 3:
+                    header = bytearray(12)
+                    header[7] = 1
+                    header[8] = 2
+                    yield 257, bytes(header) + struct.pack('<IHBB', 1, 65535, 4, 1)
+        with self.assertRaises(TimeoutError):
+            list_events_staged(PartialSession(), 1, 2)

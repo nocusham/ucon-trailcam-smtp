@@ -150,8 +150,8 @@ def main():
     window = parser.add_mutually_exclusive_group()
     window.add_argument('--hours', type=int, default=24)
     window.add_argument('--day', type=dt.date.fromisoformat, help='Calendar day YYYY-MM-DD')
-    parser.add_argument('--sd-flow', choices=('app', 'no-av'), default='no-av',
-                        help='H4 no-AV default or experimental app sequence')
+    parser.add_argument('--sd-flow', choices=('app', 'no-av', 'stop-after-list'), default='no-av',
+                        help='Default no-AV or experimental AVCTRL before/after listing')
     parser.add_argument('--no-live-wait', action='store_true',
                         help='Experimental: send settings immediately after relay binding')
     parser.add_argument('--no-audio', action='store_true',
@@ -324,7 +324,10 @@ def main():
             return 0
         print(f'Events returned: {len(events)}')
         if not events:
-            print('No events decoded; SD card may still contain recordings.')
+            if args.events:
+                print('No recordings reported in the requested time range.')
+            else:
+                print('No events decoded; SD card may still contain recordings.')
         for event in sorted(events, key=lambda e: e.start_time):
             stamp = dt.datetime.fromtimestamp(event.start_time, dt.timezone.utc).isoformat()
             print(f'{stamp} | type={event.event_type} | length={event.length}')

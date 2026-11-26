@@ -36,8 +36,8 @@ def list_events_staged(session, begin, end, flow='no-av', *, wait_live=True, wit
                             st_time_day=0, param=0)
         for _ in session.poll_ioctrl(timeout=0.03):
             pass
-    elif flow == 'no-av':
-        notes.append('H4 listing: AVCTRL omitted.')
+    elif flow in ('no-av', 'stop-after-list'):
+        notes.append('H4 listing: AVCTRL omitted before listing.')
     else:
         raise ValueError('unknown SD flow')
     session.send_ioctrl_batch(0, [(256, build_list_event(begin, end, 0)),
@@ -53,16 +53,35 @@ def list_events_staged(session, begin, end, flow='no-av', *, wait_live=True, wit
         if len(body) < 12 + 8 * count:
             notes.append('Truncated SD response ignored.')
             continue
+        if expected is not None and total != expected:
+            notes.append('Inconsistent SD record totals; refusing partial list.')
+            raise ValueError('Inconsistent SD list totals')
         expected = total
         for offset in range(12, 12 + 8 * count, 8):
             record = parse_event_record(body[offset:offset + 8])
             event = SdCardEvent(record.start_time, record.length, record.event_type,
                                 record.src_event, record.src_status)
             events[(record.start_time, record.length, record.src_event, record.src_status)] = event
-        if len(events) >= expected:
+        if len(events) > expected:
+            notes.append('SD list contains more unique records than reported.')
+            raise ValueError('Invalid SD record total')
+        if len(events) == expected:
             break
     if expected is None:
         notes.append('No decoded SD list response.')
-    else:
-        notes.append(f'SD response reported total={expected}; unique records={len(events)}')
+        raise TimeoutError('No SD list response 257')
+    notes.append(f'SD response reported total={expected}; unique records={len(events)}')
+    if len(events) != expected:
+        notes.append('Incomplete SD list; no download attempted.')
+        raise TimeoutError('Incomplete SD list')
+    if expected == 0:
+        notes.append('SD response confirmed empty for requested time range.')
+    if flow == 'stop-after-list' and events:
+        session.phase = 'stream stop'
+        notes.append('Experimental AVCTRL 2 after complete SD list, before file retrieval.')
+        session.send_avctrl(2, playrecord=0, streamindex=0, with_audio=1,
+                            st_time_day=0, param=0)
+        # The Android trace still has a short tail of live data after AVCTRL.
+        for _ in session.poll_ioctrl(timeout=0.3):
+            pass
     return list(events.values())

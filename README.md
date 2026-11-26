@@ -196,6 +196,16 @@ Use separate directories to avoid overwriting or rejecting previously saved imag
 
 SDK 0.1.16 exposes listing, calendar, metadata, file data and SD status, but no single-file deletion method. Remote deletion is not verified on H4. Do not use format or recording-disable as a substitute. If the official app offers deletion specifically on the SD card (not the local album), capture a deletion of a disposable test event after local backup and verify that only that event disappeared. No deletion code is implemented. Future retention must be opt-in, operate only on verified locally archived and successfully delivered events, preserve unknown/undelivered records, and verify the exact target and outcome. A seven-day retention policy could be layered on that capability if supported; otherwise preserve the camera's normal overwrite behavior and deduplicate locally.
 
+## Android SD/HD and stream-stop trace; tests Z1–Z4 (2026-11-26)
+
+The private Android trace contains 58 outgoing and 3065 incoming unique KCP PUSH segments, with a continuous reassembled stream. AVCTRL 9 with playrecord=0, streamindex=1/0 and optionflag=1 switches HD/SD. HD introduces native video marker 0x1000011, not yet supported by the probe parser; keep the camera in SD for testing. AVCTRL 2 with playrecord=0, streamindex=0, with_audio=1 and all remaining fields zero precedes listing by 35 ms. The list returns 119 ms later. A short tail of live media ends about 135 ms after AVCTRL 2. From relative second 31 until playback starts at 107.82 s, no decoded live audio/video frames appear; control and JPEG frames continue. The capture yields 14 distinct complete JPEGs, all matching metadata MD5; the three originals decode at 5120x2880. This proves that the H4 supports SD downloads without continuous live video in an official app session, not yet that the Python path reliably reproduces it.
+
+The trace also confirms a card format: request 896, responses 897 with observed progress-like values 10 and 100, followed by a valid empty list for the current day (9 records before formatting). No per-file deletion command was observed and the user reports no such control in the app. Do not implement automatic formatting.
+
+All four subsequent Python tests queried the previous day after formatting, and none completed listing/download. Z1 default: 687712 bytes/26.9 s, settings succeeded, no 257. Z2 early: 614413 bytes/19.4 s, settings never acknowledged. Z3 early + AVCTRL: 119259 bytes/27.1 s, AVCTRL/list transport ACKs, all KCP data ceased shortly after AVCTRL, no 257; keepalives continued. Z4 early + muted: 625419 bytes/19.2 s, settings never acknowledged, so mute was never sent. The figures are server-side IPv4/UDP estimates of failed sessions, not comparable successful download costs. No response is not proof of an empty list.
+
+The staged list now fails closed on missing, incomplete or inconsistent replies and separately reports confirmed empty time ranges. A new opt-in stop-after-list flow sends the captured session-level AVCTRL 2 only after obtaining a complete nonempty list. It is an experimental alternative to the app ordering, not a proven fix. The no-AV default and live wait remain unchanged. For a clean comparison create a new PIR photo after formatting; run a successful baseline first, then app flow WITH live wait, then stop-after-list if needed. Use separate output directories and the same photo timestamp. The skip-live-wait and muted modes are deferred. No destructive operation is added.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -208,6 +218,8 @@ SDK 0.1.16 exposes listing, calendar, metadata, file data and SD status, but no 
 - [x] Validate corrected codec and normal metadata-driven activity thumbnail/original downloads live.
 - [ ] Test wake from sleep and personal SIM compatibility.
 - [ ] Investigate whether the backend exposes motion-event metadata without a cloud subscription; do not assume notifications are available.
+- [x] Demonstrate file transfer without continuous live video in the official Android app.
+- [ ] Validate Python SD download with live video stopped.
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.
 - [ ] If no passive event signal is available, evaluate configurable low-frequency polling with backoff, overlapping query windows and no concurrent sessions; leave unattended polling disabled until measured.
 - [ ] Optional: Android notification webhook only for configurations where notifications are actually available.

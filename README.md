@@ -364,6 +364,21 @@ python probe.py --events --day YYYY-MM-DD --sd-flow app --match-queue data/event
 
 The new option is read-only and cannot be combined with downloads. It scopes queue rows to the actual selected camera UID. Only H4 SD event type 4 and still-photo length 65535 are candidates. The provisional tolerance is ±2 seconds; multiple candidates (even with an exact timestamp) or a candidate shared by two cloud records are ambiguous. No guess or nearest-neighbor selection. The query includes padding around the requested interval to detect boundary conflicts within the stored records. Missing or ambiguous matches return nonzero. This is a timestamp correlation test, not proof of image identity; unobserved cloud events and coincidental timestamps remain possible. No cloud type mapping is assumed. Five standalone matching tests passed locally with synthetic fixtures and SQLite; the integrated camera path has not been live-tested. No photo download, database state transition or SMTP worker yet. Continue on the existing test server, with LXC and Revierwelt deferred.
 
+## Live SD correlation and bounded original batch test
+
+All 71 tests passed on the test server. M1 matched the three same-day cloud records to SD type 4 still photos with zero time offset, using a single 6.9 s session (103460 estimated server IPv4/UDP bytes). The fourth queue entry was from the previous day, outside the query interval. All four cloud records report type 1 and battery 100; the three matched records support cloud type 1 as the candidate activity class for H4, not a universal type mapping.
+
+The next explicit test processes at most three pending type-1 originals for the chosen day in a single app-flow session. Matching uses all nearby queued timestamps, including already downloaded records, to reject ambiguous associations. Each original is verified by the existing SD downloader (size, block timestamps, MD5) and then fully decoded. The existing database is extended with a downloads receipt table only when a verified file is committed; receipt and downloaded state update are one transaction. Stored originals are checked on repeat runs, and if there are no eligible pending records no P4P session is opened. A per-database advisory lock excludes concurrent batch processes. Stop the cloud watch and do not run other camera clients during this test. Native basenames are preserved where safe; each download uses a private unique attempt directory. If interrupted before the DB commit, an unreferenced file may remain; it is not adopted or sent, and a retry may download it again. No automatic repair, retry scheduling, power-loss durability guarantee or SMTP worker yet. Six standalone tests passed locally with SQLite, synthetic JPEGs and a simulated downloader; the integration has not been live-tested.
+
+```sh
+sqlite3 data/events-watch-test.sqlite3 ".backup data/events-batch-test.sqlite3"
+chmod 600 data/events-batch-test.sqlite3
+python probe.py --events --day 2026-11-26 --sd-flow app --download-queue data/events-batch-test.sqlite3 --batch-limit 3 --output-dir media/batch-test
+sqlite3 -readonly data/events-batch-test.sqlite3 'SELECT state,count(*) FROM events GROUP BY state;'
+```
+
+Only copy to a new test database; repeat the probe without recreating the copy. Keep the old historical event pending. No production database or Revierwelt usage; continue on the existing Ubuntu test server.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -393,7 +408,9 @@ The new option is read-only and cannot be combined with downloads. It scopes que
 - [x] Implement bounded cloud polling test with session reuse and overlap.
 - [x] Validate live polling and session reuse (6/6 queries, one login).
 - [x] Implement read-only SD timestamp correlation test.
-- [ ] Validate live SD correlation and extend to persistent download/delivery states and event-type filtering.
+- [x] Validate live SD correlation for three same-day records.
+- [x] Implement bounded original download batch and persistent file receipts.
+- [ ] Validate live batch download, retries, delivery states and event-type filtering.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.

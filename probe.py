@@ -12,6 +12,8 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from h4_events import list_events_staged
 from event_match import queued_times, match_events
+from queue_download import batch_lock, load_rows, eligible, check_existing, download_batch
+from cloud_image import validate_image
 from h4_transport import TransportTrace, kcp_segments
 from h4_receive import poll_relay
 from h4_traffic import TrafficStats, SocketModuleProxy
@@ -169,6 +171,9 @@ def main():
                         help='Local JPEG directory; existing files are never overwritten')
     parser.add_argument('--download-photo', choices=('thumbnail', 'original'),
                         help='Download one latest activity photo after a successful event list')
+    parser.add_argument('--download-queue', type=Path,
+                        help='Explicit original batch test; no SMTP')
+    parser.add_argument('--batch-limit', type=int, default=3)
     parser.add_argument('--match-queue', type=Path,
                         help='Read-only match of queued cloud events to H4 SD photos; no download')
     parser.add_argument('--native-filename', action='store_true',
@@ -185,6 +190,12 @@ def main():
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
+    if not 1 <= args.batch_limit <= 10:
+        parser.error('--batch-limit must be 1–10')
+    if args.download_queue is not None and (not args.events or args.day is None
+            or args.sd_flow != 'app' or args.match_queue is not None or args.download_photo
+            or args.no_live_wait or args.no_audio):
+        parser.error('--download-queue requires --events --day --sd-flow app; no other download or match mode')
     if args.match_queue is not None and (not args.events or args.download_photo):
         parser.error('--match-queue requires --events and disallows downloads')
     if args.download_photo and not args.events:
@@ -217,6 +228,7 @@ def main():
         parser.error('Account and password are required')
     logging.disable(logging.CRITICAL)
     stage = 'account login / device discovery'
+    resources = contextlib.ExitStack()
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             device = asyncio.run(CredentialClient(account, password).get_device(index=args.index))
@@ -237,6 +249,19 @@ def main():
                 print('No queued cloud events for selected camera and interval; no relay session.')
                 return 1
             match_begin, match_end = begin, end
+            begin, end = begin - 6, end + 6
+            stage = 'camera relay session / SD event listing'
+        if args.download_queue is not None:
+            stage = 'batch queue selection and local verification'
+            resources.enter_context(batch_lock(args.download_queue))
+            batch_begin, batch_end = begin, end
+            batch_rows = load_rows(args.download_queue, device.device_uid, begin, end)
+            check_existing(args.download_queue, device.device_uid, batch_rows, begin, end, validate_image)
+            pending = sum(eligible(row, begin, end) for row in batch_rows)
+            print(f'Batch pending eligible originals: {pending}; limit={args.batch_limit}')
+            if not pending:
+                print('No eligible pending originals; no relay session, no SMTP.')
+                return 0
             begin, end = begin - 6, end + 6
             stage = 'camera relay session / SD event listing'
         session = DiagnosticRelay(device.device_uid, device.device_password)
@@ -321,7 +346,14 @@ def main():
                         events = list_events_staged(session, begin, end, flow=args.sd_flow,
                                                    wait_live=not args.no_live_wait,
                                                    with_audio=not args.no_audio)
-                        if args.download_photo:
+                        if args.download_queue is not None:
+                            stage = 'queue original batch download'
+                            batch_missing = download_batch(session, args.download_queue,
+                                                           device.device_uid, batch_rows,
+                                                           batch_begin, batch_end, events,
+                                                           args.output_dir, args.batch_limit,
+                                                           download_photo, validate_image)
+                        elif args.download_photo:
                             stage = 'experimental JPEG download'
                             photos = [e for e in events if e.length == 65535]
                             if args.photo_time is not None:
@@ -350,6 +382,9 @@ def main():
             session.report()
             for note in getattr(session, 'stage_notes', []):
                 print(note)
+        if args.download_queue is not None:
+            print('Batch session closed. No SMTP.')
+            return 1 if batch_missing else 0
         if args.sd_status:
             for label, expected in [('SD status', IOTYPE_GET_SD_STATUS_RSP),
                                     ('Advanced settings', IOTYPE_GET_ADVANCE_SETTINGS_RSP)]:
@@ -384,6 +419,8 @@ def main():
     except Exception as exc:
         print(f'Failed during {stage}: {type(exc).__name__}. Raw diagnostic details suppressed.')
         return 1
+    finally:
+        resources.close()
 
 
 if __name__ == '__main__':

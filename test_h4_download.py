@@ -1,7 +1,7 @@
 import hashlib
 import struct
 import unittest
-from h4_download import bulk_request, PhotoBlocks, native_frames, transfer_size, check_reference
+from h4_download import bulk_request, PhotoBlocks, native_frames, transfer_size, check_reference, verify_metadata_md5
 
 
 class DownloadTests(unittest.TestCase):
@@ -57,3 +57,11 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from('<H', req, 1212)[0], 230)
         self.assertEqual(struct.unpack_from('<I', req, 1216)[0], 0)
         self.assertEqual(struct.unpack_from('<I', req, 1220)[0], 275548)
+
+    def test_metadata_md5_required_and_verified(self):
+        data = b'synthetic photo data'
+        verify_metadata_md5(data, hashlib.md5(data).digest())
+        with self.assertRaises(ValueError):
+            verify_metadata_md5(data, bytes(16))
+        with self.assertRaises(ValueError):
+            verify_metadata_md5(data + b'!', hashlib.md5(data).digest())

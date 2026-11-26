@@ -19,7 +19,8 @@ import time
 from p4p_camera_sdk.credentials import CredentialClient
 from p4p_camera_sdk.relay import RelaySession
 import p4p_camera_sdk.relay as sdk_relay
-from p4p_camera_sdk.p4p_crypto import encode
+import p4p_camera_sdk.p4p_crypto as sdk_crypto
+from h4_crypto import encode, decode
 from h4_compat import recover_control, is_alive_response
 from p4p_camera_sdk.sdcard_client import SdCardClient
 from p4p_camera_sdk.sdcard import (
@@ -139,7 +140,7 @@ def main():
     parser.add_argument('--index', type=int, default=0)
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--events', action='store_true', help='Explicitly request SD events (may wake camera)')
-    modes.add_argument('--sdk-events', action='store_true', help='Original SDK event sequence for comparison')
+    modes.add_argument('--sdk-events', action='store_true', help='Legacy SDK event sequence (known bad command constants; diagnostic only)')
     modes.add_argument('--sd-status', action='store_true', help='Test read-only SD status and settings requests')
     window = parser.add_mutually_exclusive_group()
     window.add_argument('--hours', type=int, default=24)
@@ -232,7 +233,7 @@ def main():
                         session.inbound_conv[conv] += 1
             return plain
 
-        print('H4 compatibility: encoded outbound KCP; native RDT control recovery')
+        print('H4 compatibility: corrected P4P tail permutations; encoded outbound KCP; native RDT control recovery')
         print(f'SD flow: {args.sd_flow}; KCP receive window: {args.kcp_window}')
         if args.events or args.sdk_events:
             print(f'Query UTC: {dt.datetime.fromtimestamp(begin, dt.timezone.utc).isoformat()}'
@@ -240,6 +241,10 @@ def main():
         try:
             with (contextlib.redirect_stdout(io.StringIO()),
                   contextlib.redirect_stderr(io.StringIO()),
+                  patch.object(sdk_crypto, 'encode', encode),
+                  patch.object(sdk_crypto, 'decode', decode),
+                  patch.object(sdk_relay, 'encode', encode),
+                  patch.object(sdk_relay, 'decode', decode),
                   patch.object(sdk_relay, 'wrap_relay_kcp', encoded_wrap),
                   patch.object(sdk_relay, 'try_decode', observed_decode),
                   patch.object(sdk_relay, 'parse_rlystreamrsp', compact_binding)):

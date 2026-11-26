@@ -4,7 +4,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmwa
 
 ## Status / Projektstand
 
-Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). Live thumbnail retrieval is confirmed for a network-wake event; activity-photo retrieval and original-photo retrieval are still experimental. SMTP is not implemented yet.
+Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). A live activity original was independently reconstructed from the Python wire capture and matched the corrected Android reference byte-for-byte. The corrected P4P codec and normal metadata-driven downloads still need live validation. SMTP is not implemented yet.
 
 ## First test (Linux, Python 3.12+)
 
@@ -150,6 +150,18 @@ The H4 returned the correct 275548-byte original size in native response 261 for
 
 Rechecking the third Android capture against the current bulk_request layout confirms the successful original 262 payload matches the constructed timestamp, type, count, zero offset, size and zero-filled remaining bytes. Actual Python wire bytes still need verification. Capture UDP ports 20001 and 10240 on the Linux test server (tcpdump with full snap length), repeat the activity original and test a known network-wake original as a control. Compare raw KCP stream reconstruction, native framing, response 261, request 262 and session initialization with the app trace. The app had already retrieved other images and used AVCTRL in its session; the Python path omits AVCTRL for listing because the earlier AVCTRL tests failed. State dependence remains a hypothesis. No additional protocol changes until the server trace is examined. Keep captures private.
 
+## Tests U/V: root cause — P4P tail permutations (2026-11-26)
+
+**This section supersedes earlier conclusions about opaque command fields, unknown event type 84, reference hashes and MD5 mismatches.** The previous decoder omitted native permutations on tails of length 2, 4 and 8. Comparing repeated incoming KCP PUSH segments with different datagram packing revealed the permutation after XOR (zero-based): 2: [1,0]; 4: [2,3,0,1]; 8: [7,4,3,2,1,6,5,0]. These matched all 21, 13 and 248 qualifying comparison pairs respectively. Corrected decoding eliminates all observed conflicting incoming retransmissions in the server capture. No changes to full-block crypto.
+
+Test U received all 230 file blocks even though metadata size was zero. The initial hash discrepancy was eight bytes at offset 1192 in the old Android reference, not a bad Python reconstruction. Re-decoding both captures with corrected tails gives identical 275548-byte JPEGs (5120x2880), including decoded pixels. Test V returned positive metadata but no file frames. Actual outbound packets decoded with corrected tails show Test U's 260 event parameters were corrupted, while Test V's 262 final offset/size fields were corrupted. This explains why success depended on KCP batching and why transport ACKs did not guarantee valid application commands.
+
+All ten JPEGs independently reconstructed from the two Android SD captures match the 16-byte MD5 at 261 offsets 12–27 after correction. The new decoder also reveals initial IOCTRL 960 + 8474 (four zero bytes each), AVCTRL command 2 with zero timestamp/param, and SD list 256 + 960 (four zero bytes). Android metadata 260 uses the actual event timestamp, length and flags. There is no need to guess opaque values.
+
+The probe applies the corrected tail permutation to SDK relay encoding/decoding and outbound KCP, scoped to the test session. It keeps the no-AV default and compact binding fix, and corrects the optional app sequence. Ordinary photo downloads require positive size and matching metadata MD5 before saving; the explicit reference fallback still requires matching SHA256. Old reference hashes may be incorrect; recompute with the corrected codec. No captures or personal identifiers are published.
+
+Next live tests: use ordinary original retrieval with no reference overrides, first for the activity event and then optionally an explicitly selected network-wake photo. Run unit tests first. The new patch is supported by offline evidence but has not yet been tested with the physical camera. Old saved JPEGs from uncorrected decoding should not be treated as verified. The legacy SDK sequence retains known erroneous command constants and is for historical diagnostics only.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -158,7 +170,8 @@ Rechecking the third Android capture against the current bulk_request layout con
 - [x] Validate staged event retrieval and native event response recovery on H4 (no-AV flow).
 - [x] Verify SD event listing.
 - [x] Validate live reference thumbnail download byte-for-byte against Android capture.
-- [ ] Validate activity-photo thumbnail and original JPEG download on the camera.
+- [x] Independently verify live activity original against corrected Android wire reference.
+- [ ] Validate corrected codec and normal metadata-driven activity thumbnail/original downloads live.
 - [ ] Test wake from sleep and personal SIM compatibility.
 - [ ] Investigate whether the backend exposes motion-event metadata without a cloud subscription; do not assume notifications are available.
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.

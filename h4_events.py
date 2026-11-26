@@ -13,7 +13,7 @@ def list_events_staged(session, begin, end, flow='no-av'):
     notes = session.stage_notes = []
     session.wait_for_live_stream()
     session.phase = 'settings init'
-    session.send_ioctrl_batch(0, [(960, bytes(4)), (0x07074C3F, bytes.fromhex('6d0c0c25'))])
+    session.send_ioctrl_batch(0, [(960, bytes(4)), (8474, bytes(4))])
     start = time.monotonic()
     for kind, _ in session.poll_ioctrl(timeout=15):
         if kind == 961:
@@ -29,7 +29,7 @@ def list_events_staged(session, begin, end, flow='no-av'):
     if flow == 'app':
         session.phase = 'playback init'
         session.send_avctrl(2, playrecord=0, streamindex=0, with_audio=1,
-                            st_time_day=0x07074C3F, param=0x3F0C0C4C)
+                            st_time_day=0, param=0)
         for _ in session.poll_ioctrl(timeout=0.03):
             pass
     elif flow == 'no-av':
@@ -37,7 +37,7 @@ def list_events_staged(session, begin, end, flow='no-av'):
     else:
         raise ValueError('unknown SD flow')
     session.send_ioctrl_batch(0, [(256, build_list_event(begin, end, 0)),
-                                  (0x07074C3F, bytes.fromhex('4f0c0cff'))])
+                                  (960, bytes(4))])
     notes.append('SD list requested after settings response.')
     events = {}
     expected = None

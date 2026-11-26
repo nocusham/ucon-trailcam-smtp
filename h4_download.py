@@ -89,6 +89,14 @@ def transfer_size(reported, reference_size=None):
     return reported
 
 
+def verify_metadata_md5(data, checksum):
+    """The 16 bytes at offsets 12..27 of successful 261 are the file MD5."""
+    if len(checksum) != 16 or not any(checksum):
+        raise ValueError('Missing file MD5')
+    if hashlib.md5(data).digest() != checksum:
+        raise ValueError('File MD5 mismatch')
+
+
 def check_reference(data, reference_sha256):
     actual = hashlib.sha256(data).hexdigest()
     if reference_sha256 is not None and actual != reference_sha256.lower():
@@ -129,6 +137,9 @@ def download_photo(session, event, file_type, destination, *,
     size = transfer_size(size, reference_size)
     notes.append(f'Data request: timestamp={event.start_time}, file_type={file_type}, '
                  f'size={size}, blocks={(size + CHUNK - 1)//CHUNK}')
+    if reported_size > 0 and not any(checksum):
+        notes.append('Metadata MD5 absent; data request not sent.')
+        raise ValueError('Missing file MD5')
     request = bulk_request(file_type, event.start_time, size)
     blocks = PhotoBlocks(file_type, event.start_time, size)
     session.phase = 'photo data'
@@ -143,8 +154,12 @@ def download_photo(session, event, file_type, destination, *,
         notes.append(f'JPEG blocks: {len(blocks.parts)}/{(size + CHUNK - 1)//CHUNK}')
     data = blocks.image()
     if reported_size > 0:
-        match = hashlib.md5(data).digest() == checksum
-        notes.append(f'Metadata MD5 comparison: {"match" if match else "mismatch (semantics unverified)"}')
+        try:
+            verify_metadata_md5(data, checksum)
+        except ValueError:
+            notes.append('Metadata MD5 missing or mismatched; no file saved.')
+            raise
+        notes.append('Metadata MD5: exact match')
     actual = hashlib.sha256(data).hexdigest()
     notes.append(f'JPEG size/signature checked; SHA256={actual}')
     if reference_sha256 is not None:

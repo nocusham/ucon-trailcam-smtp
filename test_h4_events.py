@@ -38,19 +38,19 @@ class StagedTests(unittest.TestCase):
     def test_wait_then_list_and_keep_zero_length(self):
         session = FakeSession()
         events = list_events_staged(session, 1699999999, 1700000100, flow='app')
-        self.assertEqual(session.calls, ['live', (960, 0x07074C3F),
-                                         ('av', 2), (256, 0x07074C3F)])
+        self.assertEqual(session.calls, ['live', (960, 8474),
+                                         ('av', 2), (256, 960)])
         self.assertEqual([e.length for e in events], [0, 65535])
 
     def test_no_list_without_settings_response(self):
         session = FakeSession(settings=False)
         with self.assertRaises(TimeoutError):
             list_events_staged(session, 1699999999, 1700000100)
-        self.assertEqual(session.calls, ['live', (960, 0x07074C3F)])
+        self.assertEqual(session.calls, ['live', (960, 8474)])
 
     def test_no_av_variant(self):
         session = FakeSession()
         events = list_events_staged(session, 1699999999, 1700000100, flow='no-av')
-        self.assertEqual(session.calls, ['live', (960, 0x07074C3F),
-                                         (256, 0x07074C3F)])
+        self.assertEqual(session.calls, ['live', (960, 8474),
+                                         (256, 960)])
         self.assertEqual(len(events), 2)

@@ -13,6 +13,7 @@ import httpx
 from p4p_camera_sdk.credentials import HOST, USER_AGENT, encode_password
 from ucon_auth import read_credentials
 from cloud_image import ImageError, reference_scheme, select_latest, fetch_image
+from event_metadata import select_event, save_metadata
 
 
 class ApiError(Exception):
@@ -42,7 +43,7 @@ async def post_json(client, path, headers, body, stage):
     return data
 
 
-async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None):
+async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None, event_time=None, export_event=None):
     # Match the pinned SDK's Ucon login, host and account discovery.
     app_uuid = str(uuid4())
     headers = {
@@ -77,8 +78,12 @@ async def query_events(client, account, password, index, begin, end, *, schema=F
         raise ApiError('cloud event list: missing items array')
     if schema:
         print_event_schema(result, uid)
+    if image_dir is not None or export_event is not None:
+        item = select_latest(items, uid) if event_time is None else select_event(items, uid, event_time)
+    if export_event is not None:
+        save_metadata(export_event, item)
+        print(f'Event metadata saved locally: {export_event}')
     if image_dir is not None:
-        item = select_latest(items, uid)
         print('Cloud image test: API URL, public destinations only, no account headers.')
         async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False,
                                      limits=httpx.Limits(max_keepalive_connections=0)) as image_client:
@@ -160,7 +165,9 @@ def summarize(items, uid):
 async def run(args, account, password, begin, end):
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
         return await query_events(client, account, password, args.index, begin, end, schema=args.schema,
-                                  image_dir=args.output_dir if args.download_image else None)
+                                  image_dir=args.output_dir if args.download_image else None,
+                                  event_time=int(args.event_time.timestamp()) if args.event_time else None,
+                                  export_event=args.export_event)
 
 
 def main():
@@ -175,7 +182,17 @@ def main():
     parser.add_argument('--download-image', action='store_true',
                         help='Try one latest matching cloud image from its API URL')
     parser.add_argument('--output-dir', type=Path, default=Path('media/cloud'))
+    parser.add_argument('--event-time', type=dt.datetime.fromisoformat,
+                        help='Exact cloud et_utc timestamp, including UTC offset')
+    parser.add_argument('--export-event', type=Path,
+                        help='Save six selected event fields to a new JSON file')
     args = parser.parse_args()
+    if args.event_time is not None and (args.event_time.utcoffset() is None or args.event_time.microsecond):
+        parser.error('--event-time requires a whole second with explicit UTC offset')
+    if args.export_event is not None and args.event_time is None:
+        parser.error('--export-event requires --event-time to identify the correct event')
+    if args.event_time is not None and not (args.export_event or args.download_image):
+        parser.error('--event-time requires --export-event or --download-image')
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
     if version('p4p-camera-sdk') != '0.1.16':

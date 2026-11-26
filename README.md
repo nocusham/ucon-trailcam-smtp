@@ -302,6 +302,24 @@ python smtp_probe.py /path/to/test-image.jpg --send
 
 For an authorized relay without authentication, unset SMTP_USERNAME and SMTP_PASSWORD. Do not commit credentials. The test sends one email, does not query the camera or cloud, and does not retry automatically. SMTP acceptance is not proof of inbox delivery; check the inbox before repeating after an uncertain result. Four SMTP mock tests and twelve existing cloud tests passed locally (16 total, with SDK credential stubs for cloud tests); actual SMTP delivery has not been tested. The supplied cloud JPEG also passed the local validation-only command. No user media or credentials are committed.
 
+## SMTP delivery confirmed; configurable transport and event metadata
+
+The user's STARTTLS test delivered the cloud thumbnail to their own mailbox. The manual SMTP probe now supports `SMTP_SECURITY=none` (default port 25), `starttls` (587, default security), and `tls` (465); SMTP_PORT overrides the port. No TLS downgrade or automatic fallback. Plain SMTP explicitly warns that images, metadata and any credentials are transmitted unencrypted.
+
+The eventual destination is Revierwelt. Its published setup guide (https://wiki.revierwelt.de/index.php/knowledge-base/wildkamera-per-e-mail-mit-revierwelt-verbinden/) specifies smtp.revierwelt.de, port 5025, the published account/credentials and a recipient formed from the registered SIM phone number plus @revierwelt.de. It does not specify TLS support. Verify STARTTLS capability before choosing plaintext. No message to Revierwelt has been sent.
+
+The manual sender preserves the existing local image basename and bytes, and determines MIME type from decoded image format. The current SD downloader still uses generated local filenames; preserving the native camera filename from metadata is a separate future improvement.
+
+Six requested cloud fields (itemid, et_utc, battery, type, ai_result, user_tag) are saved independently of image source. An exact cloud event timestamp including offset identifies one own-device event, avoiding accidental latest-event selection. Metadata JSON is created exclusively with mode 0600, only the six fields, and no image URLs or account tokens. Missing fields are null. Use a private ignored data directory. The mail body contains the original JSON values as plain-text key/value lines, without interpreting battery units or event type. The same metadata can be used with a matching SD original; the manual user must ensure image/event correspondence. No queue or automatic matching is implemented yet.
+
+```sh
+python cloud_probe.py --day YYYY-MM-DD --event-time 'YYYY-MM-DDTHH:MM:SS+01:00' --export-event data/event.json
+python smtp_probe.py media/cloud/example.jpg --event-json data/event.json
+python smtp_probe.py media/cloud/example.jpg --event-json data/event.json --send
+```
+
+Existing manual image-only tests remain supported without --event-json; future production delivery must require event metadata and a verified original. Keep SMTP credentials out of Git. Metadata includes private event information; do not publish the JSON file.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -326,7 +344,8 @@ For an authorized relay without authentication, unset SMTP_USERNAME and SMTP_PAS
 - [ ] Optional: Android notification webhook only for configurations where notifications are actually available.
 - [ ] Implement SQLite-backed event and delivery queue; deduplicate by camera and event/file identity; exclude verified network-wake events by default.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
-- [ ] Validate live SMTP delivery and implement persistent delivery queue with retry/uncertain-delivery handling.
+- [x] Validate live SMTP delivery to the user's own TLS mail server.
+- [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.
 - [ ] Add tests with synthetic fixtures, Docker and setup documentation in German and English.
 
 ## References

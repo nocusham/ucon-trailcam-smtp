@@ -16,7 +16,7 @@ class SmtpProbeTests(unittest.TestCase):
             msg = build_message('sender@example.invalid', 'recipient@example.invalid', image)
             attachment, = msg.iter_attachments()
             self.assertEqual(attachment.get_content_type(), 'image/png')
-            self.assertEqual(attachment.get_filename(), 'wildkamera-test.png')
+            self.assertEqual(attachment.get_filename(), 'photo.bin')
             self.assertEqual(attachment.get_payload(decode=True), path.read_bytes())
             path.write_bytes(b'<html>not an image</html>')
             with self.assertRaises(ImageError):
@@ -47,3 +47,29 @@ class SmtpProbeTests(unittest.TestCase):
             factory.assert_called_once()
             client.login.assert_not_called()
             client.send_message.assert_called_once()
+
+    def test_plain_smtp_explicit_mode(self):
+        with patch('smtp_probe.smtplib.SMTP') as factory:
+            client = factory.return_value.__enter__.return_value
+            client.send_message.return_value = {}
+            send_message(object(), 'example.invalid', 5025, 'none', 'user', 'secret')
+            client.starttls.assert_not_called()
+            client.login.assert_called_once_with('user', 'secret')
+            client.send_message.assert_called_once()
+
+    def test_plain_text_event_fields_and_filename(self):
+        event = {'itemid': 'sample', 'et_utc': 123, 'battery': 87, 'type': 4,
+                 'ai_result': {'animal': 'Reh'}, 'user_tag': {},
+                 'img_url': 'https://example.invalid/secret'}
+        image = (b'fixture', 'jpg', 12, 8, 'Original Foto.jpg')
+        msg = build_message('sender@example.invalid', 'recipient@example.invalid', image, event)
+        body = msg.get_body(preferencelist=('plain',))
+        self.assertEqual(body.get_content_type(), 'text/plain')
+        text = body.get_content()
+        for line in ('itemid: "sample"', 'et_utc: 123', 'battery: 87', 'type: 4',
+                     'ai_result: {"animal": "Reh"}', 'user_tag: {}'):
+            self.assertIn(line, text)
+        self.assertNotIn('secret', text)
+        attachment, = msg.iter_attachments()
+        self.assertEqual(attachment.get_filename(), 'Original Foto.jpg')
+        self.assertEqual(attachment.get_payload(decode=True), b'fixture')

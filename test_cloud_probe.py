@@ -34,6 +34,15 @@ class CloudProbeTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ApiError, '^login: HTTP 403$'):
                 await query_events(client, 'test@example.invalid', 'secret', 0, 1, 2)
 
+    async def test_wrong_password_structured_error(self):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, json={'code': 20005, 'data': {'private': 'synthetic'}}))) as client:
+            with self.assertRaisesRegex(ApiError, '^login: API code 20005$') as caught:
+                await query_events(client, 'test@example.invalid', 'secret', 0, 1, 2)
+        self.assertEqual(caught.exception.stage, 'login')
+        self.assertEqual(caught.exception.api_code, 20005)
+        self.assertNotIn('synthetic', str(caught.exception))
+
     def test_invalid_fields_and_other_devices(self):
         rows, ignored = summarize([{'uid': 'own', 'et_utc': 'bad', 'img_url': 'file:///tmp/a'},
                                    {'uid': 'other', 'et_utc': 1},

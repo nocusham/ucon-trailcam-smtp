@@ -23,29 +23,31 @@ from camera_selection import SelectionError, select_device, profile_uid, relay_c
 class ApiError(Exception):
     """Contains only a fixed stage label and numeric status, never raw responses."""
 
+    def __init__(self, message, *, stage=None, api_code=None, http_status=None):
+        super().__init__(message)
+        self.stage, self.api_code, self.http_status = stage, api_code, http_status
+
 
 async def post_json(client, path, headers, body, stage):
     try:
         response = await client.post(HOST + path, headers=headers, json=body)
     except httpx.HTTPError as exc:
-        raise ApiError(f'{stage}: transport failure ({type(exc).__name__})') from None
+        raise ApiError(f'{stage}: transport failure ({type(exc).__name__})', stage=stage) from None
     if response.status_code != 200:
-        error = ApiError(f'{stage}: HTTP {response.status_code}')
-        error.http_status = response.status_code
-        raise error
+        raise ApiError(f'{stage}: HTTP {response.status_code}', stage=stage, http_status=response.status_code)
     try:
         payload = response.json()
     except ValueError:
-        raise ApiError(f'{stage}: invalid JSON') from None
+        raise ApiError(f'{stage}: invalid JSON', stage=stage) from None
     if not isinstance(payload, dict):
-        raise ApiError(f'{stage}: unexpected response shape')
+        raise ApiError(f'{stage}: unexpected response shape', stage=stage)
     if payload.get('code') != 0:
         code = payload.get('code')
         code = code if type(code) is int else 'unavailable'
-        raise ApiError(f'{stage}: API code {code}')
+        raise ApiError(f'{stage}: API code {code}', stage=stage, api_code=code if type(code) is int else None)
     data = payload.get('data')
     if not isinstance(data, dict):
-        raise ApiError(f'{stage}: missing data object')
+        raise ApiError(f'{stage}: missing data object', stage=stage)
     return data
 
 
@@ -64,7 +66,7 @@ async def discover_devices(client, account, password):
     }, 'login')
     token = login.get('Token') or login.get('token')
     if not isinstance(token, str) or not token:
-        raise ApiError('login: missing token')
+        raise ApiError('login: missing token', stage='login')
     headers = {**headers, 'X-Ubia-Auth-Usertoken': token,
                'X-Ubiaapi-Callcontext': (
                    f"source=app&app=ucon&ver=2.0.10&uuid={login.get('uuid', app_uuid)}&lang=en")}
@@ -96,7 +98,7 @@ async def list_cloud_events(client, headers, uid, begin, end):
                              'cloud event list')
     items = result.get('items')
     if not isinstance(items, list):
-        raise ApiError('cloud event list: missing items array')
+        raise ApiError('cloud event list: missing items array', stage='cloud event list')
     return result
 
 

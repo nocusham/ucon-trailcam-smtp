@@ -6,6 +6,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
+- Retry-aware UID-selected original download confirmed live (5120 x 2880, 256,172 bytes, 214 blocks, matching MD5, 10.4 s, estimated 601,949 UDP/IP bytes); immediate repeat opened no relay. Live failure path not exercised.
+
 - Authenticated H4 device-list schema includes integer dynamic_info.latest_active_utc, battery, signal, online_state and power flags. A subsequent live PIR test confirmed that latest_active_utc uses Unix seconds and updated ten seconds after the new event without opening the app or initiating P4P. Periodic contact without PIR and long-term reliability remain unverified; no individual telemetry values or private identifiers recorded here.
 
 - Independent alarm SMTP test accepted and received. Full expanded test-suite result not yet reported.
@@ -21,6 +23,8 @@ This records development milestones, not a published production release.
 - Single/grouped preview plans confirmed; private grouped live transmission remains untested.
 
 ### Implemented
+
+- Bounded persistent cloud intake with per-camera startup cutoff/cursor, overlapping catch-up, persistent API backoff and explicit login-block release after code 20005. Nine core tests passed locally; additional HTTP mock test and actual SDK/CLI integration await full server validation. No automatic mail or relay operation.
 
 - Persistent per-event download scheduling, capped exponential backoff and projection of repeated same-event failures into camera alarm state. Explicit --retry-due batch mode; no automatic mail, no extra camera health polling. Eight retry-core and eleven existing alarm tests passed locally; full server integration pending.
 

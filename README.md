@@ -136,17 +136,29 @@ The second command requires enabled=true and a configured private alert destinat
 
 Optional [download_retry] in the local TOML sets initial_minutes=5 and max_minutes=360. Use the existing configured SD batch command with the additional --retry-due flag. The SQLite register persists next due time and actual failures per pending photo. A bounded batch with no due originals skips the relay; actual list/transfer timeouts and missing/ambiguous matches are recorded, other exceptions are not yet classified. A confirmed repeated failure of the same outstanding event spanning the camera alarm threshold creates a per-camera incident. No email is sent in this manual test. A different successful photo cannot clear older failed pending originals. Eight new retry-core tests and eleven existing alarm tests passed locally; full CLI/SDK path and server suite still require validation. See [ALERTS.md](docs/ALERTS.md).
 
+## Persistent cloud intake test
+
+The live retry-aware SD batch downloaded one 5120 x 2880 original (256,172 bytes, 214/214 blocks, matching MD5, safe camera basename) in 10.4 seconds, with estimated server IPv4/UDP traffic of 601,949 bytes. Repeating the batch immediately selected zero due items and opened no relay. No confirmed failure in that live run.
+
+New bounded cloud_intake.py test uses an independent new database. It records a per-camera startup cutoff (no historical event import), a persisted overlapping cursor (five minutes) and one-hour forward catch-up steps. Events commit before the cursor, so a replay after interruption is deduplicated. H4 candidate photo type 1 only. One account login reused per invocation. HTTP 401/403 resets the session; other errors get persisted backoff (up to 15 minutes). A confirmed login-stage API code 20005 persists a login block; correct credentials and explicitly use --resume-login with the same database. No credential hashes stored. Legacy probes remain manual and do not enforce this block. Only bounded intake is enabled, no P4P or mail. Current implementation stops the remaining cameras in a cycle after an API error; multi-camera fault isolation, pagination, long-gap completeness and periodic device telemetry are still pending.
+
+```sh
+python cloud_intake.py --config config.local.toml --queue-db data/events-intake-test.sqlite3 --cycles 3 --interval 60
+```
+
+Use a fresh path for the first run, never an old historical or production queue. Trigger a new PIR after the start, then repeat against the same path to check the persisted cursor. Nine core tests with synthetic API/store and real SQLite passed locally. One additional HTTP mock test checks structured login errors; full SDK/CLI and real cloud test are pending.
+
 ## Known API errors and recovery plan
 
 | Observation | Implemented now | Planned service behavior |
 | --- | --- | --- |
-| Login API code 20005 after deliberately wrong password | Reports numeric error | Stop automatic login retries until credentials corrected; existing verified files may still be sent |
+| Login API code 20005 after deliberately wrong password | Structured error; persistent block in bounded intake | Integrate same block into full service; explicit resume after correcting credentials; existing verified files may still be sent |
 | HTTP 401/403 during watch | Drop session and authenticate next attempt | Bounded reauthentication |
 | Other cloud/network errors | Bounded watch backoff | Persistent cursor, capped backoff and recovery |
 | Camera/SD failure | Manual test fails; committed files retained | Per-camera persistent retry policy |
 | SMTP outcome uncertain | Retain uncertain, no automatic resend | Explicit safe resolution, distinguish known pre-send failures |
 
-Code 20005 is observed for a wrong password, not a proven exhaustive vendor error mapping. The login-specific retry suspension is **planned**, not implemented.
+Code 20005 is observed for a wrong password, not a proven exhaustive vendor error mapping. The login-specific retry suspension is implemented in the bounded persistent intake test, not yet in the full service.
 
 ## Roadmap / Weitere Entwicklung
 
@@ -158,7 +170,8 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [x] Validate manual alert SMTP live (test mail received).
 - [ ] Wire observation/dispatch into the service for outstanding original download failures, no extra active camera health checks; implement optional disabled-by-default inactivity warning using validated last-activity telemetry, with no-photo fallback for models lacking the field.
 - [x] Persistent download retry core with explicit retry-aware SD batch test (core tested locally; live integration pending).
-- [ ] Persistent event cursor, initial-start policy, freshness filtering and login-specific retry handling; integrate automatic alert dispatch.
+- [x] Persistent intake cursor, startup cutoff, bounded catch-up and login-specific retry block in bounded test (nine core tests).
+- [ ] Validate bounded intake live, complete service integration, freshness/pagination validation and automatic alert dispatch.
 - [ ] Continuous service with independent cloud, camera and delivery failure handling; configuration for intervals and retention.
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.
 - [ ] Test wake after extended idle, event reliability, mobile data use, pagination and service entitlement.

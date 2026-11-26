@@ -186,6 +186,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Multi-day live test of the H4 on the existing Ubuntu server.
 - [ ] Native unprivileged Debian 13 LXC, systemd autostart and actual reboot test.
 - [ ] Final Revierwelt delivery test with one original per message.
+- [ ] After completion of the existing goals: optional per-camera image footer appended below the complete original image, never overlaid on it; see [planned image footer](docs/IMAGE_FOOTER.md).
 - [ ] After first live system: validate WOLFANG WT08-WB (Ucon) and real multi-camera operation.
 - [ ] Afterwards investigate Xega XG-23 (UBox), separate account authentication and potential shared protocol/backend; compatibility is unconfirmed.
 - [ ] Discuss small upstream SDK fixes with the maintainer after application validation; clarify licensing before redistribution.
@@ -196,6 +197,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [Credential setup (Deutsch)](docs/CREDENTIALS.md)
 - [Optional health alerts (Deutsch)](docs/ALERTS.md)
 - [Deferred native Proxmox LXC plan](docs/LXC.md)
+- [Planned optional image footer (Deutsch)](docs/IMAGE_FOOTER.md)
 - [Full historical development and protocol analysis](docs/DEVELOPMENT_HISTORY.md)
 - [Development changelog](CHANGELOG.md)
 

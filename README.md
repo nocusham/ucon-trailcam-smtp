@@ -144,6 +144,12 @@ python probe.py --events --day YYYY-MM-DD --download-photo original \\
   --reference-size 275548 --reference-sha256 YOUR_64_DIGIT_SHA256
 ```
 
+## Test T: correct original metadata, no file frames
+
+The H4 returned the correct 275548-byte original size in native response 261 for the selected activity event. The reference-size fallback was not used. All KCP segments matched the binding, 262 was cumulatively acknowledged, and live data continued throughout the 45-second file timeout, but no decoded 263 file frame arrived. The listing returned 27/27 records. This rules out missing size as a sufficient explanation for this failure.
+
+Rechecking the third Android capture against the current bulk_request layout confirms the successful original 262 payload matches the constructed timestamp, type, count, zero offset, size and zero-filled remaining bytes. Actual Python wire bytes still need verification. Capture UDP ports 20001 and 10240 on the Linux test server (tcpdump with full snap length), repeat the activity original and test a known network-wake original as a control. Compare raw KCP stream reconstruction, native framing, response 261, request 262 and session initialization with the app trace. The app had already retrieved other images and used AVCTRL in its session; the Python path omits AVCTRL for listing because the earlier AVCTRL tests failed. State dependence remains a hypothesis. No additional protocol changes until the server trace is examined. Keep captures private.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

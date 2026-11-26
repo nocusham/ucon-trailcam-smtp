@@ -336,6 +336,12 @@ The user confirmed a successful live H4 download with the receive-queue fix, app
 
 As checked on 2026-11-26, upstream main and the most recent GitHub/PyPI release v0.1.16 both date to 2026-09-19 (commit 327939db193116269fd06c6c86a25ae4affa44ad, "Match APK SD entry handshake"). Keep the pinned dependency while validating the application. At the end, discuss small, independently tested changes with the SDK maintainer: drain the full KCP receive queue (including already buffered frames on generator re-entry), corrected power-of-two P4P tail permutations, outbound relay KCP encoding, binding conversation validation, native SD control/file frame parsing, metadata-driven download with MD5 and safe native filename, and the verified H4 AVCTRL stop/list/download sequence. Keep device-specific behavior isolated where necessary; validate across supported models before generalizing. The first candidate is the generic receive-queue defect, with a synthetic regression case releasing multiple responses in one UDP datagram. No upstream issue, fork, PR or release has been created. No raw PCAPs, credentials, identifiers or photos should be published. GitHub reports no recognized root license for the SDK; clarify licensing and contribution terms with the maintainer before redistribution of modified SDK code. The application-specific SMTP, Revierwelt, SQLite and scheduling logic stays in this repository.
 
+## LXC development stage: SQLite event intake
+
+The user confirmed SMTP with all six metadata fields, and wants Revierwelt tested only at the end. The camera reports weak signal and the user's SIMbase portal currently shows no recent usage/registration despite earlier successful own-SIM transfers. Weak signal is a plausible contributor to initial ACK loss, not a verified cause; the correct APN and accounting delay are not established. See Simbase APN and CDR documentation before changing camera settings.
+
+A native, unprivileged Proxmox LXC deployment is planned; see [LXC test setup](docs/LXC.md). The cloud probe now offers an explicit discovery-only `--queue-db` mode. SQLite stores valid matching records by camera UID and itemid with their six metadata fields; repeated calls do not reset state or create duplicates. Conflicting IDs/timestamps roll back, and no download or SMTP worker runs. Four standalone synthetic SQLite tests passed locally. The complete SDK integration and LXC are not yet tested. Do not use the historical test database for production delivery.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -360,7 +366,8 @@ As checked on 2026-11-26, upstream main and the most recent GitHub/PyPI release 
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.
 - [ ] If no passive event signal is available, evaluate configurable low-frequency polling with backoff, overlapping query windows and no concurrent sessions; leave unattended polling disabled until measured.
 - [ ] Optional: Android notification webhook only for configurations where notifications are actually available.
-- [ ] Implement SQLite-backed event and delivery queue; deduplicate by camera and event/file identity; exclude verified network-wake events by default.
+- [x] Implement initial discovery-only SQLite intake and duplicate detection.
+- [ ] Validate live intake and extend to persistent download/delivery states and event-type filtering.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.

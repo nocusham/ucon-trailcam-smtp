@@ -14,6 +14,7 @@ from p4p_camera_sdk.credentials import HOST, USER_AGENT, encode_password
 from ucon_auth import read_credentials
 from cloud_image import ImageError, reference_scheme, select_latest, fetch_image
 from event_metadata import select_event, save_metadata
+from event_queue import ingest_events, QueueError
 
 
 class ApiError(Exception):
@@ -43,7 +44,7 @@ async def post_json(client, path, headers, body, stage):
     return data
 
 
-async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None, event_time=None, export_event=None):
+async def query_events(client, account, password, index, begin, end, *, schema=False, image_dir=None, event_time=None, export_event=None, queue_db=None):
     # Match the pinned SDK's Ucon login, host and account discovery.
     app_uuid = str(uuid4())
     headers = {
@@ -76,6 +77,9 @@ async def query_events(client, account, password, index, begin, end, *, schema=F
     items = result.get('items')
     if not isinstance(items, list):
         raise ApiError('cloud event list: missing items array')
+    if queue_db is not None:
+        added, known, rejected, pending = ingest_events(queue_db, uid, items)
+        print(f'Queue: new={added}, known={known}, rejected={rejected}, pending={pending}')
     if schema:
         print_event_schema(result, uid)
     if image_dir is not None or export_event is not None:
@@ -167,7 +171,7 @@ async def run(args, account, password, begin, end):
         return await query_events(client, account, password, args.index, begin, end, schema=args.schema,
                                   image_dir=args.output_dir if args.download_image else None,
                                   event_time=int(args.event_time.timestamp()) if args.event_time else None,
-                                  export_event=args.export_event)
+                                  export_event=args.export_event, queue_db=args.queue_db)
 
 
 def main():
@@ -186,7 +190,11 @@ def main():
                         help='Exact cloud et_utc timestamp, including UTC offset')
     parser.add_argument('--export-event', type=Path,
                         help='Save six selected event fields to a new JSON file')
+    parser.add_argument('--queue-db', type=Path,
+                        help='Discovery only: persist matching events in a test SQLite database')
     args = parser.parse_args()
+    if args.queue_db is not None and (args.download_image or args.export_event):
+        parser.error('--queue-db cannot be combined with image download or event export')
     if args.event_time is not None and (args.event_time.utcoffset() is None or args.event_time.microsecond):
         parser.error('--event-time requires a whole second with explicit UTC offset')
     if args.export_event is not None and args.event_time is None:
@@ -210,7 +218,7 @@ def main():
         account, password = read_credentials()
         print('Experimental cloud event query; no P4P/UDP camera session.')
         rows, unverified = asyncio.run(run(args, account, password, begin, end))
-    except (ApiError, ImageError) as exc:
+    except (ApiError, ImageError, QueueError) as exc:
         print(str(exc))
         return 1
     except Exception as exc:

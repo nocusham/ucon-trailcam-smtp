@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import datetime as dt
+import re
 from importlib.metadata import version
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -39,7 +40,7 @@ async def post_json(client, path, headers, body, stage):
     return data
 
 
-async def query_events(client, account, password, index, begin, end):
+async def query_events(client, account, password, index, begin, end, *, schema=False):
     # Match the pinned SDK's Ucon login, host and account discovery.
     app_uuid = str(uuid4())
     headers = {
@@ -72,7 +73,130 @@ async def query_events(client, account, password, index, begin, end):
     items = result.get('items')
     if not isinstance(items, list):
         raise ApiError('cloud event list: missing items array')
+    if schema:
+        print_event_schema(result, uid)
     return summarize(items, uid)
+
+
+def describe_fields(value, prefix='', depth=0):
+    """Bounded structural diagnostics only; never return scalar values."""
+    if depth > 5:
+        yield prefix, 'depth limit'
+        return
+    if isinstance(value, dict):
+        yield prefix or '
+    """Report only matching-device counts and safe event metadata."""
+    rows = []
+    unverified = 0
+    for item in items:
+        if not isinstance(item, dict) or item.get('uid', item.get('device_uid')) != uid:
+            unverified += 1
+            continue
+        stamp = item.get('et_utc')
+        if type(stamp) is not int or not 0 <= stamp <= 4102444800:
+            stamp = None
+        image = item.get('img_url')
+        try:
+            has_image = isinstance(image, str) and urlsplit(image).scheme == 'https' and bool(urlsplit(image).hostname)
+        except ValueError:
+            has_image = False
+        rows.append((stamp, has_image))
+    return rows, unverified
+
+
+async def run(args, account, password, begin, end):
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        return await query_events(client, account, password, args.index, begin, end, schema=args.schema)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--index', type=int, default=0)
+    window = parser.add_mutually_exclusive_group()
+    window.add_argument('--day', type=dt.date.fromisoformat)
+    window.add_argument('--hours', type=int, default=24)
+    parser.add_argument('--tz', default='Europe/Berlin')
+    parser.add_argument('--schema', action='store_true',
+                        help='Show event field names, types and string classifications only')
+    args = parser.parse_args()
+    if args.index < 0 or not 1 <= args.hours <= 168:
+        parser.error('index must be nonnegative; hours must be 1–168')
+    if version('p4p-camera-sdk') != '0.1.16':
+        parser.error('Use the pinned SDK version 0.1.16')
+    end = int(dt.datetime.now(dt.timezone.utc).timestamp())
+    begin = end - args.hours * 3600
+    if args.day:
+        try:
+            tz = ZoneInfo(args.tz)
+        except Exception:
+            parser.error('Invalid time zone')
+        begin = int(dt.datetime.combine(args.day, dt.time.min, tzinfo=tz).timestamp())
+        end = int(dt.datetime.combine(args.day + dt.timedelta(days=1), dt.time.min, tzinfo=tz).timestamp())
+    try:
+        account, password = read_credentials()
+        print('Experimental cloud event query; no P4P/UDP camera session.')
+        rows, unverified = asyncio.run(run(args, account, password, begin, end))
+    except ApiError as exc:
+        print(str(exc))
+        return 1
+    except Exception as exc:
+        print(f'Cloud probe failed: {type(exc).__name__}. Details suppressed.')
+        return 1
+    print(f'Matching-device events: {len(rows)}; HTTPS image references: {sum(has for _, has in rows)}')
+    print(f'Unverified/unmatched items ignored: {unverified}')
+    for stamp, has_image in sorted(rows, key=lambda row: row[0] if row[0] is not None else -1):
+        when = dt.datetime.fromtimestamp(stamp, dt.timezone.utc).isoformat() if stamp is not None else 'unknown'
+        print(f'{when} | image reference: {"yes" if has_image else "no"}')
+    print('No image URL, token, device ID or raw API response printed. No image downloaded.')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
+, f'object ({len(value)} fields)'
+        for key, child in list(value.items())[:80]:
+            # Do not print arbitrary map keys that may be identifiers or URLs.
+            safe = (key if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,23}', key)
+                    and not re.search(r'[0-9]{5,}', key) else '[redacted key]')
+            yield from describe_fields(child, f'{prefix}.{safe}' if prefix else safe, depth + 1)
+    elif isinstance(value, list):
+        yield prefix, f'array ({len(value)} items)'
+        for child in value[:3]:
+            yield from describe_fields(child, f'{prefix}[]', depth + 1)
+    elif isinstance(value, str):
+        kind = 'empty string' if not value else 'string'
+        if value:
+            try:
+                parsed = urlsplit(value)
+                if parsed.scheme.lower() in ('https', 'http') and parsed.hostname:
+                    kind = f'{parsed.scheme.lower()} URL'
+                elif value.lstrip().startswith(('{', '[')):
+                    kind = 'possible embedded JSON string'
+                elif '/' in value:
+                    kind = 'string containing slash (possible path)'
+            except ValueError:
+                pass
+        yield prefix, f'{kind}, length={len(value)}'
+    elif value is None:
+        yield prefix, 'null'
+    else:
+        yield prefix, type(value).__name__
+
+
+def print_event_schema(result, uid):
+    """Only examine the selected device's records, never other account data."""
+    items = result.get('items', [])
+    own = [i for i in items if isinstance(i, dict)
+           and i.get('uid', i.get('device_uid')) == uid]
+    print('Event API structure (field names/types only, values suppressed):')
+    # Response-level metadata can contain cursors and tokens; show shape only.
+    meta = {k: v for k, v in result.items() if k != 'items'}
+    for path, kind in describe_fields(meta, 'data'):
+        print(f'  {path}: {kind}')
+    for index, item in enumerate(own[:5], 1):
+        print(f'  Matching item {index}:')
+        for path, kind in describe_fields(item, 'item'):
+            print(f'    {path}: {kind}')
 
 
 def summarize(items, uid):

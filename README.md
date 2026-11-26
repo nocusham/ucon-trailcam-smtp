@@ -224,13 +224,25 @@ Z8 accepted the correct conversation, received settings, sent AVCTRL 2 and list 
 
 ### Experimental cloud event query (no camera session)
 
-The related UBox project documents an authenticated cloud event-list endpoint (https://github.com/mahumadad/ubox-p4p/blob/main/docs/ENDPOINTS.md). The new `cloud_probe.py` tests that path on the **existing pinned Ucon API host**, using the same login and selected account device. It sends only HTTPS login, device discovery and one list query. It does not contact the relay, retrieve images, register push tokens or change camera settings. This route is not yet verified on Ucon or without paid storage.
+The related UBox project documents an authenticated cloud event-list endpoint (https://github.com/mahumadad/ubox-p4p/blob/main/docs/ENDPOINTS.md). The new `cloud_probe.py` tests that path on the **existing pinned Ucon API host**, using the same login and selected account device. It sends only HTTPS login, device discovery and one list query. It does not contact the relay, retrieve images, register push tokens or change camera settings. This route was subsequently verified on Ucon with a personal SIM and no reported paid storage subscription (see below).
 
 ```sh
 python cloud_probe.py --day 2026-11-26
 ```
 
 Existing UCON_ACCOUNT/UCON_PASSWORD variables are supported. The probe reports counts, matching-device timestamps and presence of HTTPS image references, not IDs, tokens, URLs or raw response bodies. Unmatched/unverified items are ignored. A zero result or API rejection is not proof that no other notification API exists. No automatic polling is enabled. If event listing works without waking the camera, it may enable backend-only polling and event-triggered SD downloads. FCM itself requires app-instance registration; no direct FCM listener is implemented. Synthetic mock-transport tests are included.
+
+## Cloud event probe success (2026-11-26)
+
+The account-scoped HTTPS query returned exactly two matching-device records for the test day and zero unmatched records. Both end timestamps agree with the two observed PIR events (one exactly and one within one second of the captured image time). The numerous observed network-wake SD events were absent from this response. No client-side P4P session was initiated. The backend's effect on the camera's actual power state and SIM consumption has not yet been independently measured. No paid storage subscription was reported; separate entitlements and event retention remain unknown.
+
+Both records lacked a usable HTTPS reference in the specific `img_url` field checked by the first probe. This does not prove that other snapshot fields or HTTP references are absent. A new opt-in structural diagnostic prints field names, types, lengths, null/empty state and URL/path classifications, including nested fields for up to five verified matching-device records, without printing scalar values, URLs, tokens or identifiers. Field names themselves come from the API, so review the output before sharing. No image fetching or automatic polling is added.
+
+```sh
+python cloud_probe.py --day 2026-11-26 --schema
+```
+
+The next architectural step is a persistent backend event cursor/deduplication queue with bounded overlapping queries and a separate SD retrieval worker. Keep end timestamp semantics and the observed one-second discrepancy in mind; do not require exact equality between cloud and SD event timestamps. Validate stable event identifiers and whether thumbnails are available before choosing the retrieval method.
 
 ## Roadmap
 
@@ -246,7 +258,8 @@ Existing UCON_ACCOUNT/UCON_PASSWORD variables are supported. The probe reports c
 - [ ] Measure wake from extended idle and check notification availability over time.
 - [x] Observe a PIR notification on Android without a reported paid cloud-storage subscription.
 - [x] Identify probable FCM/OSS notification transport from Android capture.
-- [ ] Validate account-scoped HTTPS event query without waking the camera.
+- [x] Validate account-scoped HTTPS event query without a client-initiated P4P session.
+- [ ] Independently verify no camera wake/data usage caused by backend queries and measure event availability latency.
 - [ ] Verify notification reliability and any separate service-entitlement limits.
 - [x] Demonstrate file transfer without continuous live video in the official Android app.
 - [ ] Validate Python SD download with live video stopped.

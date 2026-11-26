@@ -1,6 +1,8 @@
 import unittest
 import httpx
-from cloud_probe import query_events, summarize, ApiError
+from cloud_probe import query_events, summarize, ApiError, describe_fields, print_event_schema
+from contextlib import redirect_stdout
+from io import StringIO
 
 
 class CloudProbeTests(unittest.IsolatedAsyncioTestCase):
@@ -38,3 +40,24 @@ class CloudProbeTests(unittest.IsolatedAsyncioTestCase):
                                    {'uid': 'own', 'et_utc': 2, 'img_url': 'https://['}], 'own')
         self.assertEqual(rows, [(None, False), (2, False)])
         self.assertEqual(ignored, 1)
+
+    def test_schema_describes_values_without_disclosing_them(self):
+        fields = dict(describe_fields({'img_url': 'http://example.invalid/private?token=secret',
+                                       'snap': 'bucket/private.jpg',
+                                       'empty': '', 'nested': {'url': 'https://example.invalid/x'},
+                                       'itemid': 'secret-id', 'et_utc': 1795677006}))
+        self.assertTrue(fields['img_url'].startswith('http URL'))
+        self.assertTrue(fields['nested.url'].startswith('https URL'))
+        self.assertIn('possible path', fields['snap'])
+        self.assertEqual(fields['itemid'], 'string, length=9')
+        self.assertEqual(fields['et_utc'], 'int')
+        self.assertNotIn('secret', str(fields))
+        self.assertNotIn('example.invalid', str(fields))
+
+    def test_schema_skips_unmatched_records(self):
+        out = StringIO()
+        with redirect_stdout(out):
+            print_event_schema({'items': [{'uid': 'own', 'image': ''},
+                                         {'uid': 'other', 'private_field': 'secret'}]}, 'own')
+        self.assertIn('item.image: empty string', out.getvalue())
+        self.assertNotIn('private_field', out.getvalue())

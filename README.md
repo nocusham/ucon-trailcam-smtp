@@ -393,6 +393,20 @@ sqlite3 -readonly data/events-batch-test.sqlite3 'SELECT state,count(*) FROM eve
 
 Use only the previously validated private TLS mail server and test recipient. No Revierwelt tests until the complete application is ready. Without --send there is no SMTP connection or delivery state change. With --send, commit an uncertain state and delivery receipt (message ID, start time) immediately before sending; mark sent and record acceptance time only after the SMTP helper returns normally. A crash, timeout or any SMTP exception leaves uncertain, even if the server never received the message; the selected day's batch stops and further runs refuse to send until manual review. No automatic resend or resolution yet. A successful server acceptance is not proof of inbox delivery. The same per-database advisory lock is used as the download batch. Expected final state is sent=3, pending=1, and repeating the command should open no SMTP connection. Do not recreate the DB or reset sent rows for a repeat test. Six local tests of the new processing core passed using real SQLite and JPEGs with injected image/message helpers and mocked SMTP; complete CLI, shared settings refactor and live delivery are not yet validated.
 
+## Live queued SMTP delivery and configurable message grouping
+
+All 83 tests passed on the user's server. Validation-only verified three full-resolution originals. Three independent SMTP send calls succeeded, the database contains sent=3 and pending=1, and the repeated command opened no SMTP connection. The user reported seeing three images together in their mailbox; the previous code constructed one attachment per message with identical subjects, so mail-client conversation grouping is plausible but not verified. The newly uploaded comparison JPEG is 2048x1152 and byte-identical to the previous app-saved comparison, not the 5120x2880 SD receipt. The point of resizing is not established.
+
+The queue sender now supports `SMTP_MODE=single` (default, mandatory for Revierwelt) or `SMTP_MODE=grouped`, overridden by `--mode single|grouped`. Single mode uses one message per image, validates attachment bytes and name, and includes the filename and UTC event timestamp in the subject. Grouped mode puts up to --limit originals in one message, with numbered plain-text metadata sections corresponding to attachment order. All events in a grouped message transition to uncertain together before SMTP, then sent together after acceptance; they share the recorded message ID. A grouped send is refused for the known Revierwelt SMTP hostname or @revierwelt.de recipients. Server attachment/message-size limits still apply. No image resizing, recompression or automatic split/fallback is performed.
+
+```sh
+# Already sent images: preview both modes without SMTP or changing event state.
+python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --limit 3 --preview-sent --mode single
+python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --limit 3 --preview-sent --mode grouped
+```
+
+Expected message/attachment plan: single=3 messages with one attachment each, grouped=1 message with three attachments. --preview-sent cannot be combined with --send. Do not reset sent rows. Five new tests passed locally (11 queue SMTP tests total); grouped MIME serialization, filename and bytes, receipt transitions, preview and Revierwelt guard were tested using synthetic JPEGs and injected helpers. Full integration and real grouped delivery have not yet been tested. Continue on infra-vm-06; LXC and Revierwelt live tests remain deferred.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -426,7 +440,9 @@ Use only the previously validated private TLS mail server and test recipient. No
 - [x] Implement bounded original download batch and persistent file receipts.
 - [x] Validate live batch download and skip already downloaded originals.
 - [x] Implement explicit queue SMTP batch and conservative uncertain-delivery state.
-- [ ] Validate queue SMTP live and implement bounded retry/recovery and production event filtering.
+- [x] Validate queue SMTP live with three accepted messages and no resend.
+- [x] Implement configurable single/grouped MIME delivery with Revierwelt guard.
+- [ ] Validate both message plans on the test server and implement bounded retry/recovery and production event filtering.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.

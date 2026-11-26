@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock
 from PIL import Image
 from io import BytesIO
-from queue_smtp import DeliveryError, ready_rows, process
+from queue_smtp import DeliveryError, ready_rows, process, validate_destination
 
 
 class QueueSMTPTests(unittest.TestCase):
@@ -44,10 +44,10 @@ class QueueSMTPTests(unittest.TestCase):
         msg.add_attachment(image[0], maintype='image', subtype='jpeg', filename=image[4])
         return msg
 
-    def run_batch(self, send=None, begin=1, end=400):
-        return process(self.db, ready_rows(self.db, begin, end, 3), load_image=self.load,
+    def run_batch(self, send=None, begin=1, end=400, mode="single", state="downloaded"):
+        return process(self.db, ready_rows(self.db, begin, end, 3, state), load_image=self.load,
                        build_message=self.build, sender='s@example.invalid', recipient='r@example.invalid',
-                       send=send, emit=lambda _: None)
+                       send=send, emit=lambda _: None, mode=mode)
 
     def states(self):
         return [r[0] for r in self.db.execute('SELECT state FROM events ORDER BY et_utc')]
@@ -102,3 +102,56 @@ class QueueSMTPTests(unittest.TestCase):
         self.run_batch(send, begin=150, end=250)
         self.assertEqual(self.states(), ['downloaded', 'sent', 'pending'])
         send.assert_called_once()
+
+    def test_single_mode_distinct_subject_and_exactly_one_attachment(self):
+        send = Mock()
+        self.run_batch(send)
+        messages = [call.args[0] for call in send.call_args_list]
+        self.assertEqual(len(messages), 2)
+        self.assertNotEqual(messages[0]['Subject'], messages[1]['Subject'])
+        for message in messages:
+            self.assertEqual(len(list(message.iter_attachments())), 1)
+
+    def test_grouped_mode_metadata_bytes_and_receipts(self):
+        send = Mock()
+        self.assertEqual(self.run_batch(send, mode='grouped'), 0)
+        send.assert_called_once()
+        from email import policy
+        from email.parser import BytesParser
+        msg = BytesParser(policy=policy.default).parsebytes(send.call_args.args[0].as_bytes())
+        attachments = list(msg.iter_attachments())
+        self.assertEqual(len(attachments), 2)
+        for part in attachments:
+            self.assertEqual(part.get_filename(), 'native.jpg')
+            self.assertEqual(part.get_payload(decode=True), self.path.read_bytes())
+        body = msg.get_body(preferencelist=('plain',)).get_content()
+        self.assertIn('Bild 1: native.jpg', body)
+        self.assertIn('Bild 2: native.jpg', body)
+        self.assertIn('"itemid": "a"', body)
+        self.assertIn('"itemid": "b"', body)
+        self.assertEqual(self.states(), ['sent', 'sent', 'pending'])
+        self.assertEqual(self.db.execute('SELECT count(DISTINCT message_id) FROM deliveries').fetchone()[0], 1)
+
+    def test_grouped_failure_marks_all_uncertain(self):
+        def fail(msg):
+            self.assertEqual(self.states(), ['uncertain', 'uncertain', 'pending'])
+            raise TimeoutError
+        self.assertEqual(self.run_batch(fail, mode='grouped'), 1)
+        self.assertEqual(self.states(), ['uncertain', 'uncertain', 'pending'])
+        self.assertEqual(self.db.execute('SELECT count(*) FROM deliveries WHERE accepted_utc IS NULL').fetchone()[0], 2)
+
+    def test_preview_sent_is_read_only(self):
+        self.run_batch(Mock())
+        before = self.db.execute('SELECT * FROM deliveries').fetchall()
+        self.assertEqual(len(ready_rows(self.db, 1, 400, 3, 'sent')), 2)
+        self.assertEqual(self.run_batch(mode='grouped', state='sent'), 0)
+        self.assertEqual(self.states(), ['sent', 'sent', 'pending'])
+        self.assertEqual(self.db.execute('SELECT * FROM deliveries').fetchall(), before)
+
+    def test_revierwelt_single_only(self):
+        for host, recipient in [('smtp.revierwelt.de', 'r@example.invalid'),
+                                ('smtp.example.invalid', 'Camera <r@revierwelt.de>')]:
+            with self.assertRaises(DeliveryError):
+                validate_destination('grouped', host, recipient)
+            validate_destination('single', host, recipient)
+        validate_destination('grouped', 'smtp.example.invalid', 'r@example.invalid')

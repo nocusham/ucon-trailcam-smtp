@@ -352,6 +352,18 @@ python cloud_probe.py --watch --hours 24 --cycles 6 --interval 60 --overlap 300 
 
 The first poll queries 24 hours; subsequent successful queries overlap the previous successful end by five minutes. Session credentials and device selection are reused, HTTP 401/403 trigger a new login on the next attempt, and the selected device must not change. Other API errors retain the session and cursor, with exponential backoff capped at 900 seconds. API-specific expiration codes are not yet known. The run ends after six attempts (or Ctrl+C); any failed attempt produces exit status 1 at completion. The cursor is in memory and a restart begins with the configured historical window. No guarantee of lossless ingestion across long outages, pagination or late events outside the overlap. No automatic downloads or SMTP. Test DB is not a production queue. Four standalone polling tests passed locally with real SQLite and simulated API callbacks; the refactored HTTP integration has not been live tested.
 
+## Live cloud watch and read-only SD matching
+
+Six consecutive live polls succeeded with one login; three events were stored initially, a fourth appeared on poll five, and poll six recognized it as known. The test database contains four pending rows. No P4P session or SMTP message was initiated.
+
+Next, compare the stored cloud timestamps to a complete SD listing in one camera session:
+
+```sh
+python probe.py --events --day YYYY-MM-DD --sd-flow app --match-queue data/events-watch-test.sqlite3
+```
+
+The new option is read-only and cannot be combined with downloads. It scopes queue rows to the actual selected camera UID. Only H4 SD event type 4 and still-photo length 65535 are candidates. The provisional tolerance is ±2 seconds; multiple candidates (even with an exact timestamp) or a candidate shared by two cloud records are ambiguous. No guess or nearest-neighbor selection. The query includes padding around the requested interval to detect boundary conflicts within the stored records. Missing or ambiguous matches return nonzero. This is a timestamp correlation test, not proof of image identity; unobserved cloud events and coincidental timestamps remain possible. No cloud type mapping is assumed. Five standalone matching tests passed locally with synthetic fixtures and SQLite; the integrated camera path has not been live-tested. No photo download, database state transition or SMTP worker yet. Continue on the existing test server, with LXC and Revierwelt deferred.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -379,7 +391,9 @@ The first poll queries 24 hours; subsequent successful queries overlap the previ
 - [x] Implement initial discovery-only SQLite intake and duplicate detection.
 - [x] Validate live SQLite intake and duplicate detection.
 - [x] Implement bounded cloud polling test with session reuse and overlap.
-- [ ] Validate live polling and extend to persistent download/delivery states and event-type filtering.
+- [x] Validate live polling and session reuse (6/6 queries, one login).
+- [x] Implement read-only SD timestamp correlation test.
+- [ ] Validate live SD correlation and extend to persistent download/delivery states and event-type filtering.
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.

@@ -11,6 +11,7 @@ from importlib.metadata import version
 from unittest.mock import patch
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from h4_events import list_events_staged
+from event_match import queued_times, match_events
 from h4_transport import TransportTrace, kcp_segments
 from h4_receive import poll_relay
 from h4_traffic import TrafficStats, SocketModuleProxy
@@ -168,6 +169,8 @@ def main():
                         help='Local JPEG directory; existing files are never overwritten')
     parser.add_argument('--download-photo', choices=('thumbnail', 'original'),
                         help='Download one latest activity photo after a successful event list')
+    parser.add_argument('--match-queue', type=Path,
+                        help='Read-only match of queued cloud events to H4 SD photos; no download')
     parser.add_argument('--native-filename', action='store_true',
                         help='Use safe camera-reported filename for original photos')
     parser.add_argument('--photo-time', type=dt.datetime.fromisoformat,
@@ -182,6 +185,8 @@ def main():
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')
+    if args.match_queue is not None and (not args.events or args.download_photo):
+        parser.error('--match-queue requires --events and disallows downloads')
     if args.download_photo and not args.events:
         parser.error('--download-photo requires --events')
     if (args.no_live_wait or args.no_audio) and not args.events:
@@ -225,6 +230,15 @@ def main():
             tz = ZoneInfo(args.tz)
             begin = int(dt.datetime.combine(args.day, dt.time.min, tzinfo=tz).timestamp())
             end = int(dt.datetime.combine(args.day + dt.timedelta(days=1), dt.time.min, tzinfo=tz).timestamp())
+        if args.match_queue is not None:
+            stage = 'read-only queue selection'
+            cloud_times = queued_times(args.match_queue, device.device_uid, begin - 4, end + 4)
+            if not any(begin <= t < end for t in cloud_times):
+                print('No queued cloud events for selected camera and interval; no relay session.')
+                return 1
+            match_begin, match_end = begin, end
+            begin, end = begin - 6, end + 6
+            stage = 'camera relay session / SD event listing'
         session = DiagnosticRelay(device.device_uid, device.device_password)
         started = time.monotonic()
         session.started = started
@@ -342,6 +356,21 @@ def main():
                 found = any(kind == expected for (_, kind) in session.frames)
                 print(f'{label}: {"response received" if found else "no explicit response decoded"}')
             return 0
+        if args.match_queue is not None:
+            counts = Counter()
+            for cloud, status, sd in match_events(cloud_times, events):
+                if not match_begin <= cloud < match_end:
+                    continue
+                counts[status] += 1
+                when = dt.datetime.fromtimestamp(cloud, dt.timezone.utc).isoformat()
+                if sd is None:
+                    print(f'Match: cloud={when} | {status}')
+                else:
+                    sd_when = dt.datetime.fromtimestamp(sd, dt.timezone.utc).isoformat()
+                    print(f'Match: cloud={when} | SD={sd_when} | delta={sd-cloud:+d}s')
+            print(f'Match summary: matched={counts["matched"]}, missing={counts["missing"]}, ambiguous={counts["ambiguous"]}')
+            print('Read-only matching test: no photo download, no database changes, no SMTP.')
+            return 1 if counts['missing'] or counts['ambiguous'] else 0
         print(f'Events returned: {len(events)}')
         if not events:
             if args.events:

@@ -320,6 +320,14 @@ python smtp_probe.py media/cloud/example.jpg --event-json data/event.json --send
 
 Existing manual image-only tests remain supported without --event-json; future production delivery must require event metadata and a verified original. Keep SMTP credentials out of Git. Metadata includes private event information; do not publish the JSON file.
 
+## Z10/Z11: SD response received on wire, KCP receive-queue fix
+
+Z10 downloaded the same verified 247692-byte activity JPEG (207 blocks) in 14.4 s, with 837800 server-side IP/UDP bytes. Z11 stopped live video and timed out at 27.1 s, with 127819 bytes. The private Linux capture demonstrates that the camera actually returned a complete 132-byte IOCTRL 257 (15 records) after AVCTRL 2, together with a 368-byte 961. The final inbound datagram contains two ACKs and two PUSH messages (152/153); all 154 unique incoming PUSH segments are contiguous. The list response was on wire roughly 127 ms after request. The outgoing AVCTRL and list bodies match the successful Android capture. The pinned SDK calls get_received once per UDP datagram; kcp 0.1.6 implements that method as a single ikcp_recv. Multiple PUSH messages accumulate and the last responses remain queued when live traffic stops. The receive loop now drains pending KCP messages and existing app-buffer frames before waiting for new network traffic, and after each input datagram. Three synthetic receive tests passed locally; the integrated SDK path needs a live retest. No change to AVCTRL or outgoing request formats. The intermittent failure to receive initial settings ACKs remains a separate open issue.
+
+The successful original metadata response also contains an ASCII basename starting at body offset 28, with little-endian length at offset 6 (32 in the observed response). The opt-in `--native-filename` now uses a safe JPEG basename from metadata, rejecting paths, traversal, non-ASCII and unsupported suffixes; missing or unsafe names fall back to the generated basename. Existing files are never overwritten. This flag is restricted to original retrieval and is not yet live-tested. No captured image or credentials are bundled.
+
+Repeat the original and app flows with the same exact event, separate new output directories and `--native-filename`. Compare SHA256, MD5 status, media counters and traffic. The previous failed app measurement is not a successful download cost. Revierwelt testing is deferred until the entire application is complete; the user's TLS mail test including all six requested text fields succeeded.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.

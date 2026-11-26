@@ -1,7 +1,7 @@
 import hashlib
 import struct
 import unittest
-from h4_download import bulk_request, PhotoBlocks, native_frames, transfer_size, check_reference, verify_metadata_md5
+from h4_download import bulk_request, PhotoBlocks, native_frames, transfer_size, check_reference, verify_metadata_md5, native_photo_filename
 
 
 class DownloadTests(unittest.TestCase):
@@ -65,3 +65,13 @@ class DownloadTests(unittest.TestCase):
             verify_metadata_md5(data, bytes(16))
         with self.assertRaises(ValueError):
             verify_metadata_md5(data + b'!', hashlib.md5(data).digest())
+
+    def test_native_photo_filename(self):
+        name = b'20260101_120000_000_65535_PH.jpg'
+        header = bytearray(28)
+        struct.pack_into('<H', header, 6, len(name))
+        self.assertEqual(native_photo_filename(bytes(header) + name), name.decode())
+        for unsafe in (b'../file.jpg', b'a/b.jpg', b'file.exe', b'a..jpg', b'file.jpg\x00'):
+            struct.pack_into('<H', header, 6, len(unsafe))
+            self.assertIsNone(native_photo_filename(bytes(header) + unsafe))
+        self.assertIsNone(native_photo_filename(bytes(header)))

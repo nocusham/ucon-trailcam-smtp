@@ -12,6 +12,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from h4_events import list_events_staged
 from h4_transport import TransportTrace, kcp_segments
+from h4_receive import poll_relay
 from h4_traffic import TrafficStats, SocketModuleProxy
 from h4_download import native_frames, download_photo, MAX_SIZE
 from pathlib import Path
@@ -52,6 +53,7 @@ class DiagnosticRelay(RelaySession):
         self.binding_conv = None
         self.requested_conv = None
         self.inbound_conv = Counter()
+        self.rx_messages = self.rx_errors = 0
 
     def _drain_frames(self):
         if self.native_download:
@@ -85,7 +87,7 @@ class DiagnosticRelay(RelaySession):
         return super().send_ioctrl_batch(channel, commands)
 
     def poll_ioctrl(self, timeout=5.0):
-        for iotype, data in super().poll_ioctrl(timeout=timeout):
+        for iotype, data in poll_relay(self, sdk_relay.try_decode, timeout):
             self.frames[(self.phase, iotype)] += 1
             self.last_frame[(self.phase, iotype)] = time.monotonic() - self.started
             if iotype in (0x10011, 0x10013):
@@ -119,6 +121,9 @@ class DiagnosticRelay(RelaySession):
         print('Inbound decoded relay datagrams:')
         for kind, count in sorted(self.relay_rx.items()):
             print(f'  0x{kind:08x}: {count}, last +{self.relay_last[kind]:.2f}s')
+        print(f'KCP messages drained: {self.rx_messages}; receive errors: {self.rx_errors}')
+        if self.kcp is not None:
+            print(f'Next queued KCP message size: {self.kcp.get_next_packet_size()}')
         print(f'Undrained application buffer: {len(self._app_buf)} bytes')
         print('IOCTRL requests queued (not proof of delivery):')
         for (phase, iotype), count in sorted(self.sent.items()):
@@ -163,6 +168,8 @@ def main():
                         help='Local JPEG directory; existing files are never overwritten')
     parser.add_argument('--download-photo', choices=('thumbnail', 'original'),
                         help='Download one latest activity photo after a successful event list')
+    parser.add_argument('--native-filename', action='store_true',
+                        help='Use safe camera-reported filename for original photos')
     parser.add_argument('--photo-time', type=dt.datetime.fromisoformat,
                         help='Explicit photo event time, including UTC offset; permits a network-wake control test')
     parser.add_argument('--reference-size', type=int,
@@ -181,6 +188,8 @@ def main():
         parser.error('Experimental stream options require --events')
     if args.no_audio and args.sd_flow != 'app':
         parser.error('--no-audio requires --sd-flow app')
+    if args.native_filename and args.download_photo != 'original':
+        parser.error('--native-filename requires --download-photo original')
     if args.photo_time is not None:
         if not args.download_photo or args.photo_time.utcoffset() is None:
             parser.error('--photo-time requires --download-photo and an explicit UTC offset')
@@ -315,12 +324,13 @@ def main():
                             event = max(photos, key=lambda e: e.start_time)
                             kind = 2 if args.download_photo == 'thumbnail' else 3
                             destination = args.output_dir / f'event{event.event_type}_{event.start_time}_{args.download_photo}.jpg'
-                            if destination.exists():
+                            if destination.exists() and not args.native_filename:
                                 raise FileExistsError('Local destination already exists')
                             session.stage_notes.append(f'Photo candidate: timestamp={event.start_time}, event_type={event.event_type}, file_type={kind}, length={event.length}, src_event={event.src_event}, src_status={event.src_status}')
                             download_photo(session, event, kind, destination,
                                            reference_size=args.reference_size,
-                                           reference_sha256=args.reference_sha256)
+                                           reference_sha256=args.reference_sha256,
+                                           preserve_filename=args.native_filename)
         finally:
             print(f'Relay / SD query elapsed: {time.monotonic() - started:.1f} s')
             session.report()

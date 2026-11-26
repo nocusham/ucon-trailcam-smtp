@@ -1,5 +1,6 @@
 """Experimental one-photo H4 transfer, using the Android capture's bulk request."""
 import hashlib
+import re
 import struct
 import time
 from pathlib import Path
@@ -104,8 +105,24 @@ def check_reference(data, reference_sha256):
     return actual
 
 
+def native_photo_filename(body):
+    """Return a safe camera basename from the 261 metadata or None."""
+    if len(body) < 28:
+        return None
+    length = struct.unpack_from('<H', body, 6)[0]
+    if not 1 <= length <= 128 or len(body) < 28 + length:
+        return None
+    try:
+        name = body[28:28 + length].decode('ascii')
+    except UnicodeDecodeError:
+        return None
+    if '..' in name or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*\.(?i:jpg|jpeg)', name):
+        return None
+    return name
+
+
 def download_photo(session, event, file_type, destination, *,
-                   reference_size=None, reference_sha256=None):
+                   reference_size=None, reference_sha256=None, preserve_filename=False):
     if (reference_size is None) != (reference_sha256 is None):
         raise ValueError('Reference size and hash must be supplied together')
     if reference_size is not None and file_type != 3:
@@ -140,6 +157,16 @@ def download_photo(session, event, file_type, destination, *,
     if reported_size > 0 and not any(checksum):
         notes.append('Metadata MD5 absent; data request not sent.')
         raise ValueError('Missing file MD5')
+    destination = Path(destination)
+    if preserve_filename and file_type == 3:
+        name = native_photo_filename(body)
+        if name:
+            destination = destination.with_name(name)
+            notes.append('Using camera-reported photo basename.')
+        else:
+            notes.append('Missing or unsafe camera filename; using generated basename.')
+    if destination.exists():
+        raise FileExistsError('Local destination already exists')
     request = bulk_request(file_type, event.start_time, size)
     blocks = PhotoBlocks(file_type, event.start_time, size)
     session.phase = 'photo data'

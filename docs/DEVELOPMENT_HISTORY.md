@@ -1,0 +1,494 @@
+# Development history / Entwicklungshistorie
+
+Historical investigation log, archived on 2026-11-26. These entries describe the state **at the time of each experiment**; older conclusions, instructions, planned features and test counts are superseded by later entries and the [current README](../README.md). Do not use this log as a current installation guide. Dates, file sizes and aggregate measurements document the H4 reference tests; actual credentials, private captures, images and device UIDs must remain private.
+
+Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmware modifications or paid cloud storage intended. The UBIA backend is still required for authentication and relay connectivity.
+
+## Status / Projektstand
+
+Target: H4 LTE trail camera, Ucon Android app, using a personal SIM since at least the tests on 2026-11-25 (user correction), no paid cloud-storage subscription reported. Field observation (2026-11-25): motion recordings did not generate app notifications in the initial test configuration; a later PIR test on 2026-11-26 did produce an almost immediate Android notification with thumbnail, according to the user (no paid storage subscription reported). Initially SD recordings became visible only after actively connecting; later Android PIR notifications included a snapshot. Whether a server can obtain the event metadata directly remains unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). A live activity original was independently reconstructed from the Python wire capture and matched the corrected Android reference byte-for-byte. The corrected codec and normal metadata-driven activity thumbnail/original and network-wake original downloads passed live tests W/X/Y, with matching MD5 on all three files. SMTP is not implemented yet.
+
+## First test (Linux, Python 3.12+)
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python probe.py
+```
+
+Enter your own Ucon credentials locally when prompted. Passwords and device credentials are not printed. The default test logs in and resolves the first registered device without contacting the camera directly. To select another registered device, use `--index 1` (zero-based).
+
+### Optional credentials for one Bash/SSH session
+
+```bash
+read -r -p 'Ucon account: ' UCON_ACCOUNT
+read -r -s -p 'Ucon password: ' UCON_PASSWORD
+printf '\n'
+export UCON_ACCOUNT UCON_PASSWORD
+```
+
+The probe reads each variable if nonempty; otherwise it prompts for that field as before. The password is entered without terminal echo and is not typed into a shell command or saved by the probe. Do not use literal passwords in commands, enable shell tracing, or print the environment. Exported variables are inherited by child processes and may be readable by processes with the same account or elevated privileges. Use only a trusted server. Remove them with `unset UCON_ACCOUNT UCON_PASSWORD` when finished, or end the shell session. No .env loader or automatic persistent password storage is added.
+
+With the camera in a known test state, trigger a recording and close the mobile app before running:
+
+```sh
+python probe.py --events --hours 24
+```
+
+This makes one relay session and lists SD events. It may wake the camera and consume battery and mobile data. The test may take several minutes and may fail on incompatible models. No unattended polling or settings changes are performed. SDK diagnostics are suppressed to avoid exposing identifiers; never publish raw credentials, device UIDs, tokens, or packet captures without redaction. Test only devices you own or are authorized to access.
+
+## Read-only SD status diagnostics
+
+```sh
+python probe.py --sd-status
+```
+
+This opens one relay connection, waits for live data, then sends documented SD status (520) and advanced settings read (960) requests, each with up to ten seconds of response polling. It reports frame types, counts, last-frame times and payload sizes, not raw payloads or credentials. No settings are written. A missing explicit response is inconclusive: the camera could use a different response format. The camera may wake and consume data.
+
+## H4 field observations: 2026-11-25
+
+With SDK 0.1.16 and existing photos and a video visible in Ucon's card playback:
+
+| Probe | Total time | First live frame | Last decoded frame | Explicit response |
+| --- | --- | --- | --- | --- |
+| SD status / settings read | 24.3 s | 4.2 s | 6.8 s | None |
+| SD event listing | 94.3 s | 4.2 s | 6.7 s | None |
+
+Only SDK-decoded RDT types 0x10011 and 0x10013 were seen; the latter had 240-byte payloads. No decoded 521, 961, 257 or RDT control 0x10004 response. This does not establish whether requests reached the device or whether additional packets were discarded by the SDK. Longer timeouts alone did not help.
+
+App playback shows network wake events at 17:23 and 17:28 local time, matching Python test times. This is strong evidence that polling may itself create recordings. Physical sleep state and power consumption have not been measured. The app also shows genuine activity events and a video. The SDK maps network wake to event type 3 and activity to type 4; confirm these mappings against actual H4 data before enabling a default SMTP filter. Do not send network-wake recordings by default once classification is validated.
+
+### Next diagnostic: compare official Android app with Python client
+
+Use PCAPdroid (https://emanuele-f.github.io/PCAPdroid/) with the Ucon app filter, PCAP file export and full packet payload enabled. No root or TLS interception is needed for the initial UDP comparison. Stay logged in, use a test recording with non-private content, close the Python client and make one capture of opening card playback, waiting for the list and successfully downloading one known photo. Stop capture promptly. If possible make a separate live-view-only baseline capture. Record the approximate times of actions and whether each succeeded.
+
+A local VPN capture can change network behavior; note any differences in app connectivity. A capture may contain device identifiers, authentication material, IP addresses and private media. Keep it private, never commit it to the public repository, and share only with a trusted analyst after appropriate review. A packet summary alone may be insufficient for application protocol analysis.
+
+## H4 packet capture comparison (2026-11-25)
+
+Offline analysis of two private Android captures (live and SD playback with photo/video): 1,023 and 1,832 outgoing relay KCP datagrams respectively were P4P-encoded. SDK 0.1.16 wraps outgoing KCP without encoding. The probe now applies encoding to outgoing KCP in a scoped patch of the pinned SDK, without editing installed packages. Inbound relay data is already decoded by the SDK.
+
+The SD response is an RDT control frame with marker 4 and native command 257 at offset 12. Its 124-byte body begins at offset 16, with 12-byte event-list header and fourteen eight-byte records (timestamp u32, length u16, type u8, status u8). The upstream decoder strips 32 bytes and loses the first 16 body bytes, causing its RDT parser to reject the remaining 108 bytes. The probe recovers the native response for known control commands and passes the full body to the SDK. Native settings response 961 is also present in the captures. Of the fourteen events, thirteen are type 3 (network wake) and one is type 4 (activity). The sentinel length 65535 is not a duration in seconds for photos. The private captures are not committed.
+
+Observed app order: initial settings request and companion IOCTRL; then AVCTRL, list request 256, companion IOCTRL. This broadly matches SDK 0.1.16. The compatibility changes are experimental and require live H4 validation; no media downloader is enabled yet. Run:
+
+```sh
+git pull
+python -m pip install -r requirements.txt
+python probe.py --events --hours 24
+```
+
+## H4 live validation and staged SD request (2026-11-25)
+
+With encoded KCP enabled, `--sd-status` received native settings response 961 (368 bytes). Live video continued until +16.4 s; the earlier stream stopped around +6.8 s. SD status 521 was not decoded. The original SDK event sequence still stopped early (+6.5 s) with no list response, so full SD compatibility is not established.
+
+The Android SD capture shows initial settings + companion at 7.540 s, settings response at 9.319 s, AVCTRL at 9.722 s, event request + companion at 9.753 s and list response at 9.930 s. It also queries local midnight to next midnight (Europe/Berlin, UTC 23:00 to 23:00 on these dates). This suggests testing a staged initialization rather than sending all commands immediately. The app timing does not prove that waiting for settings is required.
+
+```sh
+python probe.py --events --day 2026-11-25 --tz Europe/Berlin
+```
+
+The default event path now waits for live data, sends the initial pair, waits up to 15 s for 961, continues receiving for 0.4 s, then sends AVCTRL and the list request pair. It polls up to 20 s for list responses and preserves zero-length records. If initialization fails it stops without sending the list request. The previous behavior remains available as `--sdk-events`. The staged mode is experimental and has not been validated with the physical camera. No firmware or persistent settings are modified.
+
+## Staged test K: transport diagnostics
+
+Settings response 961 arrived 1.93 s after the initial request. Last decoded frame at +6.8 s, directly after AVCTRL and SD list requests; no 257 response. App capture confirms exactly the same calendar boundaries and AVCTRL payload as the probe. In the Android capture, KCP PUSH sequence numbers 0–4 were explicitly acknowledged after 117, 117, 207, 177 and 177 ms respectively. App outgoing PUSH segments advertised receive window 512; SDK 0.1.16 configures 256.
+
+The probe now reports outbound PUSH sequence/command, retransmissions, explicit ACK or cumulative UNA, last incoming relay/KCP traffic, and undrained buffer size, without raw packet content. ACK proves transport acknowledgement, not application execution.
+
+Controlled experiments (close the app, one session at a time):
+
+```sh
+python probe.py --events --day 2026-11-25 --sd-flow no-av
+python probe.py --events --day 2026-11-25 --sd-flow app
+python probe.py --events --day 2026-11-25 --sd-flow app --kcp-window 512
+```
+
+The first omits only AVCTRL, the second retains the prior sequence, and the third changes only the receive window relative to the second. The alternative paths and telemetry are experimental. A missing application response may still be due to framing or an incomplete session, not necessarily a rejected command.
+
+## H4 successful listing and experimental photo retrieval
+
+Test L (no AVCTRL, window 256) returned all 18/18 records in 8.0 seconds: 17 network wake events and one activity event. Tests M/N (with AVCTRL, window 256/512) both had transport ACKs but no list response. The default is now no-av; app flow remains for comparison. The failed login in the test was an input mistake.
+
+Offline reconstruction of the private SD capture yielded three 640x360 thumbnails and two decodable 5120x2880 JPEGs. The observed file transfer uses native 261 metadata and 263 file frames. One 262 request asks for the whole file, with block count at 1212 and size at 1220. The full 24-byte file body header must be retained. Four of five JPEG checksums did not match the metadata MD5 interpretation, so the probe reports the comparison without claiming integrity verification; it checks contiguous blocks, exact size and JPEG start/end signatures. The higher image size does not prove optical resolution. No raw capture, personal data or image contents are committed.
+
+```sh
+python probe.py --events --day 2026-11-25 --download-photo thumbnail
+python probe.py --events --day 2026-11-25 --download-photo original
+```
+
+These are explicit one-shot experiments: select the newest type-4 event with the observed photo sentinel 65535, use file type 2 or 3, and save in ignored media/ without overwriting. The metadata request uses the selected event record (some Android capture fields varied); exact request behavior and the new native download decoder remain to be validated live. No automatic retries or SMTP. A missing or incomplete file is an error, not success. Do not publish personal images.
+
+## Download tests O/P and compact relay binding
+
+Test O failed before sending commands: 1152 incoming KCP PUSH segments, no outgoing KCP packets or decoded frames. Both original app captures contain a 468-byte relay candidate (0x00421206) and a 36-byte alive reply (0x00421406). Only the alive reply contains the KCP conversation matching subsequent traffic at offset 24. SDK 0.1.16 may accept either reply as binding; the probe now restricts binding to the compact alive response and reports the count of incoming segments matching the chosen conversation, without printing identifiers. This is a plausible explanation for the intermittent startup failure, not verified on a failed Python packet capture.
+
+Test P listed 22/22 events, obtained ACK for 260 and received a 60-byte response 261 with size zero for a type-4 photo. No data request or file write occurred. In the Android capture, some successful metadata requests use the event's actual timestamp/length/flags, others use unexplained values; do not replay those opaque fields. First validate the deterministic thumbnail path for an activity photo and an explicitly chosen known network-wake photo. The second is a diagnostic exception, not a change to the normal activity-only selection.
+
+```sh
+python probe.py --events --day 2026-11-25 --download-photo thumbnail
+python probe.py --events --day 2026-11-25 --download-photo thumbnail --photo-time 2026-11-25T17:42:16+01:00
+```
+
+The known control event had a successful 5246-byte thumbnail in the Android capture (metadata request 260 with actual timestamp, length 65535, source event 3, status 1). The test may differ if the file has since been removed. Metadata diagnostics now report body length and filename length only. Zero-size responses remain errors and do not trigger a data request. A timestamp with an explicit UTC offset is required for manual selection. These changes are not live-validated. If the control succeeds and activity fails, capture a successful in-app download of the exact activity photo next. No paid storage, camera firmware changes or automatic polling added.
+
+## Download tests Q/R: byte-identical live thumbnail
+
+Both tests established a compact alive binding with every observed inbound KCP segment matching the selected conversation. Test Q listed 23/23 events and got positive 261 metadata (6121 bytes) for a type-4 photo; request 262 was acknowledged, but no decoded 263 file frames arrived during 45 seconds of continued live traffic. Test R listed 24/24 records and downloaded the explicitly selected type-3 reference thumbnail (5246 bytes, five blocks) in 9.8 s including login-independent relay setup. Independent offline reconstruction of that file from the prior Android SD capture produced exactly the same SHA-256 digest as reported by the live probe. Thus the tested data-request and block-decoding path produces a byte-identical JPEG for the reference event.
+
+The original Android capture has three thumbnail transfers, all with five blocks; no transfer of the specific type-4 candidate is present. The activity thumbnail needs six blocks. This does not establish whether the event type, block count, request parameters, state or a transient failure caused the missing response. The capture also contains nonzero unexplained trailing fields in some 262 requests; a successful Python reference transfer with zeroed offset and actual size shows that those fields are not universally required. Do not copy opaque values into new requests.
+
+One record in test R had an unfamiliar event type 84 and length 17448. The list count alone does not establish semantic validity of every record. Keep the type-4 filter for automatic selection and compare the unfamiliar record with the app before interpreting it.
+
+Next: capture a successful Android thumbnail/original retrieval of the exact type-4 recording (prefer a short capture limited to Ucon), and if needed one failed Python transfer using tcpdump filtered to UDP port 20001. Compare 260/261/262/263 and the session state. Do not publish packet captures, image content, authentication material or personal identifiers. No further protocol changes until the exact activity-photo transfer is compared.
+
+## Test S: successful Android original-photo capture
+
+A third private app capture shows a complete type-4 original JPEG transfer: metadata size 275548 bytes, type 3, 230 blocks, 5120x2880 pixels. The file was reconstructed and decoded offline with Pillow. The direct original download did not require a thumbnail of the same event beforehand. The app had already downloaded other images in the same session. Its 262 payload is byte-compatible with bulk_request(timestamp, type 3, size 275548), using zero offset. The captured 260 request contains unexplained fields instead of the event timestamp/length/flags; their meaning remains unknown and they are not copied. The previously unusual event type 84 at 18:06:27 local appears as a normal type-3 record in this capture, so it is not established as a distinct event type.
+
+A diagnostic reference mode permits using a known original size if the standard metadata response explicitly reports zero. It still sends the normal metadata request, stops on timeout or a conflicting positive size, and requires explicit event selection and a known SHA256. It saves only a complete JPEG whose SHA256 matches the supplied reference. This tests whether 262 can retrieve the exact file despite the zero metadata response, without guessing opaque 260 fields. It is not the default download behavior, not yet live-validated, and does not solve metadata discovery for arbitrary originals. Exact event timestamps, image hashes and captures are kept out of the public repository.
+
+Example syntax (substitute your own values from a successful local app capture):
+
+```sh
+python probe.py --events --day YYYY-MM-DD --download-photo original \\
+  --photo-time YYYY-MM-DDTHH:MM:SS+01:00 \\
+  --reference-size 275548 --reference-sha256 YOUR_64_DIGIT_SHA256
+```
+
+## Test T: correct original metadata, no file frames
+
+The H4 returned the correct 275548-byte original size in native response 261 for the selected activity event. The reference-size fallback was not used. All KCP segments matched the binding, 262 was cumulatively acknowledged, and live data continued throughout the 45-second file timeout, but no decoded 263 file frame arrived. The listing returned 27/27 records. This rules out missing size as a sufficient explanation for this failure.
+
+Rechecking the third Android capture against the current bulk_request layout confirms the successful original 262 payload matches the constructed timestamp, type, count, zero offset, size and zero-filled remaining bytes. Actual Python wire bytes still need verification. Capture UDP ports 20001 and 10240 on the Linux test server (tcpdump with full snap length), repeat the activity original and test a known network-wake original as a control. Compare raw KCP stream reconstruction, native framing, response 261, request 262 and session initialization with the app trace. The app had already retrieved other images and used AVCTRL in its session; the Python path omits AVCTRL for listing because the earlier AVCTRL tests failed. State dependence remains a hypothesis. No additional protocol changes until the server trace is examined. Keep captures private.
+
+## Tests U/V: root cause — P4P tail permutations (2026-11-26)
+
+**This section supersedes earlier conclusions about opaque command fields, unknown event type 84, reference hashes and MD5 mismatches.** The previous decoder omitted native permutations on tails of length 2, 4 and 8. Comparing repeated incoming KCP PUSH segments with different datagram packing revealed the permutation after XOR (zero-based): 2: [1,0]; 4: [2,3,0,1]; 8: [7,4,3,2,1,6,5,0]. These matched all 21, 13 and 248 qualifying comparison pairs respectively. Corrected decoding eliminates all observed conflicting incoming retransmissions in the server capture. No changes to full-block crypto.
+
+Test U received all 230 file blocks even though metadata size was zero. The initial hash discrepancy was eight bytes at offset 1192 in the old Android reference, not a bad Python reconstruction. Re-decoding both captures with corrected tails gives identical 275548-byte JPEGs (5120x2880), including decoded pixels. Test V returned positive metadata but no file frames. Actual outbound packets decoded with corrected tails show Test U's 260 event parameters were corrupted, while Test V's 262 final offset/size fields were corrupted. This explains why success depended on KCP batching and why transport ACKs did not guarantee valid application commands.
+
+All ten JPEGs independently reconstructed from the two Android SD captures match the 16-byte MD5 at 261 offsets 12–27 after correction. The new decoder also reveals initial IOCTRL 960 + 8474 (four zero bytes each), AVCTRL command 2 with zero timestamp/param, and SD list 256 + 960 (four zero bytes). Android metadata 260 uses the actual event timestamp, length and flags. There is no need to guess opaque values.
+
+The probe applies the corrected tail permutation to SDK relay encoding/decoding and outbound KCP, scoped to the test session. It keeps the no-AV default and compact binding fix, and corrects the optional app sequence. Ordinary photo downloads require positive size and matching metadata MD5 before saving; the explicit reference fallback still requires matching SHA256. Old reference hashes may be incorrect; recompute with the corrected codec. No captures or personal identifiers are published.
+
+Next live tests: use ordinary original retrieval with no reference overrides, first for the activity event and then optionally an explicitly selected network-wake photo. Run unit tests first. The new patch is supported by offline evidence but has not yet been tested with the physical camera. Old saved JPEGs from uncorrected decoding should not be treated as verified. The legacy SDK sequence retains known erroneous command constants and is for historical diagnostics only.
+
+## Tests W/X/Y: normal downloads confirmed
+
+With the corrected P4P codec and no reference overrides, all three live downloads succeeded. The activity original (275548 bytes, 230 blocks) took 12.2 s, the network-wake original (257267 bytes, 215 blocks) 11.6 s, and the activity thumbnail (6121 bytes, six blocks) 14.1 s. All matched the camera's metadata MD5 and were saved locally. The relay/listing returned all 27 reported records each time. These are observed relay-session durations, not battery or mobile-data measurements. No personal credentials, filenames, hashes or media are published here. The next step is a persistent deduplicated delivery queue and SMTP, followed by measured polling behavior.
+
+## Traffic measurements and experimental live-stream reduction
+
+The relay SDK starts receiving live frames automatically after binding. Skipping the wait does not itself stop the stream. The new probe counts all successful UDP sendto/recvfrom calls on relay sockets, by phase, including discovery, wake and logout. It reports payload bytes plus an estimated 28 bytes per IPv4 UDP datagram. It excludes account HTTPS traffic, link-layer overhead, packets not delivered to the socket, and packets arriving after socket close. This is server-side traffic, not a measurement of the camera SIM's billed traffic. Decoded video and audio/metadata bytes are separate application-level counters.
+
+Compare the following one-shot read-only tests on the same day and event, with the app closed:
+
+```sh
+python probe.py --events --day YYYY-MM-DD --download-photo original --output-dir media/baseline
+python probe.py --events --day YYYY-MM-DD --download-photo original --no-live-wait --output-dir media/early
+python probe.py --events --day YYYY-MM-DD --download-photo original --no-live-wait --sd-flow app --output-dir media/av
+python probe.py --events --day YYYY-MM-DD --download-photo original --no-live-wait --sd-flow app --no-audio --output-dir media/av-muted
+```
+
+Use separate directories to avoid overwriting or rejecting previously saved images. All successful downloads still require MD5. The corrected AVCTRL 2 is taken from the app playback sequence, not a confirmed stop-video command; with_audio=0 is a session-level request, not a persistent camera setting. The early and AVCTRL modes have not been live-validated. Measure remaining media frames and traffic before claiming savings. No guessed stop-video or recording-disable command is sent.
+
+## Remote deletion and retention
+
+SDK 0.1.16 exposes listing, calendar, metadata, file data and SD status, but no single-file deletion method. Remote deletion is not verified on H4. Do not use format or recording-disable as a substitute. If the official app offers deletion specifically on the SD card (not the local album), capture a deletion of a disposable test event after local backup and verify that only that event disappeared. No deletion code is implemented. Future retention must be opt-in, operate only on verified locally archived and successfully delivered events, preserve unknown/undelivered records, and verify the exact target and outcome. A seven-day retention policy could be layered on that capability if supported; otherwise preserve the camera's normal overwrite behavior and deduplicate locally.
+
+## Android SD/HD and stream-stop trace; tests Z1–Z4 (2026-11-26)
+
+The private Android trace contains 58 outgoing and 3065 incoming unique KCP PUSH segments, with a continuous reassembled stream. AVCTRL 9 with playrecord=0, streamindex=1/0 and optionflag=1 switches HD/SD. HD introduces native video marker 0x1000011, not yet supported by the probe parser; keep the camera in SD for testing. AVCTRL 2 with playrecord=0, streamindex=0, with_audio=1 and all remaining fields zero precedes listing by 35 ms. The list returns 119 ms later. A short tail of live media ends about 135 ms after AVCTRL 2. From relative second 31 until playback starts at 107.82 s, no decoded live audio/video frames appear; control and JPEG frames continue. The capture yields 14 distinct complete JPEGs, all matching metadata MD5; the three originals decode at 5120x2880. This proves that the H4 supports SD downloads without continuous live video in an official app session, not yet that the Python path reliably reproduces it.
+
+The trace also confirms a card format: request 896, responses 897 with observed progress-like values 10 and 100, followed by a valid empty list for the current day (9 records before formatting). No per-file deletion command was observed and the user reports no such control in the app. Do not implement automatic formatting.
+
+All four subsequent Python tests queried the previous day after formatting, and none completed listing/download. Z1 default: 687712 bytes/26.9 s, settings succeeded, no 257. Z2 early: 614413 bytes/19.4 s, settings never acknowledged. Z3 early + AVCTRL: 119259 bytes/27.1 s, AVCTRL/list transport ACKs, all KCP data ceased shortly after AVCTRL, no 257; keepalives continued. Z4 early + muted: 625419 bytes/19.2 s, settings never acknowledged, so mute was never sent. The figures are server-side IPv4/UDP estimates of failed sessions, not comparable successful download costs. No response is not proof of an empty list.
+
+The staged list now fails closed on missing, incomplete or inconsistent replies and separately reports confirmed empty time ranges. A new opt-in stop-after-list flow sends the captured session-level AVCTRL 2 only after obtaining a complete nonempty list. It is an experimental alternative to the app ordering, not a proven fix. The no-AV default and live wait remain unchanged. For a clean comparison create a new PIR photo after formatting; run a successful baseline first, then app flow WITH live wait, then stop-after-list if needed. Use separate output directories and the same photo timestamp. The skip-live-wait and muted modes are deferred. No destructive operation is added.
+
+## New PIR notification and tests Z5–Z7 (2026-11-26)
+
+A fresh PIR event produced an almost immediate Android notification with a thumbnail (user observation, no paid cloud-storage subscription reported). The accompanying capture ends about 31 seconds before the corresponding PIR timestamp, so the notification transport itself is not captured. This supersedes the earlier assumption that notifications are unavailable. Repeat with the app in the background, after the camera has returned to its normal idle state, and capture all relevant Android traffic including Google Play Services; do not open live view or SD playback until after the notification is received. Investigate the provider event API or an Android notification webhook before designing unattended polling. Personal SIM operation is now confirmed by the user (including the previous day's tests); availability after any separate trial service entitlement expires is unknown.
+
+The same trace confirms sensitivity values low=1, medium=2, high=3. Each change sends request 20 (13 bytes) and two requests 22 (40 bytes each), with replies 21 and 23. In request 20 offsets 6 and 7 carry the chosen value; in 22 offset 6 carries it and offset 0 differs (1/0). The meaning of the companion commands is not fully established; no setting-write functionality is added. Another AVCTRL 2 / SD list / photo transfer succeeded in the app with no sustained live media: both captured JPEGs (262330 and 5223 bytes) match their metadata MD5.
+
+Z5 downloaded the new activity original, 247692 bytes, 207/207 blocks, MD5 verified. Relay session duration 13.2 s; IPv4/UDP estimate 859066 bytes, of which 195961 bytes were counted before the metadata phase (250626 including metadata). These are server socket measurements, not SIM billing. Z6 failed before settings: 0/1152 incoming KCP segments matched the accepted conversation, zero outgoing KCP packets, 550570 bytes. Z7 failed before listing: 1152/1152 matching segments, no ACK for the initial settings requests despite nine transmissions each, 567786 bytes. Neither experimental stream-stop command was reached.
+
+Across six private PCAPs, seven successful captured relay sessions all echo the requested four conversation bytes (stream request offset 88, compact alive offset 24, KCP header offset 0). The probe now records the proposed conversation from the pinned SDK builder and rejects compact alive replies that do not match. This is an H4-specific fail-closed guard, not a proven resolution of Z6; no failed-session capture yet proves whether the reply was stale or the relay sent data for a different conversation. Z7's lack of acknowledgements despite matching conversation remains unresolved. Do not guess a replacement routing tag or automatically retry. Run unit tests and repeat Z6/Z7 with the same explicit event timestamp, separate output directories, and a pause between sessions to reduce possible overlap. If failure persists, capture the failed session including discovery and logout. No raw captures, credentials, device IDs, private media or hashes are published.
+
+## Push capture and Z8/Z9 (2026-11-26)
+
+The user confirms personal SIM operation since the previous day's tests. A second PIR notification appeared with a snapshot. The private Android capture covers about 47 seconds and 230 IP packets, with no observed P4P UDP traffic on ports 20001/10240. At relative +14.197 s an established TLS connection to mtalk.google.com:5228 received 1155 TCP payload bytes; at +14.240 s a DNS query for ubiasnap-eu-uk.oss-eu-west-1.aliyuncs.com began, followed by TLS on port 443 and several kilobytes of incoming encrypted application data at +14.483 s. Google's FCM network documentation confirms the mtalk host/port. The timing strongly supports FCM delivery followed by an OSS snapshot fetch, but TLS prevents inspection of the actual message, URL or image. This capture measures phone-side traffic, not the camera SIM. The screenshot's embedded time precedes the probable push traffic by roughly nine seconds; clocks and display latency are not independently synchronized.
+
+Z8 accepted the correct conversation, received settings, sent AVCTRL 2 and list requests with ACKs, then all KCP data stopped after +6.83 s; no 257. Z9 had a matching conversation but no settings ACK and never reached AVCTRL. Z8 used 276679 bytes and Z9 567512 bytes (failed-session server-side estimates). No further P4P parameter changes without a failed-session wire capture.
+
+### Experimental cloud event query (no camera session)
+
+The related UBox project documents an authenticated cloud event-list endpoint (https://github.com/mahumadad/ubox-p4p/blob/main/docs/ENDPOINTS.md). The new `cloud_probe.py` tests that path on the **existing pinned Ucon API host**, using the same login and selected account device. It sends only HTTPS login, device discovery and one list query. It does not contact the relay, retrieve images, register push tokens or change camera settings. This route was subsequently verified on Ucon with a personal SIM and no reported paid storage subscription (see below).
+
+```sh
+python cloud_probe.py --day 2026-11-26
+```
+
+Existing UCON_ACCOUNT/UCON_PASSWORD variables are supported. The probe reports counts, matching-device timestamps and presence of HTTPS image references, not IDs, tokens, URLs or raw response bodies. Unmatched/unverified items are ignored. A zero result or API rejection is not proof that no other notification API exists. No automatic polling is enabled. If event listing works without waking the camera, it may enable backend-only polling and event-triggered SD downloads. FCM itself requires app-instance registration; no direct FCM listener is implemented. Synthetic mock-transport tests are included.
+
+## Cloud event probe success (2026-11-26)
+
+The account-scoped HTTPS query returned exactly two matching-device records for the test day and zero unmatched records. Both end timestamps agree with the two observed PIR events (one exactly and one within one second of the captured image time). The numerous observed network-wake SD events were absent from this response. No client-side P4P session was initiated. The backend's effect on the camera's actual power state and SIM consumption has not yet been independently measured. No paid storage subscription was reported; separate entitlements and event retention remain unknown.
+
+Both records lacked a usable HTTPS reference in the specific `img_url` field checked by the first probe. This does not prove that other snapshot fields or HTTP references are absent. A new opt-in structural diagnostic prints field names, types, lengths, null/empty state and URL/path classifications, including nested fields for up to five verified matching-device records, without printing scalar values, URLs, tokens or identifiers. Field names themselves come from the API, so review the output before sharing. No image fetching or automatic polling is added.
+
+```sh
+python cloud_probe.py --day 2026-11-26 --schema
+```
+
+The next architectural step is a persistent backend event cursor/deduplication queue with bounded overlapping queries and a separate SD retrieval worker. Keep end timestamp semantics and the observed one-second discrepancy in mind; do not require exact equality between cloud and SD event timestamps. Validate stable event identifiers and whether thumbnails are available before choosing the retrieval method.
+
+## Cloud snapshot reference discovery
+
+All 38 existing unit tests passed on the user's server. The live schema response contains two own-camera event records, each with a 374-character HTTP img_url, integer img_expire, itemid, bucket, end_point, img, type, battery, and other fields. The initial zero HTTPS references resulted from filtering by scheme, not missing URLs. The exact semantics and expiry units are not yet verified. The probe now counts HTTP(S) references and offers an explicit one-shot download of the latest unambiguous own-camera event.
+
+```sh
+python cloud_probe.py --day 2026-11-26 --download-image
+file media/cloud/*.jpg
+```
+
+The test upgrades the supplied HTTP URL to HTTPS, preserving the path and query. It restricts requests to the exact snapshot host observed in the private Android notification capture, uses a separate TLS-verified HTTP client without account headers or redirects, caps downloaded image bytes at 8 MiB, checks JPEG SOI/EOI, and never overwrites files. No plaintext fallback, signed URL logging or automatic polling. If the host differs, the test stops pending verification. Boundary checks are not a full JPEG decode or a server-provided checksum. A live image fetch and its resolution are not yet confirmed. Local synthetic tests validate transport and selection behavior.
+
+## Cloud snapshot host diagnostic
+
+All 42 tests passed on the server, but the first live image test was refused by the local allowlist/URL-format check before any storage GET. The exact reason is not yet known. The diagnostic now reports only scheme, DNS hostname (if syntactically safe), port and presence of userinfo/fragment, without the path, signed query, username or password. Review the hostname before sharing. The existing strict allowlist, HTTPS requirement and redirect refusal are unchanged. Repeat the same download command to identify the origin; no unknown host is contacted. One additional synthetic test verifies diagnostic redaction.
+
+## Cloud event bucket identified
+
+All 43 tests passed on the server. The origin diagnostic identified the event API's HTTP image URL host as `ucon-eu-uk.oss-eu-west-1.aliyuncs.com`, using the default port, without userinfo or a fragment. This differs from the Android notification capture's `ubiasnap-eu-uk.oss-eu-west-1.aliyuncs.com`. Both exact hosts are now allowed; no wildcard or other bucket is accepted. The supplied host, path and signed query are preserved when upgrading to HTTPS, with certificate verification and no plaintext fallback or redirects. Two additional mock tests check the new host and rejection of unrelated buckets. All 12 cloud tests passed locally. Live download and image resolution remain unverified. Repeat the same download command.
+
+## Provider-independent cloud image retrieval
+
+This supersedes the earlier host allowlist and HTTPS-upgrade experiments. At the user's request, the probe accepts HTTP(S) image URLs supplied by the authenticated event API without restricting the storage provider, and retains the supplied scheme, host, path and query (normal HTTP URL parsing applies). HTTP is unencrypted: the signed URL and image may be visible or modified in transit; a warning is emitted. HTTPS uses certificate verification. Account credentials and headers are never forwarded. Up to three redirects are allowed, each with public-address validation and no HTTPS downgrade. DNS answers are checked for nonpublic addresses and the connection uses a validated numeric address with original HTTP Host and TLS server name. This is a safeguard, not a substitute for server egress controls.
+
+Before saving, Pillow checks the actual image structure and fully decodes the pixels, irrespective of the URL suffix or Content-Type. Supported single-frame formats are JPEG, PNG, WebP, GIF, BMP and TIFF, with 8 MiB and 40 megapixel limits. The filename extension follows the decoded format; invalid or incomplete images are rejected and existing files are not overwritten. No SMTP processing is implemented yet. A valid image is not proof of authenticity, especially over HTTP. Image payloads are not modified.
+
+```sh
+git pull
+python -m pip install -r requirements.txt
+python -m unittest -v
+python cloud_probe.py --day 2026-11-26 --download-image
+file media/cloud/*
+```
+
+Twelve local cloud tests passed with mock HTTP transport, synthetic real images and SDK credential stubs. Live storage access, actual image size and resolution remain to be verified. The HTTP transport versions are pinned to the locally tested versions for TLS server-name support. Pillow is a new dependency.
+
+## Successful cloud snapshot and original-image requirement
+
+All 45 unit tests passed on the user's server. The live provider-independent cloud download succeeded over the API-supplied HTTP URL, with a fully decoded 640x360 JPEG of 5948 bytes. The uploaded comparison image from the Android SD download decodes at 2048x1152 and 277913 bytes. Both display the same capture timestamp. The uploaded comparison may have been resized by the app or attachment pipeline; earlier wire-reconstructed originals were 5120x2880, so do not infer the native resolution from this attachment. Blur is explained by protective film on the lens, not a transfer defect.
+
+The user requires full SD originals for production SMTP; cloud thumbnails are adequate for development/testing only. Cloud events remain the preferred trigger source. Do not silently substitute a thumbnail for an unavailable original in production. The original retrieval worker and persistent delivery queue are still missing. P4P reliability and stream-stop testing remain separate tasks.
+
+### Manual SMTP test / Manueller SMTP-Test
+
+`smtp_probe.py` validates a local image with the same full decoder and adds it unchanged as an attachment. Without `--send` it only validates, with no SMTP connection. For a manual real test use your own server and addresses; STARTTLS (587) or implicit TLS (465) with certificate verification are supported. SMTP authentication is optional for an authorized TLS relay; if a username is configured and SMTP_PASSWORD is not set, the password is prompted locally.
+
+```sh
+export SMTP_HOST='smtp.example.org'
+export SMTP_PORT=587
+export SMTP_SECURITY=starttls
+export SMTP_FROM='camera@example.org'
+export SMTP_TO='recipient@example.org'
+export SMTP_USERNAME='camera@example.org'
+python smtp_probe.py /path/to/test-image.jpg
+python smtp_probe.py /path/to/test-image.jpg --send
+```
+
+For an authorized relay without authentication, unset SMTP_USERNAME and SMTP_PASSWORD. Do not commit credentials. The test sends one email, does not query the camera or cloud, and does not retry automatically. SMTP acceptance is not proof of inbox delivery; check the inbox before repeating after an uncertain result. Four SMTP mock tests and twelve existing cloud tests passed locally (16 total, with SDK credential stubs for cloud tests); actual SMTP delivery has not been tested. The supplied cloud JPEG also passed the local validation-only command. No user media or credentials are committed.
+
+## SMTP delivery confirmed; configurable transport and event metadata
+
+The user's STARTTLS test delivered the cloud thumbnail to their own mailbox. The manual SMTP probe now supports `SMTP_SECURITY=none` (default port 25), `starttls` (587, default security), and `tls` (465); SMTP_PORT overrides the port. No TLS downgrade or automatic fallback. Plain SMTP explicitly warns that images, metadata and any credentials are transmitted unencrypted.
+
+The eventual destination is Revierwelt. Its published setup guide (https://wiki.revierwelt.de/index.php/knowledge-base/wildkamera-per-e-mail-mit-revierwelt-verbinden/) specifies smtp.revierwelt.de, port 5025, the published account/credentials and a recipient formed from the registered SIM phone number plus @revierwelt.de. It does not specify TLS support. Verify STARTTLS capability before choosing plaintext. No message to Revierwelt has been sent.
+
+The manual sender preserves the existing local image basename and bytes, and determines MIME type from decoded image format. The current SD downloader still uses generated local filenames; preserving the native camera filename from metadata is a separate future improvement.
+
+Six requested cloud fields (itemid, et_utc, battery, type, ai_result, user_tag) are saved independently of image source. An exact cloud event timestamp including offset identifies one own-device event, avoiding accidental latest-event selection. Metadata JSON is created exclusively with mode 0600, only the six fields, and no image URLs or account tokens. Missing fields are null. Use a private ignored data directory. The mail body contains the original JSON values as plain-text key/value lines, without interpreting battery units or event type. The same metadata can be used with a matching SD original; the manual user must ensure image/event correspondence. No queue or automatic matching is implemented yet.
+
+```sh
+python cloud_probe.py --day YYYY-MM-DD --event-time 'YYYY-MM-DDTHH:MM:SS+01:00' --export-event data/event.json
+python smtp_probe.py media/cloud/example.jpg --event-json data/event.json
+python smtp_probe.py media/cloud/example.jpg --event-json data/event.json --send
+```
+
+Existing manual image-only tests remain supported without --event-json; future production delivery must require event metadata and a verified original. Keep SMTP credentials out of Git. Metadata includes private event information; do not publish the JSON file.
+
+## Z10/Z11: SD response received on wire, KCP receive-queue fix
+
+Z10 downloaded the same verified 247692-byte activity JPEG (207 blocks) in 14.4 s, with 837800 server-side IP/UDP bytes. Z11 stopped live video and timed out at 27.1 s, with 127819 bytes. The private Linux capture demonstrates that the camera actually returned a complete 132-byte IOCTRL 257 (15 records) after AVCTRL 2, together with a 368-byte 961. The final inbound datagram contains two ACKs and two PUSH messages (152/153); all 154 unique incoming PUSH segments are contiguous. The list response was on wire roughly 127 ms after request. The outgoing AVCTRL and list bodies match the successful Android capture. The pinned SDK calls get_received once per UDP datagram; kcp 0.1.6 implements that method as a single ikcp_recv. Multiple PUSH messages accumulate and the last responses remain queued when live traffic stops. The receive loop now drains pending KCP messages and existing app-buffer frames before waiting for new network traffic, and after each input datagram. Three synthetic receive tests passed locally; the integrated SDK path needs a live retest. No change to AVCTRL or outgoing request formats. The intermittent failure to receive initial settings ACKs remains a separate open issue.
+
+The successful original metadata response also contains an ASCII basename starting at body offset 28, with little-endian length at offset 6 (32 in the observed response). The opt-in `--native-filename` now uses a safe JPEG basename from metadata, rejecting paths, traversal, non-ASCII and unsupported suffixes; missing or unsafe names fall back to the generated basename. Existing files are never overwritten. This flag is restricted to original retrieval and is not yet live-tested. No captured image or credentials are bundled.
+
+Repeat the original and app flows with the same exact event, separate new output directories and `--native-filename`. Compare SHA256, MD5 status, media counters and traffic. The previous failed app measurement is not a successful download cost. Revierwelt testing is deferred until the entire application is complete; the user's TLS mail test including all six requested text fields succeeded.
+
+## Z12: original download with live stream stopped
+
+The user confirmed a successful live H4 download with the receive-queue fix, app SD flow and native filename. All 207 blocks of the 247692-byte original arrived, the metadata MD5 matched, and SHA256 matched the earlier Z5/Z10 downloads. The camera-reported safe basename was retained. The client drained 321 KCP messages with zero receive errors, no queued KCP message and no undrained application bytes at completion. No live media frames were decoded during photo metadata or data transfer. Server-side session traffic was 537551 bytes in 7.6 seconds, versus 837800 bytes in 14.4 seconds for Z10 (35.8% lower traffic and 47.2% shorter duration). These are individual server-side measurements, not SIM billing or an isolated estimate of the effect of AVCTRL alone; the receive-loop change also improves processing. The full private Linux PCAP covers a longer window and contains 616719 IPv4 UDP bytes, including traffic outside the client measurement. Initial settings needed five transmissions per command before ACK; intermittent initial transport failures remain an open issue.
+
+## Upstream SDK contribution plan (after project validation)
+
+As checked on 2026-11-26, upstream main and the most recent GitHub/PyPI release v0.1.16 both date to 2026-09-19 (commit 327939db193116269fd06c6c86a25ae4affa44ad, "Match APK SD entry handshake"). Keep the pinned dependency while validating the application. At the end, discuss small, independently tested changes with the SDK maintainer: drain the full KCP receive queue (including already buffered frames on generator re-entry), corrected power-of-two P4P tail permutations, outbound relay KCP encoding, binding conversation validation, native SD control/file frame parsing, metadata-driven download with MD5 and safe native filename, and the verified H4 AVCTRL stop/list/download sequence. Keep device-specific behavior isolated where necessary; validate across supported models before generalizing. The first candidate is the generic receive-queue defect, with a synthetic regression case releasing multiple responses in one UDP datagram. No upstream issue, fork, PR or release has been created. No raw PCAPs, credentials, identifiers or photos should be published. GitHub reports no recognized root license for the SDK; clarify licensing and contribution terms with the maintainer before redistribution of modified SDK code. The application-specific SMTP, Revierwelt, SQLite and scheduling logic stays in this repository.
+
+## LXC development stage: SQLite event intake
+
+The user confirmed SMTP with all six metadata fields, and wants Revierwelt tested only at the end. The camera reports weak signal and the user's SIMbase portal currently shows no recent usage/registration despite earlier successful own-SIM transfers. Weak signal is a plausible contributor to initial ACK loss, not a verified cause; the correct APN and accounting delay are not established. See Simbase APN and CDR documentation before changing camera settings.
+
+A native, unprivileged Proxmox LXC deployment is planned; see [LXC test setup](LXC.md). The cloud probe now offers an explicit discovery-only `--queue-db` mode. SQLite stores valid matching records by camera UID and itemid with their six metadata fields; repeated calls do not reset state or create duplicates. Conflicting IDs/timestamps roll back, and no download or SMTP worker runs. Four standalone synthetic SQLite tests passed locally. The complete SDK integration and LXC are not yet tested. Do not use the historical test database for production delivery.
+
+## Bounded cloud polling on existing test server
+
+Live SQLite intake and duplicate detection are confirmed: two own-device records inserted, then zero new and two known, with two pending rows. Continue development on the existing Ubuntu test server. Create the Proxmox LXC only after application functionality is validated.
+
+```sh
+python cloud_probe.py --watch --hours 24 --cycles 6 --interval 60 --overlap 300 --queue-db data/events-watch-test.sqlite3
+```
+
+The first poll queries 24 hours; subsequent successful queries overlap the previous successful end by five minutes. Session credentials and device selection are reused, HTTP 401/403 trigger a new login on the next attempt, and the selected device must not change. Other API errors retain the session and cursor, with exponential backoff capped at 900 seconds. API-specific expiration codes are not yet known. The run ends after six attempts (or Ctrl+C); any failed attempt produces exit status 1 at completion. The cursor is in memory and a restart begins with the configured historical window. No guarantee of lossless ingestion across long outages, pagination or late events outside the overlap. No automatic downloads or SMTP. Test DB is not a production queue. Four standalone polling tests passed locally with real SQLite and simulated API callbacks; the refactored HTTP integration has not been live tested.
+
+## Live cloud watch and read-only SD matching
+
+Six consecutive live polls succeeded with one login; three events were stored initially, a fourth appeared on poll five, and poll six recognized it as known. The test database contains four pending rows. No P4P session or SMTP message was initiated.
+
+Next, compare the stored cloud timestamps to a complete SD listing in one camera session:
+
+```sh
+python probe.py --events --day YYYY-MM-DD --sd-flow app --match-queue data/events-watch-test.sqlite3
+```
+
+The new option is read-only and cannot be combined with downloads. It scopes queue rows to the actual selected camera UID. Only H4 SD event type 4 and still-photo length 65535 are candidates. The provisional tolerance is ±2 seconds; multiple candidates (even with an exact timestamp) or a candidate shared by two cloud records are ambiguous. No guess or nearest-neighbor selection. The query includes padding around the requested interval to detect boundary conflicts within the stored records. Missing or ambiguous matches return nonzero. This is a timestamp correlation test, not proof of image identity; unobserved cloud events and coincidental timestamps remain possible. No cloud type mapping is assumed. Five standalone matching tests passed locally with synthetic fixtures and SQLite; the integrated camera path has not been live-tested. No photo download, database state transition or SMTP worker yet. Continue on the existing test server, with LXC and Revierwelt deferred.
+
+## Live SD correlation and bounded original batch test
+
+All 71 tests passed on the test server. M1 matched the three same-day cloud records to SD type 4 still photos with zero time offset, using a single 6.9 s session (103460 estimated server IPv4/UDP bytes). The fourth queue entry was from the previous day, outside the query interval. All four cloud records report type 1 and battery 100; the three matched records support cloud type 1 as the candidate activity class for H4, not a universal type mapping.
+
+The next explicit test processes at most three pending type-1 originals for the chosen day in a single app-flow session. Matching uses all nearby queued timestamps, including already downloaded records, to reject ambiguous associations. Each original is verified by the existing SD downloader (size, block timestamps, MD5) and then fully decoded. The existing database is extended with a downloads receipt table only when a verified file is committed; receipt and downloaded state update are one transaction. Stored originals are checked on repeat runs, and if there are no eligible pending records no P4P session is opened. A per-database advisory lock excludes concurrent batch processes. Stop the cloud watch and do not run other camera clients during this test. Native basenames are preserved where safe; each download uses a private unique attempt directory. If interrupted before the DB commit, an unreferenced file may remain; it is not adopted or sent, and a retry may download it again. No automatic repair, retry scheduling, power-loss durability guarantee or SMTP worker yet. Six standalone tests passed locally with SQLite, synthetic JPEGs and a simulated downloader; the integration has not been live-tested.
+
+```sh
+sqlite3 data/events-watch-test.sqlite3 ".backup data/events-batch-test.sqlite3"
+chmod 600 data/events-batch-test.sqlite3
+python probe.py --events --day 2026-11-26 --sd-flow app --download-queue data/events-batch-test.sqlite3 --batch-limit 3 --output-dir media/batch-test
+sqlite3 -readonly data/events-batch-test.sqlite3 'SELECT state,count(*) FROM events GROUP BY state;'
+```
+
+Only copy to a new test database; repeat the probe without recreating the copy. Keep the old historical event pending. No production database or Revierwelt usage; continue on the existing Ubuntu test server.
+
+## Live batch download and explicit queue SMTP test
+
+All 77 unit tests passed on the user's test server. Three original JPEGs (247692, 254930, 261261 bytes; all 5120x2880) downloaded in one 10.3-second P4P session, 638/638 blocks, exact metadata MD5 and native filenames, no decoded live frames during photo transfer. Total estimated server IPv4/UDP bytes 1235998, not SIM billing. Three downloaded and one historical pending row remained; repeating the same batch opened no relay session.
+
+The next explicit test uses the existing batch DB on the Ubuntu server. No Ucon login or P4P connection is needed. Select the day and up to three downloaded rows. Revalidate exact attachment bytes against SHA256, size and dimensions and verify the matching event receipt and metadata before sending any message. Existing SMTP configuration and original basenames and six metadata fields are reused. The current SMTP image loader limits attachments to 8 MiB. The test queue is intended for the existing single-camera test and not production.
+
+```sh
+python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --limit 3
+python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --limit 3 --send
+sqlite3 -readonly data/events-batch-test.sqlite3 'SELECT state,count(*) FROM events GROUP BY state;'
+```
+
+Use only the previously validated private TLS mail server and test recipient. No Revierwelt tests until the complete application is ready. Without --send there is no SMTP connection or delivery state change. With --send, commit an uncertain state and delivery receipt (message ID, start time) immediately before sending; mark sent and record acceptance time only after the SMTP helper returns normally. A crash, timeout or any SMTP exception leaves uncertain, even if the server never received the message; the selected day's batch stops and further runs refuse to send until manual review. No automatic resend or resolution yet. A successful server acceptance is not proof of inbox delivery. The same per-database advisory lock is used as the download batch. Expected final state is sent=3, pending=1, and repeating the command should open no SMTP connection. Do not recreate the DB or reset sent rows for a repeat test. Six local tests of the new processing core passed using real SQLite and JPEGs with injected image/message helpers and mocked SMTP; complete CLI, shared settings refactor and live delivery are not yet validated.
+
+## Live queued SMTP delivery and configurable message grouping
+
+All 83 tests passed on the user's server. Validation-only verified three full-resolution originals. Three independent SMTP send calls succeeded, the database contains sent=3 and pending=1, and the repeated command opened no SMTP connection. The user reported seeing three images together in their mailbox; the previous code constructed one attachment per message with identical subjects, so mail-client conversation grouping is plausible but not verified. The newly uploaded comparison JPEG is 2048x1152 and byte-identical to the previous app-saved comparison, not the 5120x2880 SD receipt. The point of resizing is not established.
+
+The queue sender now supports `SMTP_MODE=single` (default, mandatory for Revierwelt) or `SMTP_MODE=grouped`, overridden by `--mode single|grouped`. Single mode uses one message per image, validates attachment bytes and name, and includes the filename and UTC event timestamp in the subject. Grouped mode puts up to --limit originals in one message, with numbered plain-text metadata sections corresponding to attachment order. All events in a grouped message transition to uncertain together before SMTP, then sent together after acceptance; they share the recorded message ID. A grouped send is refused for the known Revierwelt SMTP hostname or @revierwelt.de recipients. Server attachment/message-size limits still apply. No image resizing, recompression or automatic split/fallback is performed.
+
+```sh
+# Already sent images: preview both modes without SMTP or changing event state.
+python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --limit 3 --preview-sent --mode single
+python queue_smtp.py --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --limit 3 --preview-sent --mode grouped
+```
+
+Expected message/attachment plan: single=3 messages with one attachment each, grouped=1 message with three attachments. --preview-sent cannot be combined with --send. Do not reset sent rows. Five new tests passed locally (11 queue SMTP tests total); grouped MIME serialization, filename and bytes, receipt transitions, preview and Revierwelt guard were tested using synthetic JPEGs and injected helpers. Full integration and real grouped delivery have not yet been tested. Continue on infra-vm-06; LXC and Revierwelt live tests remain deferred.
+
+## Per-camera SMTP profiles
+
+The user confirmed separate emails; the mail client had grouped them into a conversation. All 88 tests and both preview plans passed, and the SHA256 of the saved mail attachment exactly matches the SD original. Revierwelt assigns each camera by recipient email address; other cameras may send only to a private mailbox.
+
+Copy `config.example.toml` to `config.local.toml` (ignored by Git; chmod 600), replace the UID and private SMTP settings locally, and use named password environment variables. Find the UID with `sqlite3 -readonly data/events-batch-test.sqlite3 'SELECT DISTINCT camera_uid FROM events;'`; do not publish the output. Camera names are aliases (ASCII letters, digits, hyphen, underscore); UIDs are stable identities, not app indices. Each profile has its own enabled flag, host, port, security (none/starttls/tls), sender, exactly one recipient, optional username/password environment variable, mode (single/grouped), and limit 1–10. Defaults: STARTTLS, corresponding port, single, limit 3. No global recipient or password fallback. Unconfigured and disabled cameras are skipped. Duplicate names, UIDs and Revierwelt recipients are rejected; Revierwelt requires single. Private recipients may be shared, but messages always contain only one camera's images. Passwords are not recorded in the database or logs. Route snapshot (alias, host, port, security, sender, recipient, mode) is saved in delivery_routes in the same transaction as the uncertain delivery receipt before SMTP; previous receipts remain unchanged.
+
+```sh
+cp config.example.toml config.local.toml
+chmod 600 config.local.toml
+nano config.local.toml
+python camera_smtp.py --config config.local.toml --queue-db data/events-batch-test.sqlite3 --day 2026-11-26 --preview-sent
+```
+
+With the correct UID this should preview three images and three messages without SMTP or delivery-state changes. Change the private profile's mode to grouped for a second preview. `--camera testkamera` selects just that alias. Never combine --preview-sent and --send. For new downloaded events, explicit --send uses the selected profile; continue using only the private test SMTP server. Global queue_smtp.py refuses databases containing multiple camera UIDs; the core refuses mixed-camera rows. A pre-existing uncertain event blocks that camera only; a new uncertain outcome stops the current invocation. Missing passwords stop the invocation before sending. One destination per camera; no fan-out or automated retries yet. Six new local tests with synthetic camera identities, distinct JPEG bytes, recipient headers and simulated SMTP transports passed alongside 11 existing queue SMTP tests. Real multi-camera cloud discovery, downloads and SMTP routing, and the continuous service are still unvalidated. LXC and Revierwelt testing remain deferred.
+
+## Persistent local credentials and annotated configuration
+
+The single-camera profile preview passed for three verified originals. The project now reads a protected local .env file directly, without executing shell code or exporting its values to the environment. See [credential setup](CREDENTIALS.md). Private Ucon and SMTP passwords remain in .env; only the public Revierwelt password "mail" may be specified literally in a camera SMTP profile for the matching host and recipient domain. The German configuration template explains every supported field; existing config.local.toml is not overwritten. Both local files remain ignored by Git. The private credential reader checks ownership and mode (400/600), rejects symlinks and malformed/duplicate entries, and reads literal values with file precedence over existing environment variables. Eight new tests plus existing Ucon and queue routing tests passed locally (29 tests). The actual server login with .env, the legacy SMTP settings integration and eventual systemd/reboot behavior still need validation. No LXC setup or Revierwelt test yet.
+
+## Persistent credentials confirmed; stable camera selection
+
+All 102 tests passed on the Ubuntu test server, Ucon login succeeded after unsetting the previously exported account and passwords, and both local files have mode 600. The user ordered a WOLFANG WT08-WB (Ucon) and Xega XG-23 (UBox) for later validation. Keep H4 as the sole live reference until the first live system is ready. UBox credentials are separate; shared backend/protocol compatibility is a hypothesis, not a confirmed fact.
+
+Cloud and SD probes now accept `--config config.local.toml --camera NAME` instead of a device index. The selected enabled profile is resolved by exact UID in the authenticated device list; missing or duplicate matching UIDs fail closed. For SD sessions the UID and relay password are taken from the same device record, using the existing authenticated Ucon API. No fallback to another camera. Legacy index-based diagnostics remain available, but cannot be combined with the configured selection. Five standalone selection tests passed locally (order, missing/duplicate UID, legacy index, disabled/missing alias and relay credential binding). Full CLI and actual SDK integration still need test-server validation.
+
+```sh
+python cloud_probe.py --config config.local.toml --camera testkamera --hours 24
+python probe.py --config config.local.toml --camera testkamera
+```
+
+The second command is login/discovery only; neither opens a P4P session or sends mail. The same selection flags can be combined with the existing explicit SD or watch options. Do not add or enable unvalidated camera models yet. This is a preparatory step; multi-camera orchestration, bounded retry handling, continuous operation, Proxmox and Revierwelt live validation remain outstanding.
+
+## Roadmap
+
+- [x] Verify account login and H4 relay live-data reception.
+- [x] Compare Android card-playback traffic with SDK code; identify outgoing encoding and RDT control parsing discrepancies.
+- [x] Validate outbound encoding and native settings response recovery on H4.
+- [x] Validate staged event retrieval and native event response recovery on H4 (no-AV flow).
+- [x] Verify SD event listing.
+- [x] Validate live reference thumbnail download byte-for-byte against Android capture.
+- [x] Independently verify live activity original against corrected Android wire reference.
+- [x] Validate corrected codec and normal metadata-driven activity thumbnail/original downloads live.
+- [x] Confirm personal SIM operation with SD photo retrieval and Android notifications.
+- [ ] Measure wake from extended idle and check notification availability over time.
+- [x] Observe a PIR notification on Android without a reported paid cloud-storage subscription.
+- [x] Identify probable FCM/OSS notification transport from Android capture.
+- [x] Validate account-scoped HTTPS event query without a client-initiated P4P session.
+- [ ] Independently verify no camera wake/data usage caused by backend queries and measure event availability latency.
+- [ ] Verify notification reliability and any separate service-entitlement limits.
+- [x] Demonstrate file transfer without continuous live video in the official Android app.
+- [x] Validate Python SD download with live video stopped (Z12).
+- [ ] Repeat successful original retrieval across idle sessions and resolve initial ACK failures.
+- [ ] Discuss upstream SDK contributions after application validation.
+- [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.
+- [ ] If no passive event signal is available, evaluate configurable low-frequency polling with backoff, overlapping query windows and no concurrent sessions; leave unattended polling disabled until measured.
+- [ ] Optional: Android notification webhook only for configurations where notifications are actually available.
+- [x] Implement initial discovery-only SQLite intake and duplicate detection.
+- [x] Validate live SQLite intake and duplicate detection.
+- [x] Implement bounded cloud polling test with session reuse and overlap.
+- [x] Validate live polling and session reuse (6/6 queries, one login).
+- [x] Implement read-only SD timestamp correlation test.
+- [x] Validate live SD correlation for three same-day records.
+- [x] Implement bounded original download batch and persistent file receipts.
+- [x] Validate live batch download and skip already downloaded originals.
+- [x] Implement explicit queue SMTP batch and conservative uncertain-delivery state.
+- [x] Validate queue SMTP live with three accepted messages and no resend.
+- [x] Implement configurable single/grouped MIME delivery with Revierwelt guard.
+- [x] Validate both message plans and exact received attachment hash on the test server.
+- [x] Implement per-camera SMTP profiles and routing receipts with synthetic multi-camera tests.
+- [x] Validate profile preview and persistent Ucon credentials on test server.
+- [x] Implement explicit UID-based camera selection for cloud and SD probes.
+- [ ] Validate configured probe selection and implement multi-camera orchestration and bounded retry/recovery.
+- [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
+- [x] Validate live SMTP delivery to the user's own TLS mail server.
+- [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.
+- [ ] Add tests with synthetic fixtures, Docker and setup documentation in German and English.
+
+## References
+
+- https://github.com/ArtemKiyashko/p4p_camera_sdk — existing Ucon cellular relay and SD-card protocol library.
+- https://github.com/mahumadad/ubox-p4p — related UBIA protocol research.
+
+Unofficial project; not affiliated with Ucon or UBIA. No vendor code or firmware is bundled.

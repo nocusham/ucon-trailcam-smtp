@@ -12,8 +12,9 @@ name = "testkamera"
 # Dauerhafte Geräte-UID aus Ucon bzw. der lokalen Ereignisdatenbank (kein App-Index).
 uid = "REPLACE_WITH_CAMERA_UID"
 
-# true = SMTP-Verarbeitung aktiv; false = für dieses Profil kein Versand.
-# Weitere Dienstfunktionen werden später ergänzt.
+# true = Profil für SMTP und konfigurierte Cloud-/SD-Probes aktiv.
+# false = kein Versand und keine Auswahl über --config/--camera.
+# Legacy-Diagnose per --index bleibt separat; der Dauerbetrieb folgt später.
 enabled = true
 
 [cameras.smtp]

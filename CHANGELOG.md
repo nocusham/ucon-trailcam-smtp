@@ -6,6 +6,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
+- 167 tests passed; normal SMTP path after retry refinement live validated (4/4 cycles, one original and SMTP acceptance with configured camera alias and local capture-time subject, three idle cycles without relay, no alarms). Actual transport faults were simulated only.
+
 - Integrated ten-cycle run completed 10/10 without failures; one new original (5120 x 2880, 264,906 bytes) in one 9.3-second relay, one new accepted SMTP message, nine idle cycles without relay, no alarms and three sent events without duplicates.
 
 - 154 tests passed. Integrated service downloaded two 5120 x 2880 originals in one 8.5-second relay, verified them and subsequently sent two separate STARTTLS emails (both received, two sent events, no second relay). No alarm due; sent-only repeat, continuous operation and real failure paths remain unverified.
@@ -31,6 +33,8 @@ This records development milestones, not a published production release.
 - Single/grouped preview plans confirmed; private grouped live transmission remains untested.
 
 ### Implemented
+
+- Optional local original retention (off by default, 30 days from SMTP acceptance), standalone preview/apply and hourly opt-in service cleanup. Only verified sent originals under managed root; preserves deduplication receipts. Eight local tests passed; reference-server integration pending. Documented repository production/test separation plan for LXC transition.
 
 - Proven pre-submission SMTP setup failures restore downloaded state and persist per-camera exponential retry cooldown (5–60 minutes). Ambiguous submissions remain uncertain; QUIT failure after acceptance no longer blocks delivery. Seven transport/SQLite tests passed locally; two additional queue integration tests pending server validation.
 

@@ -15,6 +15,7 @@ from download_retry import init_retry, parse_retry, reserve, record_failure, syn
 from health_alerts import load_alerts, dispatch_due, due_notices, smtp_sender
 from service_cycle import run_cycle
 from service_download import plan_download
+from media_retention import parse_retention, cleanup
 
 
 def download_one(db, args, profile, devices, policy, settings):
@@ -77,7 +78,11 @@ async def run(args):
         raise ValueError('No enabled cameras')
     settings = load_alerts(args.config)
     with args.config.open('rb') as source:
-        policy = parse_retry(tomllib.load(source).get('download_retry'))
+        raw = tomllib.load(source)
+        policy = parse_retry(raw.get('download_retry'))
+        retention = parse_retention(raw.get('retention'))
+    if args.cleanup and not retention.enabled:
+        raise ValueError('--cleanup requires retention.enabled=true')
     with closing(open_queue(args.queue_db)):
         pass
     with batch_lock(args.queue_db), closing(open_queue(args.queue_db)) as db:
@@ -123,6 +128,7 @@ async def run(args):
                             api_error=ApiError, interval=args.interval,
                             refresh_devices=lambda h: list_devices(client,h), on_devices=on_devices)
             cycle = failed = 0
+            next_cleanup = 0
             while args.loop or cycle < args.cycles:
                 cycle += 1
                 started = time.monotonic()
@@ -131,6 +137,14 @@ async def run(args):
                                           devices=lambda: intake.session[1],
                                           download=lambda p,d: download_one(db,args,p,d,policy,settings),
                                           deliver=deliver, alerts=alarms, download_enabled=args.download)
+                if args.cleanup and time.monotonic() >= next_cleanup:
+                    try:
+                        _, _, skipped = cleanup(db, args.output_dir, retention, int(time.time()), apply=True)
+                        failed += int(bool(skipped))
+                    except (OSError, ValueError) as exc:
+                        print(f'Retention stopped ({type(exc).__name__}); details suppressed.')
+                        failed += 1
+                    next_cleanup = time.monotonic() + 3600
                 if args.loop or cycle < args.cycles:
                     await asyncio.sleep(max(1, args.interval - (time.monotonic() - started)))
             print(f'Service complete: cycles={cycle}, failed={failed}')
@@ -151,6 +165,7 @@ def main():
     parser.add_argument('--send', action='store_true')
     parser.add_argument('--send-alerts', action='store_true')
     parser.add_argument('--resume-login', action='store_true')
+    parser.add_argument('--cleanup', action='store_true', help='Allow configured local image retention cleanup')
     args = parser.parse_args()
     if not 1 <= args.cycles <= 1000 or not 10 <= args.interval <= 900 or not 1 <= args.batch_limit <= 10:
         parser.error('cycles 1–1000; interval 10–900 seconds; batch-limit 1–10')

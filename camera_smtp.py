@@ -55,12 +55,14 @@ def mailbox(value):
 def load_profiles(path):
     with Path(path).open('rb') as source:
         data = tomllib.load(source)
-    if set(data) - {'cameras', 'alerts', 'download_retry'} or not isinstance(data.get('cameras'), list) or not data['cameras']:
+    if set(data) - {'cameras', 'alerts', 'download_retry', 'retention'} or not isinstance(data.get('cameras'), list) or not data['cameras']:
         raise DeliveryError('Expected a nonempty [[cameras]] list')
     from health_alerts import parse_alerts
     parse_alerts(data.get('alerts'))
     from download_retry import parse_retry
     parse_retry(data.get('download_retry'))
+    from media_retention import parse_retention
+    parse_retention(data.get('retention'))
     profiles = []
     names, uids, rw = set(), set(), set()
     for entry in data['cameras']:

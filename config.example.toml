@@ -105,3 +105,10 @@ password_env = "ALERT_SMTP_PASSWORD"
 initial_minutes = 5
 # Obergrenze des exponentiellen Backoffs, in Minuten (>= initial_minutes).
 max_minutes = 360
+
+# Lokale Originale erst nach bestätigter SMTP-Annahme bereinigen.
+# Ohne explizites --cleanup (Dienst) oder --apply (manuelles Werkzeug) keine Löschung.
+[retention]
+enabled = false
+# Tage seit SMTP-Annahme, nicht seit Aufnahme. 1–3650; Standard 30.
+days = 30

@@ -38,3 +38,7 @@ The first run should insert matching valid events; a second run with the same re
 As of 2026-11-26, bounded authenticated cloud polling, timestamp matching, original batch download, persistent file and delivery receipts, per-camera SMTP profiles and persistent private credentials are implemented and tested individually on the existing Ubuntu server (108 tests passed). The remaining phases are continuous orchestration, persistent cursor and bounded retry/recovery, multi-day H4 validation, then native systemd deployment with a private state directory and protected credentials. No Revierwelt connection until the application is finished. Cloud preview remains development-only; production requires original images. The Proxmox host has not been modified by this project. A systemd unit and reboot test do not exist yet; this is a deferred deployment plan, not a production installation guide. The extra Ucon and UBox models are reserved for later compatibility work.
 
 Keep data directories private and included in backups; use separate test and production database paths. Do not copy an active SQLite database without a consistent backup procedure.
+
+## Repository packaging prerequisite
+
+Before creating the production LXC, separate runtime modules, tests, diagnostic tools, deployment files and configuration templates; install a pinned validated release rather than the development checkout. See [REPOSITORY_LAYOUT.md](REPOSITORY_LAYOUT.md). No test data or private credentials are shipped. Perform the long-duration reference-server test before migrating.

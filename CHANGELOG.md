@@ -6,6 +6,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference H4 / Ubuntu test server
 
+- Authenticated H4 device-list schema includes integer dynamic_info.latest_active_utc, battery, signal, online_state and power flags. Last-contact semantics and update behavior remain to be verified; no telemetry values or private identifiers recorded here.
+
 - Independent alarm SMTP test accepted and received. Full expanded test-suite result not yet reported.
 
 - 108 unit tests passed with local .env present; credential test isolation fixed (49f6de4).

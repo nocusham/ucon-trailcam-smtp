@@ -84,76 +84,7 @@ def describe_fields(value, prefix='', depth=0):
         yield prefix, 'depth limit'
         return
     if isinstance(value, dict):
-        yield prefix or '
-    """Report only matching-device counts and safe event metadata."""
-    rows = []
-    unverified = 0
-    for item in items:
-        if not isinstance(item, dict) or item.get('uid', item.get('device_uid')) != uid:
-            unverified += 1
-            continue
-        stamp = item.get('et_utc')
-        if type(stamp) is not int or not 0 <= stamp <= 4102444800:
-            stamp = None
-        image = item.get('img_url')
-        try:
-            has_image = isinstance(image, str) and urlsplit(image).scheme == 'https' and bool(urlsplit(image).hostname)
-        except ValueError:
-            has_image = False
-        rows.append((stamp, has_image))
-    return rows, unverified
-
-
-async def run(args, account, password, begin, end):
-    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
-        return await query_events(client, account, password, args.index, begin, end, schema=args.schema)
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--index', type=int, default=0)
-    window = parser.add_mutually_exclusive_group()
-    window.add_argument('--day', type=dt.date.fromisoformat)
-    window.add_argument('--hours', type=int, default=24)
-    parser.add_argument('--tz', default='Europe/Berlin')
-    parser.add_argument('--schema', action='store_true',
-                        help='Show event field names, types and string classifications only')
-    args = parser.parse_args()
-    if args.index < 0 or not 1 <= args.hours <= 168:
-        parser.error('index must be nonnegative; hours must be 1–168')
-    if version('p4p-camera-sdk') != '0.1.16':
-        parser.error('Use the pinned SDK version 0.1.16')
-    end = int(dt.datetime.now(dt.timezone.utc).timestamp())
-    begin = end - args.hours * 3600
-    if args.day:
-        try:
-            tz = ZoneInfo(args.tz)
-        except Exception:
-            parser.error('Invalid time zone')
-        begin = int(dt.datetime.combine(args.day, dt.time.min, tzinfo=tz).timestamp())
-        end = int(dt.datetime.combine(args.day + dt.timedelta(days=1), dt.time.min, tzinfo=tz).timestamp())
-    try:
-        account, password = read_credentials()
-        print('Experimental cloud event query; no P4P/UDP camera session.')
-        rows, unverified = asyncio.run(run(args, account, password, begin, end))
-    except ApiError as exc:
-        print(str(exc))
-        return 1
-    except Exception as exc:
-        print(f'Cloud probe failed: {type(exc).__name__}. Details suppressed.')
-        return 1
-    print(f'Matching-device events: {len(rows)}; HTTPS image references: {sum(has for _, has in rows)}')
-    print(f'Unverified/unmatched items ignored: {unverified}')
-    for stamp, has_image in sorted(rows, key=lambda row: row[0] if row[0] is not None else -1):
-        when = dt.datetime.fromtimestamp(stamp, dt.timezone.utc).isoformat() if stamp is not None else 'unknown'
-        print(f'{when} | image reference: {"yes" if has_image else "no"}')
-    print('No image URL, token, device ID or raw API response printed. No image downloaded.')
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())
-, f'object ({len(value)} fields)'
+        yield prefix or 'root', f'object ({len(value)} fields)'
         for key, child in list(value.items())[:80]:
             # Do not print arbitrary map keys that may be identifiers or URLs.
             safe = (key if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,23}', key)
@@ -221,7 +152,7 @@ def summarize(items, uid):
 
 async def run(args, account, password, begin, end):
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
-        return await query_events(client, account, password, args.index, begin, end)
+        return await query_events(client, account, password, args.index, begin, end, schema=args.schema)
 
 
 def main():
@@ -231,6 +162,8 @@ def main():
     window.add_argument('--day', type=dt.date.fromisoformat)
     window.add_argument('--hours', type=int, default=24)
     parser.add_argument('--tz', default='Europe/Berlin')
+    parser.add_argument('--schema', action='store_true',
+                        help='Show event field names, types and string classifications only')
     args = parser.parse_args()
     if args.index < 0 or not 1 <= args.hours <= 168:
         parser.error('index must be nonnegative; hours must be 1–168')

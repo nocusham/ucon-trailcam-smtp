@@ -3,7 +3,7 @@ import argparse
 import asyncio
 import contextlib
 import datetime as dt
-import getpass
+from ucon_auth import read_credentials
 import io
 import logging
 from collections import Counter
@@ -179,9 +179,9 @@ def main():
     print(f'SDK version: {sdk_version}')
     if sdk_version != '0.1.16':
         parser.error('Install the pinned SDK with python -m pip install -r requirements.txt')
-    account = input('Ucon account: ').strip()
-    password = getpass.getpass('Ucon password: ')
-    if not account or not password:
+    try:
+        account, password = read_credentials()
+    except ValueError:
         parser.error('Account and password are required')
     logging.disable(logging.CRITICAL)
     stage = 'account login / device discovery'

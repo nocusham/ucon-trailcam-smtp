@@ -4,7 +4,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmwa
 
 ## Status / Projektstand
 
-Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). A live activity original was independently reconstructed from the Python wire capture and matched the corrected Android reference byte-for-byte. The corrected P4P codec and normal metadata-driven downloads still need live validation. SMTP is not implemented yet.
+Target: H4 LTE trail camera, Ucon Android app, currently using a trial SIM, no cloud storage subscription. Field observation (2026-11-25): without a cloud subscription, motion recordings do not generate app notifications in the tested configuration. Recordings become visible only after actively connecting to the camera. Whether the backend nevertheless exposes motion-event metadata is unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). A live activity original was independently reconstructed from the Python wire capture and matched the corrected Android reference byte-for-byte. The corrected codec and normal metadata-driven activity thumbnail/original and network-wake original downloads passed live tests W/X/Y, with matching MD5 on all three files. SMTP is not implemented yet.
 
 ## First test (Linux, Python 3.12+)
 
@@ -16,6 +16,17 @@ python probe.py
 ```
 
 Enter your own Ucon credentials locally when prompted. Passwords and device credentials are not printed. The default test logs in and resolves the first registered device without contacting the camera directly. To select another registered device, use `--index 1` (zero-based).
+
+### Optional credentials for one Bash/SSH session
+
+```bash
+read -r -p 'Ucon account: ' UCON_ACCOUNT
+read -r -s -p 'Ucon password: ' UCON_PASSWORD
+printf '\n'
+export UCON_ACCOUNT UCON_PASSWORD
+```
+
+The probe reads each variable if nonempty; otherwise it prompts for that field as before. The password is entered without terminal echo and is not typed into a shell command or saved by the probe. Do not use literal passwords in commands, enable shell tracing, or print the environment. Exported variables are inherited by child processes and may be readable by processes with the same account or elevated privileges. Use only a trusted server. Remove them with `unset UCON_ACCOUNT UCON_PASSWORD` when finished, or end the shell session. No .env loader or automatic persistent password storage is added.
 
 With the camera in a known test state, trigger a recording and close the mobile app before running:
 
@@ -162,6 +173,10 @@ The probe applies the corrected tail permutation to SDK relay encoding/decoding 
 
 Next live tests: use ordinary original retrieval with no reference overrides, first for the activity event and then optionally an explicitly selected network-wake photo. Run unit tests first. The new patch is supported by offline evidence but has not yet been tested with the physical camera. Old saved JPEGs from uncorrected decoding should not be treated as verified. The legacy SDK sequence retains known erroneous command constants and is for historical diagnostics only.
 
+## Tests W/X/Y: normal downloads confirmed
+
+With the corrected P4P codec and no reference overrides, all three live downloads succeeded. The activity original (275548 bytes, 230 blocks) took 12.2 s, the network-wake original (257267 bytes, 215 blocks) 11.6 s, and the activity thumbnail (6121 bytes, six blocks) 14.1 s. All matched the camera's metadata MD5 and were saved locally. The relay/listing returned all 27 reported records each time. These are observed relay-session durations, not battery or mobile-data measurements. No personal credentials, filenames, hashes or media are published here. The next step is a persistent deduplicated delivery queue and SMTP, followed by measured polling behavior.
+
 ## Roadmap
 
 - [x] Verify account login and H4 relay live-data reception.
@@ -171,7 +186,7 @@ Next live tests: use ordinary original retrieval with no reference overrides, fi
 - [x] Verify SD event listing.
 - [x] Validate live reference thumbnail download byte-for-byte against Android capture.
 - [x] Independently verify live activity original against corrected Android wire reference.
-- [ ] Validate corrected codec and normal metadata-driven activity thumbnail/original downloads live.
+- [x] Validate corrected codec and normal metadata-driven activity thumbnail/original downloads live.
 - [ ] Test wake from sleep and personal SIM compatibility.
 - [ ] Investigate whether the backend exposes motion-event metadata without a cloud subscription; do not assume notifications are available.
 - [ ] Measure camera wake duration, battery impact and mobile data use during manual SD queries, including after deep sleep.

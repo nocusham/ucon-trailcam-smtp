@@ -10,4 +10,4 @@ Plain `python -m unittest discover -v` from the root also discovers the package.
 
 Phase 1 check: 29 tests in four modules passed locally with both discovery commands. Full 188-test reference-server verification remains required.
 
-Phase 2: six mocked cloud API tests; expected full suite 194. Phase 3a: three new shared relay adapter tests (expected full suite 197), awaiting execution with the real pinned SDK. Run `python -m unittest tests.test_sdk_relay -v` first in a separate worktree using the reference-server virtual environment. The adapter tests make no network calls.
+Phase 2: six mocked cloud API tests; expected full suite 194. Phase 3a: three new shared relay adapter tests passed on the reference server (3/3, 0.041 s; owner-reported summary). Full suite (expected 197 tests), including phase 2, remains pending. Run `python -m unittest tests.test_sdk_relay -v` first in a separate worktree using the reference-server virtual environment. The adapter tests make no network calls.

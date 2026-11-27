@@ -1,0 +1,36 @@
+[Unit]
+Description=Ucon trail camera SMTP bridge
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/ucon-trailcam-smtp/service-enabled
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=exec
+User=ucon-trailcam-smtp
+Group=ucon-trailcam-smtp
+UMask=0077
+StateDirectory=ucon-trailcam-smtp
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/ucon-trailcam-smtp
+Environment=UCON_SECRETS_FILE=/etc/ucon-trailcam-smtp/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/ucon-trailcam-smtp/current/venv/bin/ucon-trailcam-smtp --config /etc/ucon-trailcam-smtp/config.toml --queue-db /var/lib/ucon-trailcam-smtp/events.sqlite3 --output-dir /var/lib/ucon-trailcam-smtp/media --loop --interval 60 --batch-limit 3 --download --send --send-alerts
+Restart=on-failure
+RestartSec=30s
+KillSignal=SIGINT
+SuccessExitStatus=130
+TimeoutStopSec=180s
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

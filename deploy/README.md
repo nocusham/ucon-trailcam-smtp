@@ -62,3 +62,33 @@ bash deploy/check-package.sh "$HOME/ucon-trailcam-smtp/.venv/bin/python"
 ```
 
 The script requires package-index access (or a configured approved package source), git, tar and an interpreter supporting venv. It installs only into a temporary private virtual environment; if any step fails, it stops and removes the temporary directory. It archives tracked source from HEAD, not working-tree changes or private configuration. It builds only the project wheel locally, checks that no tools/tests/templates/private state/SDK code are inside it, installs it, checks installed imports and --help outside the checkout, and runs the 214 source tests. No service start or live network operation other than package retrieval; no production deployment or published artifact. Report the failing step and sanitized error on failure rather than changing dependency versions. Exact version matching is not hash verification, and the Debian 13/Python 3.13 target still needs its own installation test. SDK redistribution terms remain unresolved.
+
+Phase 6b result: at 063686e the reference environment passed exact version and pip checks, built KCP 0.1.6 from source and the local project wheel, verified 37 runtime Python files, imported 36 installed modules, ran the console command and passed 214 source tests in 2.049 s. A SQLite ResourceWarning was observed; a test fixture connection is explicitly closed in phase 6c. Warning-free rerun pending. The observed wheel hash is recorded in [repository layout](../docs/REPOSITORY_LAYOUT.md); no reproducible-build or target-platform claim.
+
+## 6c: guarded native systemd unit
+
+[Draft unit](systemd/ucon-trailcam-smtp.service) — not installed, enabled or started. The unit runs the installed console entrypoint, not a checkout. The proposed install contract is:
+
+| Path | Owner/group | Mode |
+| --- | --- | --- |
+| /opt/ucon-trailcam-smtp and releases | root:root | directories 0755; code not service-writable |
+| /etc/ucon-trailcam-smtp | root:ucon-trailcam-smtp | 0750 |
+| config.toml | root:ucon-trailcam-smtp | 0640 |
+| .env | ucon-trailcam-smtp:ucon-trailcam-smtp | 0400 (600 also accepted by parser) |
+| service-enabled | root:root | 0644; absent until approved activation |
+| /var/lib/ucon-trailcam-smtp | ucon-trailcam-smtp:ucon-trailcam-smtp | 0700 |
+| state files and media | service identity | 0600 files, 0700 directories |
+
+The dedicated system account has no login shell and no sudo privileges. The credential file must be service-owned to satisfy the existing parser, while ProtectSystem=strict makes /etc and /opt read-only inside the unit. StateDirectory grants write access to the private persistent state; PrivateTmp supplies isolated temporary storage. No EnvironmentFile interpretation or password in the unit. The installer must not create service-enabled, enable or start the service automatically. The root-owned marker is a further activation guard, not a substitute for operator approval. Removing it prevents subsequent starts but does not stop a running process.
+
+The intended active service polls every 60 seconds with a batch limit of three, downloads originals and sends image emails and configured alerts. It uses a new production SQLite queue and media root. No --cleanup or --resume-login by default. Alerts remain subject to configuration; retention needs a separate explicit opt-in. For staged live validation, first use a separate approved manual invocation without delivery flags. Never point this unit to the active L3 database. Once production activation is approved, the operator explicitly installs the unit, creates the marker, and enables/starts it; those steps are not authorized by this checkpoint.
+
+Restart on failure after 30 seconds, maximum three starts in five minutes. Normal stop sends SIGINT, allows up to 180 seconds, and recognizes exit 130. This is a best-effort shutdown, not a guarantee of atomic SMTP completion: interruption can leave uncertain receipts, which require review rather than blind retries. Do not restore an earlier queue after delivery merely to roll back software. Journal output is unbuffered; sanitized logs still contain local aliases, so restrict log access. The proposed sandbox directives must be validated in the actual LXC.
+
+Offline check from the separate worktree:
+
+```sh
+bash deploy/check-systemd.sh
+```
+
+This copies the unit to a temporary directory, substitutes only the not-yet-installed executable with /usr/bin/true and runs systemd-analyze verify without starting anything. Static tests check the original command and paths. It does not verify actual account, executable, permissions or runtime sandbox behavior. Do not create users, system directories or install units for this test. The full source regression with ResourceWarning enabled should pass 217 tests without an unclosed connection warning before proceeding.

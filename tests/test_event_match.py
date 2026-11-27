@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from ucon_trailcam_smtp.event_match import match_events, queued_times
@@ -32,7 +33,7 @@ class MatchTests(unittest.TestCase):
     def test_readonly_camera_scope(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'queue.sqlite3'
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 db.execute('CREATE TABLE events (camera_uid TEXT, et_utc INTEGER)')
                 db.executemany('INSERT INTO events VALUES (?,?)',
                                [('own', 100), ('own', 200), ('other', 101), ('own', 99)])

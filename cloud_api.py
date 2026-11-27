@@ -2,7 +2,7 @@
 from uuid import uuid4
 
 import httpx
-from p4p_camera_sdk.credentials import HOST, USER_AGENT, encode_password
+from sdk_credentials import HOST, USER_AGENT, encode_password
 from safe_diagnostics import error_kind
 from camera_selection import SelectionError, select_device, relay_credentials
 
@@ -79,7 +79,7 @@ async def authenticate(client, account, password, index, *, camera_uid=None):
 
 async def get_device_by_uid(account, password, uid):
     """Use one authenticated device-list response for UID and relay password."""
-    from p4p_camera_sdk.credentials import DeviceCredentials
+    from sdk_credentials import DeviceCredentials
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
         _, devices = await discover_devices(client, account, password)
     return DeviceCredentials(*relay_credentials(select_device(devices, uid=uid)))

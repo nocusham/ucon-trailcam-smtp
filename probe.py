@@ -24,9 +24,9 @@ from sdk_relay import DiagnosticRelay, relay_compat
 from pathlib import Path
 import time
 
-from p4p_camera_sdk.credentials import CredentialClient
-from p4p_camera_sdk.sdcard_client import SdCardClient
-from p4p_camera_sdk.sdcard import (
+from sdk_credentials import CredentialClient
+from sdk_sdcard import (
+    SdCardClient,
     IOTYPE_GET_SD_STATUS_REQ, IOTYPE_GET_SD_STATUS_RSP, build_get_sd_status,
     IOTYPE_GET_ADVANCE_SETTINGS_REQ, IOTYPE_GET_ADVANCE_SETTINGS_RSP,
 )

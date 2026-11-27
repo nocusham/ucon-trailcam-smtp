@@ -103,7 +103,7 @@ class CloudApiTests(unittest.IsolatedAsyncioTestCase):
         client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: self.fail('unexpected request')))
         with patch('cloud_api.httpx.AsyncClient', return_value=client) as factory, \
                 patch('cloud_api.discover_devices', new_callable=AsyncMock, return_value=({}, [b, a])) as discover, \
-                patch('p4p_camera_sdk.credentials.DeviceCredentials') as credentials:
+                patch('sdk_credentials.DeviceCredentials') as credentials:
             self.assertIs(await get_device_by_uid('account', 'password', 'synthetic-a'), credentials.return_value)
             factory.assert_called_once_with(timeout=30, follow_redirects=False)
             discover.assert_awaited_once_with(client, 'account', 'password')

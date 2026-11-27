@@ -11,3 +11,5 @@ Plain `python -m unittest discover -v` from the root also discovers the package.
 Phase 1 check: 29 tests in four modules passed locally with both discovery commands. All 188 baseline tests are covered by the later successful 197-test reference-server run.
 
 Phase 2: six mocked cloud API tests; expected full suite 194. Phase 3a: three new shared relay adapter tests passed on the reference server (3/3, 0.041 s; owner-reported summary). Full suite: 197/197 passed in 0.273 s on the reference server, at commit `3c8693b` with SDK `0.1.16` (owner-provided terminal summary). This covers phases 1, 2 and 3a; live regression remains pending. Run `python -m unittest tests.test_sdk_relay -v` first in a separate worktree using the reference-server virtual environment. The adapter tests make no network calls.
+
+Phase 3b: three SDK boundary tests in `tests.test_sdk_boundaries` verify the credential and SD re-exports and static direct SDK import confinement. The full expected 200-test suite is pending on the reference server; the architecture test must be adapted when moving to src/ in phase 4. No live network access is required.

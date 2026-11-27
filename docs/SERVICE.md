@@ -33,7 +33,7 @@ The next subject-format test uses `camera_smtp.py --preview-sent` against the sa
 
 ## Remaining limitations
 
-The nine new core tests and 28 existing alarm/intake/telemetry tests passed in the development container. The service entrypoint was syntax-checked. The normal integrated SDK and SMTP path and full suite are now live-confirmed. Bounded continuous operation and short transient cloud-failure recovery are live-confirmed; the longer soak test is in progress. Sustained outages, actual SMTP/SD failure recovery and automatic alarm delivery for a real incident remain unverified. SDK and KCP are not installed in the development container. No LXC/Revierwelt validation yet. Photo-event inactivity fallback stays observation-only in service dispatch until cloud completeness is verified. Other camera models, long-gap retention, pagination, protocol/MD5 retry classification, repeated incident freshness, multi-camera cloud isolation, bounded retention and systemd deployment remain open. Do not run unattended production before further validation.
+The nine new core tests and 28 existing alarm/intake/telemetry tests passed in the development container. The service entrypoint was syntax-checked. The normal integrated SDK and SMTP path and full suite are now live-confirmed. Bounded continuous operation, the reference-server soak/restart runs and short transient cloud-failure recovery are live-confirmed within the evidence limits documented below. Sustained outages, actual SMTP/SD failure recovery and automatic alarm delivery for a real incident remain unverified. SDK and KCP are not installed in the development container. No LXC/Revierwelt validation yet. Photo-event inactivity fallback stays observation-only in service dispatch until cloud completeness is verified. Other camera models, long-gap retention, pagination, protocol/MD5 retry classification, repeated incident freshness, multi-camera cloud isolation, bounded retention and systemd deployment remain open. Do not run unattended production before further validation.
 
 ## SMTP retry safety
 
@@ -58,7 +58,7 @@ Detach the terminal multiplexer without stopping the worker. After approximately
 
 ## L1 interim results (2026-11-27)
 
-Status: in progress, not a completed soak-test acceptance. The owner reported cycle 969 at a nominal 60-second interval (approximately 16.1 hours, not a measured wall-clock duration). Runtime code remains unchanged during the test. The DEATTI DL04 is connected to a USB power supply; the reported 100% battery level is not evidence of low battery consumption.
+Historical interim checkpoint; superseded by the final L1/L2 results below. The owner reported cycle 969 at a nominal 60-second interval (approximately 16.1 hours, not a measured wall-clock duration). Runtime code remains unchanged during the test. The DEATTI DL04 is connected to a USB power supply; the reported 100% battery level is not evidence of low battery consumption.
 
 | Observation | Interim result |
 | --- | --- |
@@ -89,10 +89,34 @@ This is live evidence of short cloud-failure detection, persistent retry/backoff
 
 ### Follow-up after L1
 
-- Complete the 24–48 hour run and restart test using the same test queue; compare final log counters, queue state, actual recipient inbox, cursor and telemetry freshness.
+- L1 and L2 are complete (see final results below), including the owner's confirmation of receipt of all six new messages. Retain test queue and logs privately.
 - Improve production diagnostics with allowlisted stage/error category, numeric HTTP status and numeric API error code where available; never print tokens, signed URLs, credentials, raw responses or private identifiers. Do not change runtime logging mid-test.
 - Separately plan an unplugged battery/SIMbase data-usage trial (suggested at least seven days) under representative PIR activity, with a comparable normal-app baseline. Log photo and relay counts, battery trend and actual provider-reported data volume. The USB-powered L1 test cannot establish battery life or mobile-data savings.
 
+## L1 and L2 final results (2026-11-27)
+
+The owner stopped the reference-server continuous run after cycle 1,529 and ran a separate bounded three-cycle invocation using the same test configuration, database and media directory. The supplied L1 tail contains five successful idle cycles (1,525–1,529). L2 finished with the explicit summary cycles=3, failed=0. No runtime code changes were made during the soak run.
+
+| Observation | Result |
+| --- | --- |
+| Previously completed unit suite | 175/175 passed on the reference server (not rerun at L2) |
+| L1 last completed cycle | 1,529; approximately 25.5 hours at the nominal 60-second cadence, not an independently measured elapsed duration |
+| Latest cumulative L1 relay and SMTP counters | 6 relay-opening entries and 6 single-image SMTP acceptance entries |
+| Recipient inbox | Owner confirmed all six new L1 messages arrived |
+| Latest cumulative L1 cloud failure grep | 3, all previously documented isolated failures at cycles 99, 188, 219; automatic recovery observed in each case |
+| Latest L1 queue state | sent=10, no other state rows |
+| Latest L1 cloud retry state | failures=0, next_due=0 |
+| Latest L1 cumulative disk usage | data 592 KiB, media approximately 2.6 MiB (du -sh) |
+| Telemetry | newer snapshot observed, battery=100 on USB power; signal and online-state numeric semantics unverified |
+| L2 result | 3/3 successful cycles, failed=0, no relay openings, no SMTP sends, no alarm acceptances or failures |
+| Queue after L2 | sent=10, unchanged, no pending/downloaded/uncertain rows |
+
+L2 used the existing queue with --cycles 3 --interval 60 --download --send --send-alerts; cleanup remained off. The first query window was 357 seconds and telemetry was saved; the following windows were 360 seconds. This supports cursor continuity across a normal process restart rather than resetting the intake baseline. All three cycles reported zero new/known/pending events and no due originals or ready deliveries. No old photo was re-downloaded or resent in this idle restart test. The four pre-L1 sent entries and six new acceptances reconcile with ten final sent rows.
+
+Assessment: the reference-server operational soak, recipient delivery and normal idle restart milestones are complete based on the owner's confirmation and supplied counters and excerpts. Cumulative L1 counters were supplied shortly before the final idle tail, not re-collected from an independently audited complete log after shutdown. Do not claim that every L1 cycle succeeded or that every possible camera event was captured. No outage-time photo was observed in the recovery windows. No forced crash, restart with pending or uncertain deliveries, host reboot, sustained outage, real SMTP fault, real SD transfer fault, sustained automatic alarm, actual old-file cleanup, battery endurance or SIM billing validation is established by these runs.
+
+Next engineering stage: improve sanitized diagnostics, then restructure into a single English-language runtime with clearly separated tests, tools, configuration and deployment files. Preserve verified original-download and duplicate-prevention behavior; isolate the SDK boundary so that a later licensed replacement is feasible without copying unlicensed implementation. Resolve SDK-wide licensing before public production distribution; do not bundle the SDK while its terms remain unclear. Keep production deployment and Revierwelt validation deferred until reference-server refactoring and packaging checks are complete. No test state migration to production.
+
 ## Deferred image footer
 
-After completion of the existing milestones, an optional per-camera post-download/pre-SMTP transformation will append a dedicated metadata strip below the entire image. It will not overwrite any part of the photograph or change the stored original. With the option disabled, the current exact-original attachment contract remains unchanged. See [IMAGE_FOOTER.md](IMAGE_FOOTER.md). No runtime or configuration changes during the current soak test.
+After completion of the existing milestones, an optional per-camera post-download/pre-SMTP transformation will append a dedicated metadata strip below the entire image. It will not overwrite any part of the photograph or change the stored original. With the option disabled, the current exact-original attachment contract remains unchanged. See [IMAGE_FOOTER.md](IMAGE_FOOTER.md). The feature remains deferred; no runtime or configuration changes were made for it during L1/L2.

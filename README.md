@@ -4,7 +4,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 
 **Reference camera: DEATTI DL04.** Manufacturer and model designation confirmed by the owner on both the camera and its retail box on 2026-11-26. Earlier development notes use the label `H4`; its origin and status as a vendor or internal hardware designation are unverified. In this repository it refers to the same reference test camera, not a separately validated model. Existing `h4_*` compatibility module names are retained for now.
 
-**Development status (2026-11-27):** the DEATTI DL04 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested. A 24-hour soak test is in progress: interim cycle 969, four new SMTP acceptances and four relay openings, three transient cloud failures automatically recovered. Full soak/restart acceptance, sustained outages, actual SMTP/SD failure recovery and production deployment remain pending. Do not treat this version as an unattended production release.
+**Development status (2026-11-27):** the DEATTI DL04 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested. The reference-server soak run reached 1,529 cycles; six new SMTP acceptances and six relay openings were reported in the latest cumulative counters, all six messages were confirmed received by the owner, and three transient cloud failures recovered automatically. The process restart completed 3/3 cycles without error, relay or resend; the queue remained at ten sent events. Sustained outages, actual SMTP/SD failure recovery and production deployment remain pending. Do not treat this version as an unattended production release.
 
 ## Current status / Aktueller Stand
 
@@ -185,7 +185,7 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Continuous service with independent cloud, camera and delivery failure handling; configuration for intervals and retention.
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.
 - [ ] Test wake after extended idle, event reliability, mobile data use, pagination and service entitlement.
-- [ ] Multi-day live test of the DEATTI DL04 on the existing Ubuntu server.
+- [x] Nominal 24-hour soak run (1,529 cycles), recipient confirmation and three-cycle process restart test on the existing Ubuntu reference server; longer field validation remains open.
 - [ ] Restructure the repository for production/test separation and use English consistently throughout the maintained project, including documentation, code, configuration comments, CLI help, logs, tests and deployment files; see [repository layout and language policy](docs/REPOSITORY_LAYOUT.md).
 - [ ] Native unprivileged Debian 13 LXC, systemd autostart and actual reboot test.
 - [ ] Final Revierwelt delivery test with one original per message.
@@ -217,4 +217,4 @@ Optional [retention] enabled=false, days=30 (1–3650). Age is measured from con
 
 Repository packaging and production/test separation are planned for the LXC transition; see [repository layout](docs/REPOSITORY_LAYOUT.md).
 
-The 24-hour reference-server soak test is in progress with the existing test database, private SMTP and cleanup disabled. See [SERVICE.md](docs/SERVICE.md#24-hour-reference-server-soak-test-l1) for the procedure and [interim results](docs/SERVICE.md#l1-interim-results-2026-11-27). The camera is USB-powered; battery life and SIM data consumption require a separate field test. Production packaging and LXC remain deferred.
+The reference-server soak and process restart runs are complete with the existing test database, private SMTP and cleanup disabled. See [final results](docs/SERVICE.md#l1-and-l2-final-results-2026-11-27). All six new L1 messages were confirmed received. The camera is USB-powered; battery life and SIM data consumption require a separate field test. Next: safe diagnostic improvements and repository restructuring on the development server, followed by versioned packaging and LXC validation. Resolve SDK licensing before public production distribution.

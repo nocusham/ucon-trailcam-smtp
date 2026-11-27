@@ -2,13 +2,15 @@
 
 This records development milestones, not a published production release.
 
-## Unreleased — 2026-11-26
+## Unreleased — 2026-11-27
 
 ### Reference camera identification (documentation correction)
 
 - The owner confirmed DEATTI as the manufacturer and DL04 as the model designation printed on the camera and retail box on 2026-11-26. The earlier `H4` label in the development history refers to this same reference camera; its origin is not established. It must not be presented as a confirmed manufacturer model or hardware designation. No runtime changes or new compatibility claims.
 
 ### Validated on the reference DEATTI DL04 / Ubuntu test server
+
+- 2026-11-27 L1/L2 completion: L1 reached 1,529 cycles (approximately 25.5 hours at nominal cadence; exact elapsed time not independently measured). Latest cumulative L1 counters: six relay openings, six SMTP acceptances, ten sent events total and three previously documented recovered cloud failures. The owner confirmed all six new messages arrived. L2 completed three cycles with zero failures, relay openings or sends; final queue remained sent=10. Cursor continuity and telemetry refresh observed. Outage-time photo completeness and sustained failure recovery remain unverified. See SERVICE.md for evidence limits. Documentation only.
 
 - 2026-11-27 L1 interim: cycle 969 (approximately 16.1 hours at nominal cadence), four relay openings and four new SMTP acceptances, eight sent queue entries total and no other states. Three isolated cloud failures (cycles 99, 188, 219) each recovered after one skipped polling cycle, with catch-up windows of 480 seconds followed by normal 360-second windows. Retry state returned to zero. USB-powered camera, no battery-life claim. Root causes, outage-time photo completeness and full soak/restart acceptance remain unverified. See SERVICE.md. Documentation only.
 

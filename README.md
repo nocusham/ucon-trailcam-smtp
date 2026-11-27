@@ -4,14 +4,14 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 
 **Reference camera: DEATTI DL04.** Manufacturer and model designation confirmed by the owner on both the camera and its retail box on 2026-11-26. Earlier development notes use the label `H4`; its origin and status as a vendor or internal hardware designation are unverified. In this repository it refers to the same reference test camera, not a separately validated model. Existing `h4_*` compatibility module names are retained for now.
 
-**Development status (2026-11-26):** the DEATTI DL04 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested, including a bounded ten-cycle integrated service run. Actual failure recovery, longer-duration operation and production deployment still require validation. Do not treat this version as an unattended production release.
+**Development status (2026-11-27):** the DEATTI DL04 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested. A 24-hour soak test is in progress: interim cycle 969, four new SMTP acceptances and four relay openings, three transient cloud failures automatically recovered. Full soak/restart acceptance, sustained outages, actual SMTP/SD failure recovery and production deployment remain pending. Do not treat this version as an unattended production release.
 
 ## Current status / Aktueller Stand
 
 | Component | Status |
 | --- | --- |
 | Python / SDK | Python 3.14.4 on Ubuntu test server; SDK 0.1.16 pinned |
-| Unit tests | 108 passed on the configured test server |
+| Unit tests | 175 passed on the configured test server |
 | Ucon cloud event query | Live confirmed, no client-initiated P4P session |
 | Cloud watch | 6/6 successful polls with one login; new event and duplicate detection confirmed |
 | Camera selection | Exact UID from enabled local camera profile; live cloud query and relay credential discovery confirmed |
@@ -217,4 +217,4 @@ Optional [retention] enabled=false, days=30 (1–3650). Age is measured from con
 
 Repository packaging and production/test separation are planned for the LXC transition; see [repository layout](docs/REPOSITORY_LAYOUT.md).
 
-The next milestone is a 24-hour reference-server soak test with the existing test database, private SMTP and cleanup disabled. See [SERVICE.md](docs/SERVICE.md#24-hour-reference-server-soak-test-l1) for the procedure. Production packaging and LXC remain deferred.
+The 24-hour reference-server soak test is in progress with the existing test database, private SMTP and cleanup disabled. See [SERVICE.md](docs/SERVICE.md#24-hour-reference-server-soak-test-l1) for the procedure and [interim results](docs/SERVICE.md#l1-interim-results-2026-11-27). The camera is USB-powered; battery life and SIM data consumption require a separate field test. Production packaging and LXC remain deferred.

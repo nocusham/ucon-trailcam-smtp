@@ -33,7 +33,7 @@ The next subject-format test uses `camera_smtp.py --preview-sent` against the sa
 
 ## Remaining limitations
 
-The nine new core tests and 28 existing alarm/intake/telemetry tests passed in the development container. The service entrypoint was syntax-checked. The normal integrated SDK and SMTP path and full suite are now live-confirmed. Bounded continuous operation is live-confirmed; long-duration operation, actual failure cases and automatic alarm delivery for a real incident remain unverified. SDK and KCP are not installed in the development container. No LXC/Revierwelt validation yet. Photo-event inactivity fallback stays observation-only in service dispatch until cloud completeness is verified. Other camera models, long-gap retention, pagination, protocol/MD5 retry classification, repeated incident freshness, multi-camera cloud isolation, bounded retention and systemd deployment remain open. Do not run unattended production before further validation.
+The nine new core tests and 28 existing alarm/intake/telemetry tests passed in the development container. The service entrypoint was syntax-checked. The normal integrated SDK and SMTP path and full suite are now live-confirmed. Bounded continuous operation and short transient cloud-failure recovery are live-confirmed; the longer soak test is in progress. Sustained outages, actual SMTP/SD failure recovery and automatic alarm delivery for a real incident remain unverified. SDK and KCP are not installed in the development container. No LXC/Revierwelt validation yet. Photo-event inactivity fallback stays observation-only in service dispatch until cloud completeness is verified. Other camera models, long-gap retention, pagination, protocol/MD5 retry classification, repeated incident freshness, multi-camera cloud isolation, bounded retention and systemd deployment remain open. Do not run unattended production before further validation.
 
 ## SMTP retry safety
 
@@ -55,6 +55,43 @@ python -u trailcam_service.py --config config.local.toml --queue-db data/events-
 ```
 
 Detach the terminal multiplexer without stopping the worker. After approximately 24 hours (optionally extend to 48), stop with Ctrl+C during an idle period, not during SMTP or relay transfer. Read-only SQLite queries may run in another terminal: state counts, cursor timestamps and allowlisted telemetry, acceptance receipt count. Check inbox for one message per new photo, no replay of old photos, idle cycles without relay, timely cursor progress, no unresolved uncertain outcomes or unexpected alarms, and disk usage. A transient error followed by successful recovery is not necessarily a failed soak test. Compare logs and queue status; do not share unredacted configuration, raw captures or private identifiers. After stopping, run one more cycle against the same queue to confirm restart behavior. Do not delete, migrate or reset this queue for production. Successful SMTP acceptance is not proof of inbox delivery; check the recipient. The soak test cannot establish camera battery life or SIM billing. Only after evaluating results proceed with repository packaging and LXC setup.
+
+## L1 interim results (2026-11-27)
+
+Status: in progress, not a completed soak-test acceptance. The owner reported cycle 969 at a nominal 60-second interval (approximately 16.1 hours, not a measured wall-clock duration). Runtime code remains unchanged during the test. The DEATTI DL04 is connected to a USB power supply; the reported 100% battery level is not evidence of low battery consumption.
+
+| Observation | Interim result |
+| --- | --- |
+| Queue state | 8 sent events total; no pending, downloaded or uncertain rows in the reported state-count query |
+| New image deliveries during L1 | 4 SMTP acceptance log entries |
+| Camera connections during L1 | 4 relay-opening log entries |
+| Last shown original | 5120 x 2880 JPEG, 257,095 bytes, 8.0-second relay; SMTP accepted, correct local capture-time subject |
+| Cloud failures | 3 observed, each followed by automatic recovery |
+| Persistent cloud retry state | failures=0, next_due=0 |
+| Telemetry | battery=100, signal=2, online_state=2; status-code semantics remain unverified |
+| Local disk usage | data directory 448 KiB; managed image directory approximately 2.1 MiB (reported du -sh values, cumulative test data) |
+
+The reported queue totals include four previously sent events. Four relay openings and four single-image SMTP acceptances during L1 are consistent with the intended event-driven operation. The provided log excerpts show no additional relay in idle or failed/deferred cloud cycles. These aggregate counts do not independently prove inbox receipt, exact event completeness or a complete absence of duplicates. The reported telemetry snapshot predates the latest shown photo; assess freshness at the end of L1 rather than interpreting the old activity timestamp as a proven camera fault.
+
+### First live transient cloud-failure recovery
+
+Three distinct naturally occurring failure episodes were observed in the supplied log excerpts:
+
+| Episode | Last successful cycle | Failure | Backoff (no request) | Successful retry | Normal polling |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 98 | 99 | 100 | 101 | 102 |
+| 2 | 187 | 188 | 189 | 190 | 191 |
+| 3 | 218 | 219 | 220 | 221 | 222 |
+
+Each failure retained retry state and deferred camera downloads. The next cycle performed no cloud request. The subsequent cycle succeeded, with the event-query window expanded from 360 to 480 seconds (300 seconds of overlap plus 180 seconds since the previous successful cursor). Normal 360-second windows resumed on the following cycle. No relay was opened and no alarm was dispatched in the shown failure/backoff/recovery cycles. The observed recovery interval was approximately two minutes at the configured cadence. A subsequent read-only SQLite query showed failures=0 and next_due=0; rendering the latter as a Unix timestamp produces 1970-01-01 and is expected.
+
+This is live evidence of short cloud-failure detection, persistent retry/backoff, catch-up window expansion, successful automatic recovery and retry-state reset. The actual cause (HTTP, API, transport or another error) is unknown because the current logging suppresses details. No new photo was reported in these recovery windows, so retrieval of a photo captured during an outage remains unverified. Longer outages, actual SMTP and SD transfer failures, and automatic alarm delivery for a sustained incident remain open.
+
+### Follow-up after L1
+
+- Complete the 24–48 hour run and restart test using the same test queue; compare final log counters, queue state, actual recipient inbox, cursor and telemetry freshness.
+- Improve production diagnostics with allowlisted stage/error category, numeric HTTP status and numeric API error code where available; never print tokens, signed URLs, credentials, raw responses or private identifiers. Do not change runtime logging mid-test.
+- Separately plan an unplugged battery/SIMbase data-usage trial (suggested at least seven days) under representative PIR activity, with a comparable normal-app baseline. Log photo and relay counts, battery trend and actual provider-reported data volume. The USB-powered L1 test cannot establish battery life or mobile-data savings.
 
 ## Deferred image footer
 

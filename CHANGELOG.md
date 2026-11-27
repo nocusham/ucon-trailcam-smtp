@@ -10,6 +10,8 @@ This records development milestones, not a published production release.
 
 ### Validated on the reference DEATTI DL04 / Ubuntu test server
 
+- 2026-11-27 L1 interim: cycle 969 (approximately 16.1 hours at nominal cadence), four relay openings and four new SMTP acceptances, eight sent queue entries total and no other states. Three isolated cloud failures (cycles 99, 188, 219) each recovered after one skipped polling cycle, with catch-up windows of 480 seconds followed by normal 360-second windows. Retry state returned to zero. USB-powered camera, no battery-life claim. Root causes, outage-time photo completeness and full soak/restart acceptance remain unverified. See SERVICE.md. Documentation only.
+
 - 175 tests passed; retention preview reported zero eligible originals, no file changes. Actual old-file deletion remains synthetic-test validated only. Documented 24-hour reference-server soak procedure before repository packaging/LXC transition.
 
 - 167 tests passed; normal SMTP path after retry refinement live validated (4/4 cycles, one original and SMTP acceptance with configured camera alias and local capture-time subject, three idle cycles without relay, no alarms). Actual transport faults were simulated only.

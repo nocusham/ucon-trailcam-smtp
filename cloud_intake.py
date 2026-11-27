@@ -150,7 +150,7 @@ class Intake:
 async def run(args):
     import httpx
     from camera_smtp import load_profiles
-    from cloud_probe import ApiError, discover_devices, list_cloud_events, list_devices
+    from cloud_api import ApiError, discover_devices, list_cloud_events, list_devices
     from event_queue import open_queue, ingest_events
     from queue_download import batch_lock
     from ucon_auth import read_credentials

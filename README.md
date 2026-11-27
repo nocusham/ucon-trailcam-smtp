@@ -221,4 +221,4 @@ The reference-server soak and process restart runs are complete with the existin
 
 ## Repository restructuring (development branch)
 
-Phase 1 separates synthetic tests from runtime modules and extracts shared mail functions. From the repository root run `python -m unittest discover -s tests -t . -v`. Existing service and probe CLI commands remain valid in this phase. See [repository layout](docs/REPOSITORY_LAYOUT.md). Do not update a running reference test checkout or deploy this branch as production.
+Phases 1 and 2 separate synthetic tests from runtime modules and extract shared mail and cloud REST functions (`mail_message.py`, `cloud_api.py`). The remaining P4P adapter extraction is phase 3. From the repository root run `python -m unittest discover -s tests -t . -v`. Existing service and probe CLI commands remain valid in this phase. See [repository layout](docs/REPOSITORY_LAYOUT.md). Do not update a running reference test checkout or deploy this branch as production.

@@ -9,7 +9,7 @@ import contextlib
 import datetime as dt
 from ucon_auth import read_credentials
 from camera_selection import profile_uid
-from cloud_probe import get_device_by_uid
+from cloud_api import get_device_by_uid
 import io
 import logging
 from collections import Counter

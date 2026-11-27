@@ -10,6 +10,8 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
+- Phase 2: extract the unchanged REST/account-selection functions and ApiError into cloud_api.py. Service and intake no longer depend on the cloud diagnostic entrypoint, which retains its CLI and helper exports. Six new mocked tests passed locally with a synthetic SDK interface; full 194-test suite with the installed SDK remains pending. No protocol, configuration, database or retry behavior changes.
+
 - Phase 1: move test modules to `tests/`; extract shared mail construction and sending wrapper from the SMTP probe. Preserve the existing runtime CLI, config/secret discovery and delivery behavior. 29 targeted tests passed locally under umask 002 with both discovery commands; full relocated test suite pending. No production release or merge during L3.
 - Reference server D1: 188/188 tests passed with umask 0002; D2: three successful idle cycles. Owner reported six new images sent when installing the camera for L3. L3 is an ongoing unplugged outdoor test, with the supplied solar panel intentionally omitted; battery endurance and data usage are not yet established.
 

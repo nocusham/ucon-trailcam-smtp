@@ -1,5 +1,6 @@
 """One sequential service cycle; callbacks isolate network and local operations."""
 import sqlite3
+from safe_diagnostics import error_fields
 
 
 async def run_cycle(profiles, *, cloud, devices, download, deliver, alerts,
@@ -16,7 +17,7 @@ async def run_cycle(profiles, *, cloud, devices, download, deliver, alerts,
     except sqlite3.Error:
         raise
     except Exception as exc:
-        emit(f'Cloud cycle stopped ({type(exc).__name__}); details suppressed.')
+        emit(f'Cloud cycle stopped; stage=cloud_cycle {error_fields(exc)}.')
         status = 'error'
     failed |= status != 'ok'
     if download_enabled and status == 'ok':
@@ -26,7 +27,7 @@ async def run_cycle(profiles, *, cloud, devices, download, deliver, alerts,
             except sqlite3.Error:
                 raise
             except Exception as exc:
-                emit(f'Camera {p.name}: download stopped ({type(exc).__name__}); details suppressed.')
+                emit(f'Camera {p.name}: download stopped; stage=download {error_fields(exc)}.')
                 failed = True
     elif download_enabled:
         emit('Cloud not ready; defer all camera downloads.')
@@ -36,13 +37,13 @@ async def run_cycle(profiles, *, cloud, devices, download, deliver, alerts,
         except sqlite3.Error:
             raise
         except Exception as exc:
-            emit(f'Camera {p.name}: delivery stopped ({type(exc).__name__}); details suppressed.')
+            emit(f'Camera {p.name}: delivery stopped; stage=delivery {error_fields(exc)}.')
             failed = True
     try:
         failed |= bool(alerts(status))
     except sqlite3.Error:
         raise
     except Exception as exc:
-        emit(f'Alarm dispatch stopped ({type(exc).__name__}); details suppressed.')
+        emit(f'Alarm dispatch stopped; stage=alarm_dispatch {error_fields(exc)}.')
         failed = True
     return int(failed)

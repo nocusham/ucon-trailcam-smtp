@@ -117,6 +117,22 @@ Assessment: the reference-server operational soak, recipient delivery and normal
 
 Next engineering stage: improve sanitized diagnostics, then restructure into a single English-language runtime with clearly separated tests, tools, configuration and deployment files. Preserve verified original-download and duplicate-prevention behavior; isolate the SDK boundary so that a later licensed replacement is feasible without copying unlicensed implementation. Resolve SDK-wide licensing before public production distribution; do not bundle the SDK while its terms remain unclear. Keep production deployment and Revierwelt validation deferred until reference-server refactoring and packaging checks are complete. No test state migration to production.
 
+## Sanitized service diagnostics (post-L1/L2)
+
+The service now reports allowlisted error categories and phases rather than raw exception messages. Cloud failures include the stage (login, device_discovery, cloud_event_list), category (for example read_timeout, connect_error, invalid_json, invalid_schema, camera_selection, metadata_rejected, http_status or api_code), validated numeric HTTP/API codes where available, consecutive failures, scheduled delay or manual_resume_required, and the UTC cycle timestamp. A successful cycle after persisted failures reports recovery and clears retry state as before. The timestamp and retry delay are based on the existing cycle time, not an exact network-error timestamp. Example lines below are synthetic, not a diagnosis of the three L1 errors.
+
+```text
+Cloud check failed; stage=cloud_event_list category=http_status http_status=503 failures=1 retry_in=120s utc=2026-01-01T00:00:00+00:00; cursor retained.
+Cloud retry not due; no cloud requests.
+Cloud recovered; previous_failures=1 utc=2026-01-01T00:02:00+00:00; retry state cleared.
+SMTP setup failed before submission; stage=auth category=smtp_auth smtp_status=535; state=downloaded; retry in 300s.
+SMTP outcome uncertain; stage=submission category=smtp_response smtp_status=451; stopped. Check inbox before manual resolution.
+```
+
+SMTP setup diagnostics distinguish TLS context creation, connection, EHLO, STARTTLS and authentication. SMTP reply text is never logged. An exception after entering send_message is still uncertain (including explicit SMTP errors); no automatic resend is enabled. The receipt-commit failure is separate. Alarm SMTP failures, download retry reasons (relay_timeout, missing, ambiguous, download_timeout), generic service exceptions and retention skips also emit bounded diagnostic categories. Download integrity/format errors may still be reported as invalid_value or unexpected; no change to failure classification for scheduling. Unknown exceptions are not printed verbatim. Existing configured camera aliases, subjects, event timestamps and sizes are still logged; keep logs private and redact before sharing. No raw API response, signed URL, account, password, token, recipient address, device UID, filesystem path from exceptions, traceback or exception message is added by these changes. Numeric codes are bounded and arbitrary strings are not interpolated into the new fields. HTTP/SMTP/SDK verbose logging is not enabled.
+
+No schema/configuration change, additional network request, retry timing change, alarm policy change or delivery-state change. The six standalone diagnostic tests passed in the development container with HTTP/SMTP mocks. Four additional cloud integration tests are included; full reference-server suite (expected 185 tests if discovery is unchanged) and normal-service smoke test remain to be run. The three historical L1 failures cannot be retrospectively classified using the old logs.
+
 ## Deferred image footer
 
 After completion of the existing milestones, an optional per-camera post-download/pre-SMTP transformation will append a dedicated metadata strip below the entire image. It will not overwrite any part of the photograph or change the stored original. With the option disabled, the current exact-original attachment contract remains unchanged. See [IMAGE_FOOTER.md](IMAGE_FOOTER.md). The feature remains deferred; no runtime or configuration changes were made for it during L1/L2.

@@ -14,6 +14,7 @@ from camera_telemetry import init_telemetry, record_snapshot, fresh_scopes
 from download_retry import init_retry, parse_retry, reserve, record_failure, sync_download_health
 from health_alerts import load_alerts, dispatch_due, due_notices, smtp_sender
 from service_cycle import run_cycle
+from safe_diagnostics import allowed, error_fields
 from service_download import plan_download
 from media_retention import parse_retention, cleanup
 
@@ -41,6 +42,8 @@ def download_one(db, args, profile, devices, policy, settings):
     reserve(db, uid, ids, int(time.time()), policy)
     def failed(ident, reason):
         record_failure(db, uid, ident, int(time.time()), reason, policy)
+        safe_reason = allowed(reason, ('relay_timeout', 'missing', 'ambiguous', 'download_timeout'))
+        print(f'Camera {profile.name}: original retry scheduled; reason={safe_reason}.')
     listing = True
     print(f'Camera {profile.name}: due={len(ids)}; opening one relay.')
     try:
@@ -56,7 +59,7 @@ def download_one(db, args, profile, devices, policy, settings):
         if listing:
             for ident in ids:
                 failed(ident, 'relay_timeout')
-        print(f'Camera {profile.name}: confirmed remote timeout; retry scheduled.')
+        print(f'Camera {profile.name}: confirmed remote timeout; stage={"relay_or_list" if listing else "file_transfer"}; retry scheduled.')
         return 1
     finally:
         sync_download_health(db, uid, int(time.time()), threshold)
@@ -142,7 +145,7 @@ async def run(args):
                         _, _, skipped = cleanup(db, args.output_dir, retention, int(time.time()), apply=True)
                         failed += int(bool(skipped))
                     except (OSError, ValueError) as exc:
-                        print(f'Retention stopped ({type(exc).__name__}); details suppressed.')
+                        print(f'Retention stopped; stage=retention {error_fields(exc)}.')
                         failed += 1
                     next_cleanup = time.monotonic() + 3600
                 if args.loop or cycle < args.cycles:
@@ -175,7 +178,7 @@ def main():
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
-        print(f'Service stopped ({type(exc).__name__}); details suppressed.')
+        print(f'Service stopped; {error_fields(exc)}.')
         return 1
 
 

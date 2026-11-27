@@ -10,6 +10,7 @@ import time
 from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from pathlib import Path
+from safe_diagnostics import error_fields
 
 
 @dataclass(frozen=True)
@@ -121,7 +122,8 @@ def cleanup(db, root, policy, now, *, apply=False, emit=print):
                 break
             try:
                 size = inspect_original(db, root, root_fd, row, apply=apply, now=now)
-            except (OSError, ValueError, TypeError):
+            except (OSError, ValueError, TypeError) as exc:
+                emit(f'Retention candidate skipped; {error_fields(exc)}.')
                 skipped += 1
                 continue
             count += 1
@@ -147,7 +149,7 @@ def main():
             _, _, skipped = cleanup(db, args.output_dir, policy, int(time.time()), apply=args.apply)
         return int(bool(skipped))
     except (Exception, KeyboardInterrupt) as exc:
-        print(f'Retention stopped ({type(exc).__name__}); details suppressed.')
+        print(f'Retention stopped; {error_fields(exc)}.')
         return 1
 
 

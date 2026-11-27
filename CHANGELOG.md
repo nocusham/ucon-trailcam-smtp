@@ -8,6 +8,10 @@ This records development milestones, not a published production release.
 
 - The owner confirmed DEATTI as the manufacturer and DL04 as the model designation printed on the camera and retail box on 2026-11-26. The earlier `H4` label in the development history refers to this same reference camera; its origin is not established. It must not be presented as a confirmed manufacturer model or hardware designation. No runtime changes or new compatibility claims.
 
+### Sanitized diagnostics (post-soak development)
+
+- Added allowlisted cloud failure stages/categories, bounded HTTP/API codes, retry delays and UTC recovery messages; SMTP setup stages and numeric status, conservative uncertain-delivery diagnostics, original retry reasons, alarm/service/retention error categories. No raw exception messages or new network operations. Retry and delivery semantics unchanged. Six standalone diagnostic tests passed locally; four new cloud integration tests and full server suite pending. No retrospective cause assigned to L1 failures.
+
 ### Validated on the reference DEATTI DL04 / Ubuntu test server
 
 - 2026-11-27 L1/L2 completion: L1 reached 1,529 cycles (approximately 25.5 hours at nominal cadence; exact elapsed time not independently measured). Latest cumulative L1 counters: six relay openings, six SMTP acceptances, ten sent events total and three previously documented recovered cloud failures. The owner confirmed all six new messages arrived. L2 completed three cycles with zero failures, relay openings or sends; final queue remained sent=10. Cursor continuity and telemetry refresh observed. Outage-time photo completeness and sustained failure recovery remain unverified. See SERVICE.md for evidence limits. Documentation only.

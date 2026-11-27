@@ -1,11 +1,13 @@
 """Bounded persistent cloud intake; deliberately no P4P or SMTP operations."""
 import argparse
 import asyncio
+import datetime as dt
 import time
 from contextlib import closing
 from pathlib import Path
 
 from health_alerts import init_health, observe
+from safe_diagnostics import cloud_fields, error_fields
 from camera_telemetry import REFRESH_SECONDS, init_telemetry, record_snapshot
 
 
@@ -70,13 +72,14 @@ class Intake:
         delay = min(900, self.interval * 2 ** min(failures + 1, 4))
         with self.db:
             self.db.execute('UPDATE cloud_runtime SET failures=?,next_due=? WHERE id=1', (failures + 1, now + delay))
+        return failures + 1, delay
 
     async def cycle(self, now):
         db = self.db
         if login_blocked(db):
             self.emit('Login blocked (20005); correct credentials and explicitly resume. No cloud requests.')
             return 'blocked'
-        due, = db.execute('SELECT next_due FROM cloud_runtime WHERE id=1').fetchone()
+        prior_failures, due = db.execute('SELECT failures,next_due FROM cloud_runtime WHERE id=1').fetchone()
         if now < due:
             self.emit('Cloud retry not due; no cloud requests.')
             return 'deferred'
@@ -94,10 +97,10 @@ class Intake:
                 self.session = (headers, devices)
                 fresh_devices = True
             if not isinstance(devices, list):
-                raise self.api_error('device discovery: invalid list', stage='device discovery')
+                raise self.api_error('device discovery: invalid list', stage='device discovery', diagnostic_kind='invalid_schema')
             for uid in self.uids:
                 if sum(isinstance(d, dict) and d.get('device_uid') == uid for d in devices) != 1:
-                    raise self.api_error('Configured camera missing or ambiguous', stage='device discovery')
+                    raise self.api_error('Configured camera missing or ambiguous', stage='device discovery', diagnostic_kind='camera_selection')
                 begin, end = window(db, uid, now)
                 if end <= begin:
                     self.emit('Cloud intake baseline initialized; no elapsed interval yet.')
@@ -106,7 +109,7 @@ class Intake:
                 items = photo_items(result['items'], uid, begin, end)
                 added, known, rejected, pending = self.store(uid, items)
                 if rejected:
-                    raise self.api_error('Cloud photo metadata rejected; cursor retained', stage='cloud event list')
+                    raise self.api_error('Cloud photo metadata rejected; cursor retained', stage='cloud event list', diagnostic_kind='metadata_rejected')
                 # Store commits first. If interrupted before cursor commit, overlap/dedup replay is safe.
                 with db:
                     db.execute('UPDATE cloud_cursors SET last_end=? WHERE camera_uid=?', (end, uid))
@@ -125,9 +128,12 @@ class Intake:
                 observe(db, 'api', 'ucon', healthy=False, now=now, code=code)
             if getattr(exc, 'http_status', None) in (401, 403):
                 self.session = None
-            self.backoff(now)
-            self.emit('Cloud check failed; retry state retained. Details suppressed.')
-            return 'blocked' if login_blocked(db) else 'error'
+            failures, delay = self.backoff(now)
+            blocked = login_blocked(db)
+            stamp = dt.datetime.fromtimestamp(now, dt.timezone.utc).isoformat()
+            action = 'manual_resume_required' if blocked else f'retry_in={delay}s'
+            self.emit(f'Cloud check failed; {cloud_fields(exc)} failures={failures} {action} utc={stamp}; cursor retained.')
+            return 'blocked' if blocked else 'error'
         if fresh_devices:
             if self.on_devices is not None:
                 self.on_devices(devices, now, covered)
@@ -135,6 +141,9 @@ class Intake:
         observe(db, 'api', 'ucon', healthy=True, now=now)
         with db:
             db.execute('UPDATE cloud_runtime SET failures=0,next_due=0 WHERE id=1')
+        if prior_failures:
+            stamp = dt.datetime.fromtimestamp(now, dt.timezone.utc).isoformat()
+            self.emit(f'Cloud recovered; previous_failures={prior_failures} utc={stamp}; retry state cleared.')
         return 'ok'
 
 
@@ -203,7 +212,7 @@ def main():
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
-        print(f'Cloud intake stopped ({type(exc).__name__}); details suppressed.')
+        print(f'Cloud intake stopped; {error_fields(exc)}.')
         return 1
 
 

@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from queue_smtp import DeliveryError, ready_rows, process, validate_destination
 from local_credentials import read_secret_values
+from safe_diagnostics import error_fields
 
 
 @dataclass(frozen=True)
@@ -159,7 +160,7 @@ def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=Fa
                            sender=p.sender, recipient=p.recipient, mode=p.mode,
                            send=send if send_enabled else None, route=p.route(), emit=emit)
         except Exception as exc:
-            emit(f'Camera {p.name}: failed ({type(exc).__name__}); details suppressed')
+            emit(f'Camera {p.name}: failed; stage=delivery_prepare_or_commit {error_fields(exc)}')
             failed = True
         else:
             # Stop the invocation on uncertain SMTP outcome (including Ctrl+C).
@@ -198,7 +199,7 @@ def main():
                                send_enabled=args.send, load_image=load_image,
                                build_message=build_message, send_message=send_message)
     except (Exception, KeyboardInterrupt) as exc:
-        print(f'Camera SMTP stopped: {type(exc).__name__}; details suppressed. Check configuration and queue.')
+        print(f'Camera SMTP stopped; {error_fields(exc)}. Check configuration and queue.')
         return 1
 
 

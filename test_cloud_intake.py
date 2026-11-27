@@ -8,9 +8,10 @@ from health_alerts import AlertSettings, due_notices
 
 
 class ApiError(Exception):
-    def __init__(self, message, *, stage=None, api_code=None, http_status=None):
+    def __init__(self, message, *, stage=None, api_code=None, http_status=None, diagnostic_kind=None):
         super().__init__(message)
         self.stage, self.api_code, self.http_status = stage, api_code, http_status
+        self.diagnostic_kind = diagnostic_kind
 
 
 class IntakeTests(unittest.IsolatedAsyncioTestCase):
@@ -90,6 +91,30 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.worker.cycle(1239), 'deferred')
         self.assertEqual(await self.worker.cycle(1240), 'ok')
         self.assertEqual(self.calls[-1], ('a', 1000, 1240))
+
+    async def test_safe_failure_and_recovery_diagnostics(self):
+        lines = []
+        self.worker.emit = lines.append
+        await self.worker.cycle(1060)
+        self.api_error = ApiError('private token', stage='cloud event list', http_status=503)
+        self.assertEqual(await self.worker.cycle(1120), 'error')
+        self.assertIn('stage=cloud_event_list category=http_status http_status=503 failures=1 retry_in=120s', lines[-1])
+        self.assertNotIn('private', lines[-1])
+        self.assertEqual(await self.worker.cycle(1180), 'deferred')
+        self.api_error = None
+        self.assertEqual(await self.worker.cycle(1240), 'ok')
+        self.assertIn('Cloud recovered; previous_failures=1', lines[-1])
+        self.assertEqual(self.db.execute('SELECT failures,next_due FROM cloud_runtime').fetchone(), (0, 0))
+
+    async def test_blocked_diagnostics_do_not_suggest_automatic_retry(self):
+        lines = []
+        self.worker.emit = lines.append
+        self.login_error = ApiError('secret password', stage='login', api_code=20005)
+        self.assertEqual(await self.worker.cycle(1000), 'blocked')
+        self.assertIn('stage=login category=api_code api_code=20005', lines[-1])
+        self.assertIn('manual_resume_required', lines[-1])
+        self.assertNotIn('retry_in=', lines[-1])
+        self.assertNotIn('secret', lines[-1])
 
     async def test_wrong_password_block_persists_and_alarm_matures(self):
         self.login_error = ApiError('rejected', stage='login', api_code=20005)

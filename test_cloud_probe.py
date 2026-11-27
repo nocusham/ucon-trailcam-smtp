@@ -34,6 +34,25 @@ class CloudProbeTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ApiError, '^login: HTTP 403$'):
                 await query_events(client, 'test@example.invalid', 'secret', 0, 1, 2)
 
+    async def test_transport_failure_has_safe_category(self):
+        from safe_diagnostics import cloud_fields
+        def respond(request):
+            raise httpx.ReadTimeout('private URL?token=secret', request=request)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            with self.assertRaises(ApiError) as caught:
+                await query_events(client, 'test@example.invalid', 'secret', 0, 1, 2)
+        self.assertEqual(cloud_fields(caught.exception), 'stage=login category=read_timeout')
+        self.assertNotIn('secret', str(caught.exception))
+
+    async def test_invalid_json_has_safe_category(self):
+        from safe_diagnostics import cloud_fields
+        async with httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, text='private response'))) as client:
+            with self.assertRaises(ApiError) as caught:
+                await query_events(client, 'test@example.invalid', 'secret', 0, 1, 2)
+        self.assertEqual(cloud_fields(caught.exception), 'stage=login category=invalid_json')
+        self.assertNotIn('private', str(caught.exception))
+
     async def test_wrong_password_structured_error(self):
         async with httpx.AsyncClient(transport=httpx.MockTransport(
                 lambda _: httpx.Response(200, json={'code': 20005, 'data': {'private': 'synthetic'}}))) as client:

@@ -11,7 +11,8 @@ from email.utils import getaddresses
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from mail_subject import camera_subject
-from smtp_transport import SafeSMTPFailure
+from smtp_transport import SafeSMTPFailure, smtp_failure_fields
+from safe_diagnostics import error_fields
 from smtp_retry import retry_due, rollback_unsent, clear_retry
 
 
@@ -164,17 +165,17 @@ def process(db, rows, *, load_image, build_message, sender, recipient, send=None
         begin_delivery(db, group, str(msg['Message-ID']), route)
         try:
             send(msg)
-        except SafeSMTPFailure:
+        except SafeSMTPFailure as exc:
             delay = rollback_unsent(db, group, str(msg['Message-ID']), int(time.time()))
-            emit(f'SMTP setup failed before submission; state=downloaded; retry in {delay}s.')
+            emit(f'SMTP setup failed before submission; {smtp_failure_fields(exc)}; state=downloaded; retry in {delay}s.')
             return 1
         except (Exception, KeyboardInterrupt) as exc:
-            emit(f'SMTP outcome uncertain ({type(exc).__name__}); stopped. Check inbox before manual resolution.')
+            emit(f'SMTP outcome uncertain; stage=submission {smtp_failure_fields(exc)}; stopped. Check inbox before manual resolution.')
             return 1
         try:
             finish_delivery(db, group)
         except (Exception, KeyboardInterrupt) as exc:
-            emit(f'SMTP acceptance not committed ({type(exc).__name__}); stopped. Check inbox before manual resolution.')
+            emit(f'SMTP acceptance not committed; stage=receipt_commit {error_fields(exc)}; stopped. Check inbox before manual resolution.')
             return 1
         clear_retry(db, group[0][0])
         completed += len(group)
@@ -235,7 +236,7 @@ def main():
             return process(db, rows, load_image=load_image, build_message=build_message,
                            sender=sender, recipient=recipient, send=send, mode=args.mode)
     except (Exception, KeyboardInterrupt) as exc:
-        print(f'Queue SMTP stopped: {type(exc).__name__}. Details suppressed; check queue state.')
+        print(f'Queue SMTP stopped; {error_fields(exc)}. Check queue state.')
         return 1
 
 

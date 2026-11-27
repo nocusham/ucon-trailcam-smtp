@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 from pathlib import Path
+from smtp_transport import smtp_failure_fields
 
 
 @dataclass(frozen=True)
@@ -209,7 +210,7 @@ def dispatch_due(db, settings, now, cameras, send, *, emit=print, inactivity_sco
             send(build_alert(settings, n))
         except Exception as exc:
             failed += 1
-            emit(f'Alert SMTP failed ({type(exc).__name__}); retry throttled')
+            emit(f'Alert SMTP failed; {smtp_failure_fields(exc)}; retry throttled')
             continue
         with db:
             if n.recovered_at is not None:
@@ -252,7 +253,7 @@ def main():
             print('Configuration valid; no SMTP connection or database changes.')
         return 0
     except (Exception, KeyboardInterrupt) as exc:
-        print(f'Alert test failed ({type(exc).__name__}); details suppressed.')
+        print(f'Alert test failed; {smtp_failure_fields(exc)}.')
         return 1
 
 

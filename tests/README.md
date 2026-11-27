@@ -23,3 +23,5 @@ Phase 4b: runtime now lives in src/ucon_trailcam_smtp/. Tests use qualified impo
 Phase 5a: three offline configuration-template tests check parsing, safe defaults, empty credential values using a temporary private file, and relocation. Full 214-test suite passed at cda3649 in 2.033 s (owner-provided output). No real .env or config.local.toml is read.
 
 Phase 5b changes documentation only; no new test count. The next complete run follows source-language review in phase 5c.
+
+Phase 5c: targeted source-language review identified only intentional localization/fixture exceptions; no new tests or code changes. Run the full 214-test suite at the final phase-5 commit to close the checkpoint. Existing tests continue to verify German mail localization.

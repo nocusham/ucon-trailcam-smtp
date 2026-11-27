@@ -1,6 +1,6 @@
 # Planned repository layout for LXC transition
 
-Status: phases 1 through 5a automated validation passed; phase 5b documentation updated, source-language review and live regression pending on `refactor/repository-layout`, based on the validated `163f46b` runtime. The reference-server cold-weather run (L3) must remain on its current checkout. Do not merge or switch that checkout during L3. Reference-server retention preview, normal SMTP, nominal 24-hour soak (1,529 cycles), recipient receipt of all six new messages and normal process restart (3/3 cycles) are complete within the evidence limits in [SERVICE.md](SERVICE.md#l1-and-l2-final-results-2026-11-27). Improve sanitized diagnostics before restructuring; preserve verified behavior and repeat the full test suite.
+Status: phases 1 through 5a automated validation passed; phases 5b and 5c documentation and source-language review complete, final automated regression and live regression pending on `refactor/repository-layout`, based on the validated `163f46b` runtime. The reference-server cold-weather run (L3) must remain on its current checkout. Do not merge or switch that checkout during L3. Reference-server retention preview, normal SMTP, nominal 24-hour soak (1,529 cycles), recipient receipt of all six new messages and normal process restart (3/3 cycles) are complete within the evidence limits in [SERVICE.md](SERVICE.md#l1-and-l2-final-results-2026-11-27). Improve sanitized diagnostics before restructuring; preserve verified behavior and repeat the full test suite.
 
 ```text
 src/                 installable runtime package
@@ -103,3 +103,16 @@ Phase 5a verification (2026-11-27): the owner reported commit `cda3649`, `Ran 21
 ## Phase 5b: English documentation
 
 Translate the remaining German guides (CREDENTIALS.md, ALERTS.md, IMAGE_FOOTER.md), normalize bilingual headings in README.md and DEVELOPMENT_HISTORY.md, and clarify the current README and deferred LXC status. Preserve recorded measurements, dates, original localized examples (camera aliases, MEZ/MESZ, proposed Akku footer), protocol and configuration names, and historical evidence. The development history describes earlier checkpoints and is not the current installation guide. The current source-checkout setup explicitly selects the restructuring branch and uses relocated templates; the active main/L3 checkout remains unchanged. No runtime, test or dependency changes. Phase 5c reviews source language and tests; run the full suite after that phase. Installed package, live regression, license clarification and deployment remain open.
+
+## Phase 5c: source-language review
+
+Inspect all 89 tracked Python files (37 runtime package files including __init__, 38 test files including __init__, and 14 root/tool files) using a targeted scan for German words and characters; review flagged lines and the associated email construction functions. No remaining German project prose, CLI/log message or identifier requiring translation was identified by this scan. This is a targeted source review, not a formal proof of language completeness. The maintained Markdown file targets were also checked across all 13 Markdown files; no missing relative file targets were found. External URLs and all section anchors were not exhaustively verified.
+
+Intentional localization exceptions retained without changes:
+
+- mail_subject.py: German image-mail subject, Originalbild/Originalbilder, bis and Europe/Berlin capture time with MEZ/MESZ.
+- health_alerts.py build_alert(): existing German alert subject, test mail, incident and recovery message body. These are delivered user-facing emails, not CLI output or service logs.
+- Related tests assert existing localized output. Synthetic metadata containing Reh, example aliases such as testkamera and existing example secret key names are fixtures or user-configurable values, not project-language requirements. Preserve vendor and external protocol names and quoted historical evidence.
+- Planned image footer retains its localized example, including Akku; the feature remains unimplemented.
+
+No source, dependency or test changes in phases 5b/5c. The next reference-server check should run the complete 214-test suite at the final phase-5 commit in the separate worktree. Phase 6 can then prepare deployment and package validation. Future deployment files must follow the English-language policy. SDK license, installed-package verification and live regression remain open; keep main and active L3 untouched.

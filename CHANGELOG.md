@@ -10,6 +10,8 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
+- Phase 5c: inspect all 89 Python files for German-language candidates; retain intentional German image subjects and alert emails, MEZ/MESZ, example aliases and synthetic metadata. No runtime or test changes needed in this targeted language review. Record exceptions and scope; final 214-test regression pending.
+
 - Phase 5b: translate credentials, health-alert and planned image-footer guides into English; normalize mixed-language headings, update current README status and branch-specific setup instructions, and distinguish historical evidence from current validation. Preserve localized subject/footer examples, technical findings and private state. Documentation only; source-language review follows in phase 5c.
 
 - Phase 5a: move public configuration and credential templates into config/, translate comments into English and update setup commands and links. Active template values are unchanged (static comparison passed), including the example alias. Private configuration locations and runtime code are unchanged. Three new offline template checks; reference-server full suite 214/214 passed at cda3649 in 2.033 s (owner-provided output).

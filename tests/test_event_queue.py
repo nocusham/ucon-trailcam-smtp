@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from contextlib import closing
-from event_queue import ingest_events, QueueError
+from ucon_trailcam_smtp.event_queue import ingest_events, QueueError
 
 
 def event(ident='a', stamp=123, uid='own'):

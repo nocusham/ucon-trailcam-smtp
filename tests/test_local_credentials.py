@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from local_credentials import CredentialError, read_secret_values
-from ucon_auth import read_credentials
+from ucon_trailcam_smtp.local_credentials import CredentialError, read_secret_values
+from ucon_trailcam_smtp.ucon_auth import read_credentials
 
 
 class LocalCredentialsTests(unittest.TestCase):
@@ -57,7 +57,7 @@ class LocalCredentialsTests(unittest.TestCase):
             self.assertEqual(read_credentials(interactive=False), ('local@example.invalid', 'local-secret'))
 
     def test_no_prompt_if_noninteractive(self):
-        with patch('ucon_auth.read_secret_values', return_value={}), patch('builtins.input') as prompt:
+        with patch('ucon_trailcam_smtp.ucon_auth.read_secret_values', return_value={}), patch('builtins.input') as prompt:
             with self.assertRaises(ValueError):
                 read_credentials(interactive=False)
             prompt.assert_not_called()

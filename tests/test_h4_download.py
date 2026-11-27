@@ -1,7 +1,7 @@
 import hashlib
 import struct
 import unittest
-from h4_download import bulk_request, PhotoBlocks, native_frames, transfer_size, check_reference, verify_metadata_md5, native_photo_filename
+from ucon_trailcam_smtp.h4_download import bulk_request, PhotoBlocks, native_frames, transfer_size, check_reference, verify_metadata_md5, native_photo_filename
 
 
 class DownloadTests(unittest.TestCase):

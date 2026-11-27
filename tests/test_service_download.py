@@ -1,8 +1,8 @@
 import json
 import sqlite3
 import unittest
-from download_retry import init_retry, reserve, RetryPolicy
-from service_download import plan_download
+from ucon_trailcam_smtp.download_retry import init_retry, reserve, RetryPolicy
+from ucon_trailcam_smtp.service_download import plan_download
 
 
 class PlanTests(unittest.TestCase):

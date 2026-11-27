@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from PIL import Image
 from io import BytesIO
-from queue_download import (batch_lock, load_rows, eligible, check_existing,
+from ucon_trailcam_smtp.queue_download import (batch_lock, load_rows, eligible, check_existing,
                             download_batch)
 
 

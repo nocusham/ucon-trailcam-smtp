@@ -7,8 +7,8 @@ import p4p_camera_sdk.credentials as credentials
 import p4p_camera_sdk.sdcard as sdcard
 import p4p_camera_sdk.sdcard_client as sdcard_client
 
-import sdk_credentials
-import sdk_sdcard
+from ucon_trailcam_smtp import sdk_credentials
+from ucon_trailcam_smtp import sdk_sdcard
 
 
 class SdkBoundaryTests(unittest.TestCase):
@@ -34,11 +34,12 @@ class SdkBoundaryTests(unittest.TestCase):
 
     def test_direct_sdk_imports_are_confined_to_boundaries(self):
         root = Path(__file__).resolve().parents[1]
-        allowed = {'sdk_credentials.py', 'sdk_sdcard.py',
-                   'sdk_relay.py', 'h4_crypto.py'}
+        allowed = {'src/ucon_trailcam_smtp/' + name for name in
+                   ('sdk_credentials.py', 'sdk_sdcard.py', 'sdk_relay.py', 'h4_crypto.py')}
         seen = set()
         unexpected = []
-        for path in sorted([*root.glob('*.py'), *(root / 'tools').rglob('*.py')]):
+        for path in sorted([*root.glob('*.py'), *(root / 'src').rglob('*.py'),
+                            *(root / 'tools').rglob('*.py')]):
             tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
             for node in ast.walk(tree):
                 if isinstance(node, ast.ImportFrom):

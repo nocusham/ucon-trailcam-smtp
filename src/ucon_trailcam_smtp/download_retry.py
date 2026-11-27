@@ -2,7 +2,7 @@
 import json
 from dataclasses import dataclass
 
-from health_alerts import init_health, observe
+from ucon_trailcam_smtp.health_alerts import init_health, observe
 
 
 @dataclass(frozen=True)

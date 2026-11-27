@@ -9,13 +9,13 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def normalized_help(text, tool):
+def normalized_help(text, tool, *, namespace='tools'):
     """Ignore only argparse's generated usage program name and wrapping."""
     usage, separator, body = text.partition('\n\n')
     if not separator:
         raise ValueError('Missing help body')
     usage = ' '.join(usage.split())
-    for prefix in (f'usage: python -m tools.{tool}', f'usage: {tool}.py'):
+    for prefix in (f'usage: python -m {namespace}.{tool}', f'usage: {tool}.py'):
         if usage == prefix or usage.startswith(prefix + ' '):
             return usage[len(prefix):].strip(), body
     raise ValueError(f'Unexpected usage prefix for {tool}')

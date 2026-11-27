@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from event_metadata import FIELDS, event_metadata, select_event, save_metadata, load_metadata, metadata_text
+from ucon_trailcam_smtp.event_metadata import FIELDS, event_metadata, select_event, save_metadata, load_metadata, metadata_text
 
 
 class EventMetadataTests(unittest.TestCase):

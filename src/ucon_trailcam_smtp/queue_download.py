@@ -8,7 +8,7 @@ import tempfile
 from contextlib import closing, contextmanager
 from pathlib import Path
 
-from event_match import match_events
+from ucon_trailcam_smtp.event_match import match_events
 
 
 @contextmanager

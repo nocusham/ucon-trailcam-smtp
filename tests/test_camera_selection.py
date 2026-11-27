@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from camera_selection import SelectionError, select_device, profile_uid, relay_credentials
+from ucon_trailcam_smtp.camera_selection import SelectionError, select_device, profile_uid, relay_credentials
 
 
 class CameraSelectionTests(unittest.TestCase):

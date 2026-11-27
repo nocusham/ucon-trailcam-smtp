@@ -7,9 +7,9 @@ from types import SimpleNamespace
 import p4p_camera_sdk.p4p_crypto as sdk_crypto
 import p4p_camera_sdk.relay as sdk_module
 
-from h4_crypto import encode, decode
-from h4_traffic import TrafficStats, SocketModuleProxy
-from sdk_relay import DiagnosticRelay, relay_compat
+from ucon_trailcam_smtp.h4_crypto import encode, decode
+from ucon_trailcam_smtp.h4_traffic import TrafficStats, SocketModuleProxy
+from ucon_trailcam_smtp.sdk_relay import DiagnosticRelay, relay_compat
 
 
 class RelayAdapterTests(unittest.TestCase):

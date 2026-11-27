@@ -2,9 +2,9 @@
 from uuid import uuid4
 
 import httpx
-from sdk_credentials import HOST, USER_AGENT, encode_password
-from safe_diagnostics import error_kind
-from camera_selection import SelectionError, select_device, relay_credentials
+from ucon_trailcam_smtp.sdk_credentials import HOST, USER_AGENT, encode_password
+from ucon_trailcam_smtp.safe_diagnostics import error_kind
+from ucon_trailcam_smtp.camera_selection import SelectionError, select_device, relay_credentials
 
 
 class ApiError(Exception):
@@ -79,7 +79,7 @@ async def authenticate(client, account, password, index, *, camera_uid=None):
 
 async def get_device_by_uid(account, password, uid):
     """Use one authenticated device-list response for UID and relay password."""
-    from sdk_credentials import DeviceCredentials
+    from ucon_trailcam_smtp.sdk_credentials import DeviceCredentials
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
         _, devices = await discover_devices(client, account, password)
     return DeviceCredentials(*relay_credentials(select_device(devices, uid=uid)))

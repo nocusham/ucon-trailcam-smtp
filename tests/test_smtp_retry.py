@@ -4,20 +4,20 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from smtp_retry import rollback_unsent, retry_due, clear_retry
-from smtp_transport import transmit, SafeSMTPFailure
+from ucon_trailcam_smtp.smtp_retry import rollback_unsent, retry_due, clear_retry
+from ucon_trailcam_smtp.smtp_transport import transmit, SafeSMTPFailure
 
 
 class TransportTests(unittest.TestCase):
     def test_connection_failure_safe(self):
-        with patch('smtp_transport.smtplib.SMTP', side_effect=OSError('private')):
+        with patch('ucon_trailcam_smtp.smtp_transport.smtplib.SMTP', side_effect=OSError('private')):
             with self.assertRaises(SafeSMTPFailure) as caught:
                 transmit(object(), 'example.invalid', 587, 'starttls')
             self.assertNotIn('private', str(caught.exception))
 
     def test_tls_and_login_failure_safe(self):
         for method in ('starttls', 'login'):
-            with patch('smtp_transport.smtplib.SMTP') as factory:
+            with patch('ucon_trailcam_smtp.smtp_transport.smtplib.SMTP') as factory:
                 client = factory.return_value.__enter__.return_value
                 getattr(client, method).side_effect = OSError('private')
                 with self.assertRaises(SafeSMTPFailure):
@@ -25,7 +25,7 @@ class TransportTests(unittest.TestCase):
                 client.send_message.assert_not_called()
 
     def test_submission_timeout_not_safe(self):
-        with patch('smtp_transport.smtplib.SMTP') as factory:
+        with patch('ucon_trailcam_smtp.smtp_transport.smtplib.SMTP') as factory:
             client = factory.return_value.__enter__.return_value
             client.send_message.side_effect = TimeoutError
             with self.assertRaises(TimeoutError) as caught:
@@ -33,7 +33,7 @@ class TransportTests(unittest.TestCase):
             self.assertNotIsInstance(caught.exception, SafeSMTPFailure)
 
     def test_quit_failure_after_acceptance(self):
-        with patch('smtp_transport.smtplib.SMTP') as factory:
+        with patch('ucon_trailcam_smtp.smtp_transport.smtplib.SMTP') as factory:
             factory.return_value.__enter__.return_value.send_message.return_value = {}
             factory.return_value.__exit__.side_effect = OSError('QUIT')
             transmit(object(), 'example.invalid', 587, 'starttls')

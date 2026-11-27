@@ -10,14 +10,14 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
-from ucon_auth import read_credentials
-from cloud_image import ImageError, reference_scheme, select_latest, fetch_image
-from event_metadata import select_event, save_metadata
-from event_queue import ingest_events, QueueError
-from cloud_watch import watch
-from camera_selection import profile_uid
+from ucon_trailcam_smtp.ucon_auth import read_credentials
+from ucon_trailcam_smtp.cloud_image import ImageError, reference_scheme, select_latest, fetch_image
+from ucon_trailcam_smtp.event_metadata import select_event, save_metadata
+from ucon_trailcam_smtp.event_queue import ingest_events, QueueError
+from ucon_trailcam_smtp.cloud_watch import watch
+from ucon_trailcam_smtp.camera_selection import profile_uid
 # Re-export the original API helpers for legacy diagnostic callers.
-from cloud_api import (ApiError, post_json, discover_devices, list_devices,
+from ucon_trailcam_smtp.cloud_api import (ApiError, post_json, discover_devices, list_devices,
                        authenticate, get_device_by_uid, list_cloud_events)
 
 
@@ -168,7 +168,7 @@ def main():
         parser.error('Use --config and --camera together, without --index')
     args.camera_uid = None
     if args.config:
-        from camera_smtp import load_profiles
+        from ucon_trailcam_smtp.camera_smtp import load_profiles
         try:
             args.camera_uid = profile_uid(load_profiles(args.config), args.camera)
         except Exception:

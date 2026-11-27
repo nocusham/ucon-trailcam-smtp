@@ -9,12 +9,26 @@ class CredentialError(ValueError):
     pass
 
 
+def _default_secret_path():
+    """Only use an implicit .env in a source checkout, never in site-packages."""
+    module = Path(__file__).resolve()
+    if module.parent.name == 'ucon_trailcam_smtp' and module.parent.parent.name == 'src':
+        root = module.parents[2]
+        if (root / 'pyproject.toml').is_file():
+            return root / '.env'
+    return None
+
+
 def read_secret_values(environ=None, *, path=None):
     """File values take precedence; missing keys fall back to process environment."""
     values = dict(os.environ if environ is None else environ)
     explicit = path is not None or bool(values.get('UCON_SECRETS_FILE'))
-    target = Path(path if path is not None else values.get('UCON_SECRETS_FILE')
-                  or Path(__file__).resolve().with_name('.env'))
+    selected = path if path is not None else values.get('UCON_SECRETS_FILE')
+    if not explicit:
+        selected = _default_secret_path()
+    if selected is None:
+        return values
+    target = Path(selected)
     try:
         fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:

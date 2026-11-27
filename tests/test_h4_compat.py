@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from h4_compat import recover_control, is_alive_response, matches_requested_conv
+from ucon_trailcam_smtp.h4_compat import recover_control, is_alive_response, matches_requested_conv
 
 
 class ControlRecoveryTests(unittest.TestCase):

@@ -1,6 +1,6 @@
 """Shared legacy SMTP settings reader for manual SMTP entrypoints."""
 import getpass
-from local_credentials import read_secret_values
+from ucon_trailcam_smtp.local_credentials import read_secret_values
 
 
 def read_smtp_settings():

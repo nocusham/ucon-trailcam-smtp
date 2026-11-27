@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock
 from PIL import Image
 from io import BytesIO
-from queue_smtp import DeliveryError, ready_rows, process, validate_destination
+from ucon_trailcam_smtp.queue_smtp import DeliveryError, ready_rows, process, validate_destination
 
 
 class QueueSMTPTests(unittest.TestCase):
@@ -80,26 +80,26 @@ class QueueSMTPTests(unittest.TestCase):
         self.assertEqual(len(ready_rows(self.db, 1, 400, 3)), 1)
 
     def test_safe_smtp_failure_retry_and_success(self):
-        from smtp_transport import SafeSMTPFailure
+        from ucon_trailcam_smtp.smtp_transport import SafeSMTPFailure
         from unittest.mock import patch
         send = Mock(side_effect=SafeSMTPFailure('setup failed'))
-        with patch('queue_smtp.time.time', return_value=1000):
+        with patch('ucon_trailcam_smtp.queue_smtp.time.time', return_value=1000):
             self.assertEqual(self.run_batch(send), 1)
         self.assertEqual(self.states(), ['downloaded', 'downloaded', 'pending'])
         self.assertEqual(self.db.execute('SELECT count(*) FROM deliveries').fetchone()[0], 0)
         send.reset_mock()
         send.side_effect = None
-        with patch('queue_smtp.time.time', return_value=1299):
+        with patch('ucon_trailcam_smtp.queue_smtp.time.time', return_value=1299):
             self.assertEqual(self.run_batch(send), 1)
         send.assert_not_called()
-        with patch('queue_smtp.time.time', return_value=1300):
+        with patch('ucon_trailcam_smtp.queue_smtp.time.time', return_value=1300):
             self.assertEqual(self.run_batch(send), 0)
         self.assertEqual(send.call_count, 2)
         self.assertEqual(self.states(), ['sent', 'sent', 'pending'])
         self.assertEqual(self.db.execute('SELECT count(*) FROM smtp_retries').fetchone()[0], 0)
 
     def test_grouped_safe_smtp_failure_restores_all(self):
-        from smtp_transport import SafeSMTPFailure
+        from ucon_trailcam_smtp.smtp_transport import SafeSMTPFailure
         send = Mock(side_effect=SafeSMTPFailure('setup failed'))
         self.assertEqual(self.run_batch(send, mode='grouped'), 1)
         send.assert_called_once()

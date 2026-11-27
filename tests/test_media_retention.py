@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from media_retention import Retention, parse_retention, cleanup
+from ucon_trailcam_smtp.media_retention import Retention, parse_retention, cleanup
 
 
 class RetentionTests(unittest.TestCase):

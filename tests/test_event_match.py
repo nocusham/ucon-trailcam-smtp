@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from event_match import match_events, queued_times
+from ucon_trailcam_smtp.event_match import match_events, queued_times
 
 
 def photo(t, kind=4, length=65535):

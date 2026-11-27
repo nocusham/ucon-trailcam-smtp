@@ -1,6 +1,6 @@
 """Read-only staged SD listing, based on H4 Android packet timing."""
 import time
-from sdk_sdcard import build_list_event, parse_event_record, SdCardEvent
+from ucon_trailcam_smtp.sdk_sdcard import build_list_event, parse_event_record, SdCardEvent
 
 
 def list_events_staged(session, begin, end, flow='no-av', *, wait_live=True, with_audio=True):

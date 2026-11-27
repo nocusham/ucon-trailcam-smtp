@@ -1,5 +1,5 @@
 """Allowlisted passive cloud telemetry and optional inactivity observations."""
-from health_alerts import init_health, observe
+from ucon_trailcam_smtp.health_alerts import init_health, observe
 
 REFRESH_SECONDS = 900
 FRESH_SECONDS = 1800

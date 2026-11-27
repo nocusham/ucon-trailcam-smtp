@@ -1,7 +1,7 @@
 import sqlite3
 import unittest
-from camera_telemetry import init_telemetry, record_snapshot, fresh_scopes
-from health_alerts import AlertSettings, due_notices, build_alert
+from ucon_trailcam_smtp.camera_telemetry import init_telemetry, record_snapshot, fresh_scopes
+from ucon_trailcam_smtp.health_alerts import AlertSettings, due_notices, build_alert
 
 
 class TelemetryTests(unittest.TestCase):

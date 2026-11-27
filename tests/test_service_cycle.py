@@ -1,7 +1,7 @@
 import sqlite3
 import unittest
 from types import SimpleNamespace
-from service_cycle import run_cycle
+from ucon_trailcam_smtp.service_cycle import run_cycle
 
 
 class CycleTests(unittest.IsolatedAsyncioTestCase):

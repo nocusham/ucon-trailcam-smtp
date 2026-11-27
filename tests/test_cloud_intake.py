@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cloud_intake import Intake, init_intake, login_blocked, resume_login, window
-from health_alerts import AlertSettings, due_notices
+from ucon_trailcam_smtp.cloud_intake import Intake, init_intake, login_blocked, resume_login, window
+from ucon_trailcam_smtp.health_alerts import AlertSettings, due_notices
 
 
 class ApiError(Exception):

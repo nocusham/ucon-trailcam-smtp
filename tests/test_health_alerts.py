@@ -5,7 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
 
-from health_alerts import (AlertSettings, build_alert, dispatch_due, due_notices,
+from ucon_trailcam_smtp.health_alerts import (AlertSettings, build_alert, dispatch_due, due_notices,
                            init_health, observe, parse_alerts)
 
 

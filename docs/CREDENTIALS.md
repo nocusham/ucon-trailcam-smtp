@@ -1,6 +1,6 @@
 # Lokale Zugangsdaten und Neustart
 
-Die Installation verwendet zwei lokale, nicht versionierte Dateien: config.local.toml (Kamera- und SMTP-Einstellungen) und .env (vertrauliche Zugangsdaten). Beide bleiben auf dem Datenträger erhalten. Standardpfad der .env ist neben den Python-Skripten; optional setzt der Betreiber UCON_SECRETS_FILE auf einen anderen absoluten Dateipfad. Kein Shell-Sourcing, keine neue Abhängigkeit und kein interaktiver Passwortmanager nötig.
+Die Installation verwendet zwei lokale, nicht versionierte Dateien: config.local.toml (Kamera- und SMTP-Einstellungen) und .env (vertrauliche Zugangsdaten). Beide bleiben auf dem Datenträger erhalten. Im Git-Checkout bleibt der Standardpfad der .env im Repository-Hauptverzeichnis, auch nach der Verschiebung der Runtime nach src/ in Phase 4b. Bei einer installierten Version gibt es keinen impliziten .env-Suchpfad; der Betreiber setzt UCON_SECRETS_FILE auf den absoluten Pfad zur geschützten Datei oder verwendet Prozessumgebungsvariablen. Kein Shell-Sourcing, keine neue Abhängigkeit und kein interaktiver Passwortmanager nötig.
 
 ```sh
 umask 077

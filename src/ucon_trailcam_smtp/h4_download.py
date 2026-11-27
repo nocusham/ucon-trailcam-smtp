@@ -4,7 +4,7 @@ import re
 import struct
 import time
 from pathlib import Path
-from sdk_sdcard import build_download_sd_file
+from ucon_trailcam_smtp.sdk_sdcard import build_download_sd_file
 
 CHUNK = 1200
 MAX_SIZE = 16 * 1024 * 1024

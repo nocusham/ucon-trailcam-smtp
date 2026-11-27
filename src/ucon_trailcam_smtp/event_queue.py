@@ -5,7 +5,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from event_metadata import event_metadata
+from ucon_trailcam_smtp.event_metadata import event_metadata
 
 
 class QueueError(Exception):

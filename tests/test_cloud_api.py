@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from cloud_api import ApiError, authenticate, discover_devices, get_device_by_uid, list_cloud_events, list_devices
-from safe_diagnostics import cloud_fields
+from ucon_trailcam_smtp.cloud_api import ApiError, authenticate, discover_devices, get_device_by_uid, list_cloud_events, list_devices
+from ucon_trailcam_smtp.safe_diagnostics import cloud_fields
 
 
 class CloudApiTests(unittest.IsolatedAsyncioTestCase):
@@ -36,8 +36,8 @@ class CloudApiTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={'code': 0, 'data': {'items': [], 'next': 7}})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-            with patch('cloud_api.encode_password', return_value='encoded-fixture') as encode, \
-                    patch('cloud_api.uuid4', return_value='local-fixture'):
+            with patch('ucon_trailcam_smtp.cloud_api.encode_password', return_value='encoded-fixture') as encode, \
+                    patch('ucon_trailcam_smtp.cloud_api.uuid4', return_value='local-fixture'):
                 headers, found = await discover_devices(client, 'test@example.invalid', 'fixture-password')
                 self.assertEqual(found, devices)
                 self.assertEqual(await list_devices(client, headers), devices)
@@ -55,7 +55,7 @@ class CloudApiTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={'code': 20005, 'data': {'private': 'fixture-secret'}})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-            with patch('cloud_api.encode_password', return_value='encoded-fixture'):
+            with patch('ucon_trailcam_smtp.cloud_api.encode_password', return_value='encoded-fixture'):
                 with self.assertRaises(ApiError) as caught:
                     await discover_devices(client, 'test@example.invalid', 'fixture-password')
         self.assertEqual(calls, ['/api/v3/login'])
@@ -70,7 +70,7 @@ class CloudApiTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={'code': 0, 'data': {'other': 'fixture-secret'}})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-            with patch('cloud_api.encode_password', return_value='encoded-fixture'):
+            with patch('ucon_trailcam_smtp.cloud_api.encode_password', return_value='encoded-fixture'):
                 with self.assertRaises(ApiError) as caught:
                     await discover_devices(client, 'test@example.invalid', 'fixture-password')
         self.assertEqual(calls, ['/api/v3/login'])
@@ -88,7 +88,7 @@ class CloudApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_uid_selection_never_falls_back_to_index(self):
         a, b = {'device_uid': 'synthetic-a'}, {'device_uid': 'synthetic-b'}
-        with patch('cloud_api.discover_devices', new_callable=AsyncMock) as discover:
+        with patch('ucon_trailcam_smtp.cloud_api.discover_devices', new_callable=AsyncMock) as discover:
             discover.return_value = ({'fixture': 'header'}, [b, a])
             self.assertEqual(await authenticate(None, 'account', 'password', 0, camera_uid='synthetic-a'),
                              ({'fixture': 'header'}, 'synthetic-a'))
@@ -101,9 +101,9 @@ class CloudApiTests(unittest.IsolatedAsyncioTestCase):
         a = {'device_uid': 'synthetic-a', 'device_pwd': 'fixture-a', 'device_name': 'a'}
         b = {'device_uid': 'synthetic-b', 'device_pwd': 'fixture-b', 'device_name': 'b'}
         client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: self.fail('unexpected request')))
-        with patch('cloud_api.httpx.AsyncClient', return_value=client) as factory, \
-                patch('cloud_api.discover_devices', new_callable=AsyncMock, return_value=({}, [b, a])) as discover, \
-                patch('sdk_credentials.DeviceCredentials') as credentials:
+        with patch('ucon_trailcam_smtp.cloud_api.httpx.AsyncClient', return_value=client) as factory, \
+                patch('ucon_trailcam_smtp.cloud_api.discover_devices', new_callable=AsyncMock, return_value=({}, [b, a])) as discover, \
+                patch('ucon_trailcam_smtp.sdk_credentials.DeviceCredentials') as credentials:
             self.assertIs(await get_device_by_uid('account', 'password', 'synthetic-a'), credentials.return_value)
             factory.assert_called_once_with(timeout=30, follow_redirects=False)
             discover.assert_awaited_once_with(client, 'account', 'password')

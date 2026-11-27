@@ -2,7 +2,7 @@
 import smtplib
 import ssl
 
-from safe_diagnostics import SMTP_STAGES, KINDS, allowed, error_fields, error_kind, number_field
+from ucon_trailcam_smtp.safe_diagnostics import SMTP_STAGES, KINDS, allowed, error_fields, error_kind, number_field
 
 
 class SafeSMTPFailure(OSError):

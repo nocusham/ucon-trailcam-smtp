@@ -1,6 +1,6 @@
 import datetime as dt
 import unittest
-from mail_subject import camera_subject
+from ucon_trailcam_smtp.mail_subject import camera_subject
 
 
 def stamp(iso):

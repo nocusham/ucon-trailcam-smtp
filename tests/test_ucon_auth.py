@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from ucon_auth import read_credentials
+from ucon_trailcam_smtp.ucon_auth import read_credentials
 
 
 class CredentialTests(unittest.TestCase):
@@ -12,7 +12,7 @@ class CredentialTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.env_path = Path(tmp.name) / '.env'
-        isolated = patch('local_credentials.__file__', str(self.env_path.with_name('local_credentials.py')))
+        isolated = patch('ucon_trailcam_smtp.local_credentials._default_secret_path', return_value=self.env_path)
         isolated.start()
         self.addCleanup(isolated.stop)
 

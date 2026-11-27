@@ -1,6 +1,6 @@
 import socket
 import unittest
-from h4_traffic import TrafficStats, SocketModuleProxy
+from ucon_trailcam_smtp.h4_traffic import TrafficStats, SocketModuleProxy
 
 
 class TrafficTests(unittest.TestCase):

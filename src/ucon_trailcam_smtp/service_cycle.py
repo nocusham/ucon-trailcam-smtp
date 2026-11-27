@@ -1,6 +1,6 @@
 """One sequential service cycle; callbacks isolate network and local operations."""
 import sqlite3
-from safe_diagnostics import error_fields
+from ucon_trailcam_smtp.safe_diagnostics import error_fields
 
 
 async def run_cycle(profiles, *, cloud, devices, download, deliver, alerts,

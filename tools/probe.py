@@ -3,29 +3,29 @@ import argparse
 import asyncio
 import sqlite3
 import tomllib
-from download_retry import parse_retry, init_retry, due_ids, reserve, record_failure, sync_download_health
-from health_alerts import load_alerts
+from ucon_trailcam_smtp.download_retry import parse_retry, init_retry, due_ids, reserve, record_failure, sync_download_health
+from ucon_trailcam_smtp.health_alerts import load_alerts
 import contextlib
 import datetime as dt
-from ucon_auth import read_credentials
-from camera_selection import profile_uid
-from cloud_api import get_device_by_uid
+from ucon_trailcam_smtp.ucon_auth import read_credentials
+from ucon_trailcam_smtp.camera_selection import profile_uid
+from ucon_trailcam_smtp.cloud_api import get_device_by_uid
 import io
 import logging
 from collections import Counter
 from importlib.metadata import version
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from h4_events import list_events_staged
-from event_match import queued_times, match_events
-from queue_download import batch_lock, load_rows, eligible, check_existing, download_batch
-from cloud_image import validate_image
-from h4_download import download_photo, MAX_SIZE
-from sdk_relay import DiagnosticRelay, relay_compat
+from ucon_trailcam_smtp.h4_events import list_events_staged
+from ucon_trailcam_smtp.event_match import queued_times, match_events
+from ucon_trailcam_smtp.queue_download import batch_lock, load_rows, eligible, check_existing, download_batch
+from ucon_trailcam_smtp.cloud_image import validate_image
+from ucon_trailcam_smtp.h4_download import download_photo, MAX_SIZE
+from ucon_trailcam_smtp.sdk_relay import DiagnosticRelay, relay_compat
 from pathlib import Path
 import time
 
-from sdk_credentials import CredentialClient
-from sdk_sdcard import (
+from ucon_trailcam_smtp.sdk_credentials import CredentialClient
+from ucon_trailcam_smtp.sdk_sdcard import (
     SdCardClient,
     IOTYPE_GET_SD_STATUS_REQ, IOTYPE_GET_SD_STATUS_RSP, build_get_sd_status,
     IOTYPE_GET_ADVANCE_SETTINGS_REQ, IOTYPE_GET_ADVANCE_SETTINGS_RSP,
@@ -78,7 +78,7 @@ def main():
         parser.error('Use --config and --camera together, without --index')
     args.camera_uid = None
     if args.config:
-        from camera_smtp import load_profiles
+        from ucon_trailcam_smtp.camera_smtp import load_profiles
         try:
             args.camera_uid = profile_uid(load_profiles(args.config), args.camera)
         except Exception:

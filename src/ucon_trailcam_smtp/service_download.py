@@ -1,5 +1,5 @@
 """Select due originals in bounded SD windows, independent of calendar days."""
-from download_retry import due_ids
+from ucon_trailcam_smtp.download_retry import due_ids
 
 
 WINDOW_SECONDS = 3600

@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cloud_watch import watch
+from ucon_trailcam_smtp.cloud_watch import watch
 
 
 class ApiError(Exception):

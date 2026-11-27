@@ -1,7 +1,7 @@
 import struct
 import unittest
 from collections import deque
-from h4_receive import drain_pending, poll_relay
+from ucon_trailcam_smtp.h4_receive import drain_pending, poll_relay
 
 
 def frame(code, body):

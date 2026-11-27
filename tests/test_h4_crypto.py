@@ -1,6 +1,6 @@
 import unittest
 from p4p_camera_sdk.p4p_crypto import encode as legacy_encode
-from h4_crypto import encode, decode
+from ucon_trailcam_smtp.h4_crypto import encode, decode
 
 
 class CryptoTests(unittest.TestCase):

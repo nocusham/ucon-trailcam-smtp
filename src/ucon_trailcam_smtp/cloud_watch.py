@@ -3,7 +3,7 @@ import asyncio
 import datetime as dt
 import time
 
-from event_queue import ingest_events
+from ucon_trailcam_smtp.event_queue import ingest_events
 
 
 async def watch(client, account, password, index, db, *, authenticate, list_events,

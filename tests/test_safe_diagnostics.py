@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import httpx
 
-from safe_diagnostics import cloud_fields, error_fields, error_kind
-from smtp_transport import SafeSMTPFailure, smtp_failure_fields, transmit
+from ucon_trailcam_smtp.safe_diagnostics import cloud_fields, error_fields, error_kind
+from ucon_trailcam_smtp.smtp_transport import SafeSMTPFailure, smtp_failure_fields, transmit
 
 
 class DiagnosticTests(unittest.TestCase):
@@ -36,7 +36,7 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(error_fields(PrivateError('private')), 'category=unexpected')
 
     def test_smtp_auth_error_retains_only_safe_fields(self):
-        with patch('smtp_transport.smtplib.SMTP') as factory:
+        with patch('ucon_trailcam_smtp.smtp_transport.smtplib.SMTP') as factory:
             client = factory.return_value.__enter__.return_value
             client.login.side_effect = smtplib.SMTPAuthenticationError(535, b'private credentials')
             with self.assertRaises(SafeSMTPFailure) as caught:
@@ -46,7 +46,7 @@ class DiagnosticTests(unittest.TestCase):
         self.assertNotIn('private', str(caught.exception))
 
     def test_submission_still_uncertain(self):
-        with patch('smtp_transport.smtplib.SMTP') as factory:
+        with patch('ucon_trailcam_smtp.smtp_transport.smtplib.SMTP') as factory:
             client = factory.return_value.__enter__.return_value
             client.send_message.side_effect = smtplib.SMTPDataError(451, b'private response')
             with self.assertRaises(smtplib.SMTPDataError) as caught:
@@ -55,7 +55,7 @@ class DiagnosticTests(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, SafeSMTPFailure)
 
     def test_starttls_failure_and_quit_after_acceptance(self):
-        with patch('smtp_transport.smtplib.SMTP') as factory:
+        with patch('ucon_trailcam_smtp.smtp_transport.smtplib.SMTP') as factory:
             client = factory.return_value.__enter__.return_value
             client.starttls.side_effect = TimeoutError('private')
             with self.assertRaises(SafeSMTPFailure) as caught:

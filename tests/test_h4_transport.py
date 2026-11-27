@@ -1,6 +1,6 @@
 import struct
 import unittest
-from h4_transport import TransportTrace, kcp_segments
+from ucon_trailcam_smtp.h4_transport import TransportTrace, kcp_segments
 
 
 def segment(cmd, sn, una=0, body=b'', wnd=512):

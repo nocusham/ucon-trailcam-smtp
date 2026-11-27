@@ -35,7 +35,7 @@ class CloudProbeTests(unittest.IsolatedAsyncioTestCase):
                 await query_events(client, 'test@example.invalid', 'secret', 0, 1, 2)
 
     async def test_transport_failure_has_safe_category(self):
-        from safe_diagnostics import cloud_fields
+        from ucon_trailcam_smtp.safe_diagnostics import cloud_fields
         def respond(request):
             raise httpx.ReadTimeout('private URL?token=secret', request=request)
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
@@ -45,7 +45,7 @@ class CloudProbeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('secret', str(caught.exception))
 
     async def test_invalid_json_has_safe_category(self):
-        from safe_diagnostics import cloud_fields
+        from ucon_trailcam_smtp.safe_diagnostics import cloud_fields
         async with httpx.AsyncClient(transport=httpx.MockTransport(
                 lambda _: httpx.Response(200, text='private response'))) as client:
             with self.assertRaises(ApiError) as caught:

@@ -10,12 +10,12 @@ from p4p_camera_sdk.relay import RelaySession
 import p4p_camera_sdk.relay as sdk_relay
 import p4p_camera_sdk.p4p_crypto as sdk_crypto
 
-from h4_compat import recover_control, is_alive_response, matches_requested_conv
-from h4_crypto import encode, decode
-from h4_download import native_frames
-from h4_receive import poll_relay
-from h4_traffic import TrafficStats, SocketModuleProxy
-from h4_transport import TransportTrace, kcp_segments
+from ucon_trailcam_smtp.h4_compat import recover_control, is_alive_response, matches_requested_conv
+from ucon_trailcam_smtp.h4_crypto import encode, decode
+from ucon_trailcam_smtp.h4_download import native_frames
+from ucon_trailcam_smtp.h4_receive import poll_relay
+from ucon_trailcam_smtp.h4_traffic import TrafficStats, SocketModuleProxy
+from ucon_trailcam_smtp.h4_transport import TransportTrace, kcp_segments
 
 
 class DiagnosticRelay(RelaySession):

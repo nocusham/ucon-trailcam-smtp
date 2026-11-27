@@ -7,8 +7,8 @@ from PIL import Image
 import hashlib
 
 from tests import test_queue_smtp
-from camera_smtp import Camera, load_profiles, route_batch
-from queue_smtp import DeliveryError, process, ready_rows
+from ucon_trailcam_smtp.camera_smtp import Camera, load_profiles, route_batch
+from ucon_trailcam_smtp.queue_smtp import DeliveryError, process, ready_rows
 
 
 class CameraRoutingTests(unittest.TestCase):

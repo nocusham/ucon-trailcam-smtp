@@ -2,9 +2,9 @@
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 
-from cloud_image import ImageError, MAX_IMAGE_BYTES, validate_image
-from event_metadata import metadata_text
-from smtp_transport import transmit
+from ucon_trailcam_smtp.cloud_image import ImageError, MAX_IMAGE_BYTES, validate_image
+from ucon_trailcam_smtp.event_metadata import metadata_text
+from ucon_trailcam_smtp.smtp_transport import transmit
 
 MIME_SUBTYPE = {'jpg': 'jpeg', 'png': 'png', 'webp': 'webp', 'gif': 'gif',
                 'bmp': 'bmp', 'tiff': 'tiff'}

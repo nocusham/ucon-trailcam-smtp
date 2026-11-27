@@ -2,11 +2,11 @@
 import argparse
 from pathlib import Path
 
-from event_metadata import load_metadata
+from ucon_trailcam_smtp.event_metadata import load_metadata
 # Re-export the historical helpers for existing callers.
-from mail_message import load_image, build_message, send_message
+from ucon_trailcam_smtp.mail_message import load_image, build_message, send_message
 
-from smtp_settings import read_smtp_settings
+from ucon_trailcam_smtp.smtp_settings import read_smtp_settings
 
 
 def main():

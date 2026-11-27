@@ -1,6 +1,6 @@
 """Read Ucon credentials from a private file, environment or interactive prompts."""
 import getpass
-from local_credentials import read_secret_values
+from ucon_trailcam_smtp.local_credentials import read_secret_values
 
 
 def read_credentials(*, interactive=True):

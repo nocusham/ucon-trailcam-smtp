@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from download_retry import (RetryPolicy, due_ids, init_retry, parse_retry, record_failure,
+from ucon_trailcam_smtp.download_retry import (RetryPolicy, due_ids, init_retry, parse_retry, record_failure,
                             reserve, sync_download_health)
-from health_alerts import AlertSettings, due_notices
+from ucon_trailcam_smtp.health_alerts import AlertSettings, due_notices
 
 
 class DownloadRetryTests(unittest.TestCase):

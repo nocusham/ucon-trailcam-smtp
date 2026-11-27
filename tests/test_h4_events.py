@@ -2,7 +2,7 @@
 import struct
 import unittest
 
-from h4_events import list_events_staged
+from ucon_trailcam_smtp.h4_events import list_events_staged
 
 
 class FakeSession:

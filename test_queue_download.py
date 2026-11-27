@@ -1,4 +1,6 @@
 import json
+import os
+import stat
 import sqlite3
 import tempfile
 import unittest
@@ -64,6 +66,17 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(len(paths), 2)
         self.assertNotEqual(paths[0], paths[1])
         self.assertTrue(all(Path(r[0]).name == 'original.jpg' for r in paths))
+
+    def test_new_managed_directories_private_with_group_umask(self):
+        old = os.umask(0o002)
+        try:
+            self.assertEqual(self.run_batch(limit=1), 0)
+        finally:
+            os.umask(old)
+        with closing(sqlite3.connect(self.db)) as db:
+            path, = db.execute('SELECT path FROM downloads').fetchone()
+        for directory in Path(path).parents[:3]:
+            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o700)
 
     def test_partial_failure_persists_first(self):
         def fail_second(session, event, kind, dest, preserve_filename):

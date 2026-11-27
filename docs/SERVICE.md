@@ -133,6 +133,14 @@ SMTP setup diagnostics distinguish TLS context creation, connection, EHLO, START
 
 No schema/configuration change, additional network request, retry timing change, alarm policy change or delivery-state change. The six standalone diagnostic tests passed in the development container with HTTP/SMTP mocks. Four additional cloud integration tests are included; full reference-server suite (expected 185 tests if discovery is unchanged) and normal-service smoke test remain to be run. The three historical L1 failures cannot be retrospectively classified using the old logs.
 
+### D1 retention permission regression
+
+The reference-server D1 run discovered 185 tests, with two retention failures (preview and eligible deletion), while the other 183 passed. The original fixtures reproduce both failures locally under umask 002: pathlib mkdir(parents=True, mode=0o700) applies the requested mode only to the leaf directory; the implicit intermediate key directory is group-writable (0775 under this umask). Retention correctly refuses it. This is a pre-existing fixture assumption exposed by the test environment, not a demonstrated regression of the new diagnostics. The actual reference-server umask has not been measured.
+
+Create the test key and attempt directories explicitly with mode 0700. Also create the real managed media root explicitly before creating the event key directory so a new root does not inherit a group-writable default from implicit parent creation. No existing directory permissions are changed, and all deletion eligibility, owner, mode, path, symlink, digest and receipt checks remain unchanged. New tests cover umask 002 and refusal of a deliberately group-writable directory. The corrected retention and queue-download suites (17 tests) passed locally under each of umask 002, 022 and 077; the original two failures were reproduced before the fix. Full D1 rerun expected 188 tests; D2 still pending. Keep cleanup disabled until validation; no real files were deleted by these tests (only synthetic temporary fixtures).
+
+For future deployment use umask 077 and private service-owned data directories. Existing media directories may still have permissive permissions; inspect them before enabling retention. Do not silently chmod an existing tree or relax the retention checks.
+
 ## Deferred image footer
 
 After completion of the existing milestones, an optional per-camera post-download/pre-SMTP transformation will append a dedicated metadata strip below the entire image. It will not overwrite any part of the photograph or change the stored original. With the option disabled, the current exact-original attachment contract remains unchanged. See [IMAGE_FOOTER.md](IMAGE_FOOTER.md). The feature remains deferred; no runtime or configuration changes were made for it during L1/L2.

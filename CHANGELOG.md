@@ -10,6 +10,8 @@ This records development milestones, not a published production release.
 
 ### Sanitized diagnostics (post-soak development)
 
+- D1 reported 183/185 passing with two retention fixture failures. Reproduced both under umask 002; explicit private creation of fixture key/attempt directories fixes the implicit parent-mode issue. Real download root creation now also requests mode 0700 explicitly. Existing permissions and deletion safeguards unchanged. Added three permission regression tests; 17 targeted retention/download tests passed under each of umask 002, 022 and 077 locally. Full 188-test server rerun and D2 pending.
+
 - Added allowlisted cloud failure stages/categories, bounded HTTP/API codes, retry delays and UTC recovery messages; SMTP setup stages and numeric status, conservative uncertain-delivery diagnostics, original retry reasons, alarm/service/retention error categories. No raw exception messages or new network operations. Retry and delivery semantics unchanged. Six standalone diagnostic tests passed locally; four new cloud integration tests and full server suite pending. No retrospective cause assigned to L1 failures.
 
 ### Validated on the reference DEATTI DL04 / Ubuntu test server

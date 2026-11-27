@@ -88,8 +88,10 @@ def download_batch(session, path, uid, rows, begin, end, events, output, limit, 
     for (ident, stamp, _, _), (_, _, sd) in selected:
         event, = [e for e in events if e.start_time == sd and e.event_type == 4 and e.length == 65535]
         key = hashlib.sha256(json.dumps([uid, ident]).encode()).hexdigest()
-        folder = Path(output).resolve() / key
-        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root = Path(output).resolve()
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        folder = root / key
+        folder.mkdir(mode=0o700, exist_ok=True)
         attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=folder))
         # A unique attempt directory prevents overwrite after interruption.
         try:

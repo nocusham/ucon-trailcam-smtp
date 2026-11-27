@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -24,7 +25,8 @@ class RetentionTests(unittest.TestCase):
     def add(self, ident, state='sent', accepted=100, *, uid='a'):
         key = hashlib.sha256(json.dumps([uid, ident]).encode()).hexdigest()
         path = self.root / key / 'attempt-test' / 'original.jpg'
-        path.parent.mkdir(parents=True, mode=0o700)
+        path.parent.parent.mkdir(mode=0o700)
+        path.parent.mkdir(mode=0o700)
         payload = b'original test bytes'
         path.write_bytes(payload)
         with self.db:
@@ -64,6 +66,21 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(self.db.execute('SELECT count(*) FROM deliveries').fetchone()[0], 6)
         self.assertEqual(self.db.execute('SELECT itemid,size FROM media_cleanup').fetchall(), [('old', size)])
         self.assertEqual(self.run_cleanup(True), (0,0,0))
+
+    def test_group_writable_directory_retained(self):
+        path = self.add('old')
+        path.parent.parent.chmod(0o770)
+        self.assertEqual(self.run_cleanup(True), (0,0,1))
+        self.assertTrue(path.exists())
+        self.assertEqual(self.db.execute('SELECT count(*) FROM media_cleanup').fetchone()[0], 0)
+
+    def test_fixture_permissions_independent_of_umask(self):
+        old = os.umask(0o002)
+        try:
+            path = self.add('old')
+            self.assertEqual(self.run_cleanup(), (1, path.stat().st_size, 0))
+        finally:
+            os.umask(old)
 
     def test_modified_original_retained(self):
         path = self.add('old')

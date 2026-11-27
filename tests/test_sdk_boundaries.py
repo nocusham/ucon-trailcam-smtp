@@ -38,7 +38,7 @@ class SdkBoundaryTests(unittest.TestCase):
                    'sdk_relay.py', 'h4_crypto.py'}
         seen = set()
         unexpected = []
-        for path in sorted(root.glob('*.py')):
+        for path in sorted([*root.glob('*.py'), *(root / 'tools').rglob('*.py')]):
             tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
             for node in ast.walk(tree):
                 if isinstance(node, ast.ImportFrom):
@@ -49,9 +49,10 @@ class SdkBoundaryTests(unittest.TestCase):
                     continue
                 if any(name == 'p4p_camera_sdk' or
                        name.startswith('p4p_camera_sdk.') for name in names):
-                    seen.add(path.name)
-                    if path.name not in allowed:
-                        unexpected.append(f'{path.name}:{node.lineno}')
+                    relative = path.relative_to(root).as_posix()
+                    seen.add(relative)
+                    if relative not in allowed:
+                        unexpected.append(f'{relative}:{node.lineno}')
         self.assertEqual(unexpected, [])
         self.assertEqual(seen, allowed)
 

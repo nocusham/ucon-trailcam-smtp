@@ -14,4 +14,6 @@ Phase 2: six mocked cloud API tests; expected full suite 194. Phase 3a: three ne
 
 Phase 3b: three SDK boundary tests in `tests.test_sdk_boundaries` verify the credential and SD re-exports and static direct SDK import confinement. The full 200-test suite passed on the reference server at c93cbf2 in 0.297 s (owner-provided terminal output); the architecture test must be adapted when moving to src/ in phase 4. No live network access is required.
 
-Phase 3c: four tests in `tests.test_runtime_boundaries` cover pure diagnostic import confinement and the extracted legacy SMTP settings reader. Full expected 204-test suite and offline CLI help checks are pending. Run the checks from the separate worktree, without copying private state. Adapt the root-module architecture guards during phase 4.
+Phase 3c: four tests in `tests.test_runtime_boundaries` cover pure diagnostic import confinement and the extracted legacy SMTP settings reader. Full 204-test suite passed at 7540fd4 in 0.324 s; all nine offline CLI help checks passed (owner-provided output). Run the checks from the separate worktree, without copying private state. Adapt the root-module architecture guards during phase 4.
+
+Phase 4a: one new legacy probe/tool module identity test; architecture guards include tools/. Expected full suite 205. Verify all nine root CLI help commands and three new `python -m tools.NAME --help` commands. The runtime remains at the root until phase 4b; keep the active reference checkout unchanged.

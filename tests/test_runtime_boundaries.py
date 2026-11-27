@@ -23,9 +23,19 @@ class RuntimeBoundaryTests(unittest.TestCase):
                     names = [alias.name for alias in node.names]
                 else:
                     continue
-                if any(name.split('.')[0] in tools for name in names):
+                if any(name.split('.')[0] in tools | {'tools'} for name in names):
                     unexpected.append(f'{path.name}:{node.lineno}')
         self.assertEqual(unexpected, [])
+
+    def test_legacy_probe_imports_share_tool_modules(self):
+        import importlib
+
+        for name in ('probe', 'cloud_probe', 'smtp_probe'):
+            with self.subTest(name=name):
+                legacy = importlib.import_module(name)
+                tool = importlib.import_module(f'tools.{name}')
+                self.assertIs(legacy, tool)
+                self.assertEqual(Path(tool.__file__).parent.name, 'tools')
 
     def test_smtp_probe_reexports_shared_settings_reader(self):
         import smtp_probe

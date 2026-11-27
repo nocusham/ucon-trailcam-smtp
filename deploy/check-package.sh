@@ -83,9 +83,25 @@ PYTHON
     echo "Installed console command OK"
 )
 
+echo "=== Prepare independent versioned release from local wheels ==="
+mkdir "$WORK/wheelhouse" "$WORK/install-root" "$WORK/install-root/releases"
+"$PY" -m pip wheel --no-deps --wheel-dir "$WORK/wheelhouse" \
+    -r "$SOURCE/deploy/requirements-reference.txt" -r "$SOURCE/deploy/requirements-build.txt"
+digest=$(sha256sum "${wheels[0]}" | cut -d' ' -f1)
+(
+    cd "$SOURCE"
+    "$PY" -m deploy.prepare_release --root "$WORK/install-root" \
+        --release dev-check --wheel "${wheels[0]}" --sha256 "$digest" \
+        --wheelhouse "$WORK/wheelhouse"
+)
+[[ -f "$WORK/install-root/releases/dev-check/.ready" ]]
+[[ ! -e "$WORK/install-root/current" && ! -L "$WORK/install-root/current" ]]
+echo "Versioned release staged without activation."
+PY="$WORK/install-root/releases/dev-check/venv/bin/python"
+
 echo "=== Full source regression using freshly installed dependencies ==="
 (
     cd "$SOURCE"
     "$PY" -m unittest discover -s tests -t . -v
 )
-echo "Phase 6b package checks passed."
+echo "Package and versioned staging checks passed."

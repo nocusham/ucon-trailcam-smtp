@@ -10,7 +10,7 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
-- Phase 1: move test modules to `tests/`; extract shared mail construction and sending wrapper from the SMTP probe. Preserve the existing runtime CLI, config/secret discovery and delivery behavior. Full relocated test suite pending. No production release or merge during L3.
+- Phase 1: move test modules to `tests/`; extract shared mail construction and sending wrapper from the SMTP probe. Preserve the existing runtime CLI, config/secret discovery and delivery behavior. 29 targeted tests passed locally under umask 002 with both discovery commands; full relocated test suite pending. No production release or merge during L3.
 - Reference server D1: 188/188 tests passed with umask 0002; D2: three successful idle cycles. Owner reported six new images sent when installing the camera for L3. L3 is an ongoing unplugged outdoor test, with the supplied solar panel intentionally omitted; battery endurance and data usage are not yet established.
 
 ### Sanitized diagnostics (post-soak development)

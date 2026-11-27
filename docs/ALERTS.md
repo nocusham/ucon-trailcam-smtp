@@ -4,7 +4,7 @@
 
 ## Konfiguration
 
-Siehe den vollständig kommentierten Abschnitt [alerts] und [alerts.smtp] in [config.example.toml](../config.example.toml). Bei bestehenden Installationen nur diesen Abschnitt übernehmen; die Kameraeinstellungen bleiben unverändert. Ohne den Abschnitt oder bei enabled=false ist der Alarmkanal deaktiviert. Der private SMTP-Account hat eigenen Server, Port, Benutzer, Passwortverweis und Empfänger. Ein unabhängiger Anbieter ist sinnvoll, damit eine Störung des Bild-SMTP-Servers nicht gleichzeitig den Alarmkanal ausschaltet. Fehlerberichte sind reine Textmails ohne Bildanhänge. Nur STARTTLS oder TLS mit Zertifikatsprüfung; Revierwelt-Ziele werden für Alarme abgelehnt. Passwort wie bisher in .env, z.B. ALERT_SMTP_PASSWORD. Keine Passwörter oder Rohantworten in Alarmtexten.
+Siehe den vollständig kommentierten Abschnitt [alerts] und [alerts.smtp] in [config.example.toml](../config/config.example.toml). Bei bestehenden Installationen nur diesen Abschnitt übernehmen; die Kameraeinstellungen bleiben unverändert. Ohne den Abschnitt oder bei enabled=false ist der Alarmkanal deaktiviert. Der private SMTP-Account hat eigenen Server, Port, Benutzer, Passwortverweis und Empfänger. Ein unabhängiger Anbieter ist sinnvoll, damit eine Störung des Bild-SMTP-Servers nicht gleichzeitig den Alarmkanal ausschaltet. Fehlerberichte sind reine Textmails ohne Bildanhänge. Nur STARTTLS oder TLS mit Zertifikatsprüfung; Revierwelt-Ziele werden für Alarme abgelehnt. Passwort wie bisher in .env, z.B. ALERT_SMTP_PASSWORD. Keine Passwörter oder Rohantworten in Alarmtexten.
 
 | Kategorie | Standard | Voraussetzung |
 | --- | --- | --- |

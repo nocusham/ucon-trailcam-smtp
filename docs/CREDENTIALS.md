@@ -4,8 +4,8 @@ Die Installation verwendet zwei lokale, nicht versionierte Dateien: config.local
 
 ```sh
 umask 077
-test -e .env || cp .env.example .env
-test -e config.local.toml || cp config.example.toml config.local.toml
+test -e .env || cp config/.env.example .env
+test -e config.local.toml || cp config/config.example.toml config.local.toml
 chmod 600 .env config.local.toml
 nano .env
 ```

@@ -1,68 +1,68 @@
-# Geplantes Feature: optionale Bild-Fußzeile
+# Planned feature: optional image footer
 
-**Status:** Anforderungen abgestimmt am 26.11.2026; noch nicht implementiert. Umsetzung erst nach Abschluss der bereits vereinbarten Ziele (Langzeittest, Produktionsstruktur, LXC/Systemd, Revierwelt und weitere offene Ziele). Der laufende Langzeittest bleibt unverändert.
+**Status:** requirements agreed on 2026-11-26; not implemented. Implementation follows the existing milestones (long-duration test, production layout, LXC/systemd, Revierwelt and other open goals). The ongoing field test remains unchanged.
 
-## Ziel
+## Goal
 
-Wildkamerabilder ohne eigene Informationsleiste sollen beim E-Mail-Versand optional eine einheitliche, gut lesbare Fußzeile erhalten. Die Beispiele verschiedener Kamerahersteller dienen als gestalterische Orientierung; keine Herstellerlogos, privaten Beispielbilder oder GPS-Daten werden in das Repository übernommen.
+Trail-camera images without their own information strip should optionally receive a consistent, legible footer when sent by email. Examples from various camera vendors serve as visual guidance only; no vendor logos, private example images or GPS data are imported into the repository.
 
-Pflichtinformationen für Version 1:
+Required information for version 1:
 
-| Information | Quelle |
+| Information | Source |
 | --- | --- |
-| Kameraname | Lokaler Name des konfigurierten Kameraprofils |
-| Akkustand | Batterie-Prozentwert aus den Metadaten des konkreten Fotoereignisses |
-| Datum | Aufnahmezeitpunkt des Ereignisses, et_utc |
-| Uhrzeit | Derselbe Aufnahmezeitpunkt, niemals Download- oder Versandzeit |
+| Camera name | Local configured camera-profile alias |
+| Battery level | Battery percentage in the specific photo event metadata |
+| Date | Event capture time, et_utc |
+| Time | The same capture time, never download or delivery time |
 
-Standard: Europe/Berlin mit automatischer Sommer-/Winterzeitumstellung, Format DD.MM.YYYY HH:MM:SS; ein Zeitzonenhinweis MEZ/MESZ ist sinnvoll. Fehlender oder ungültiger Akkustand wird als unbekannt angezeigt, nicht erfunden und nicht stillschweigend durch einen später gemeldeten Batteriestand ersetzt. Keine zusätzliche Cloud- oder P4P-Abfrage allein für die Fußzeile.
+Default: Europe/Berlin with automatic daylight saving changes, DD.MM.YYYY HH:MM:SS; an MEZ/MESZ time-zone label is useful. Display missing or invalid battery data as unknown; never fabricate or silently substitute a later reported battery level. No additional cloud or P4P query solely for the footer.
 
-## Bildgeometrie — verbindliche Anforderung
+## Image geometry — mandatory requirement
 
-Die Fußzeile wird **unten an das vollständige Bild angehängt**. Sie darf keinen Teil des Motivs überdecken, abschneiden, strecken oder verkleinern.
+The footer is **appended below the complete image**. It must not cover, crop, stretch or shrink any part of the photographed scene.
 
-- Originalbreite W und Originalhöhe H bleiben für den Fotobereich erhalten.
-- Neue Bildfläche: W x (H + F), wobei F die Höhe der Fußzeile ist.
-- Originalbild an Position (0, 0) in die neue Bildfläche kopieren.
-- Ausschließlich im zusätzlichen Bereich ab y = H zeichnen.
-- Schwarzer, deckender Hintergrund mit weißer, kontrastreicher Schrift. Keine halbtransparente Überlagerung.
-- Schrift und Abstände proportional zur Bildbreite, mit ausreichendem Rand; lange zulässige Kameranamen dürfen nicht zu abgeschnittenem Text führen.
-- Einzeiliger Standardstil, beispielsweise: `testkamera | Akku: 87% | 26.11.2026 14:58:21`.
-- Beispiel für die DEATTI DL04: 5120 x 2880 Pixel plus beispielhaft 120 Pixel Fußzeile ergibt 5120 x 3000 Pixel. Die 120 Pixel sind ein Rechenbeispiel, keine festgelegte Standardhöhe.
+- Preserve original width W and height H for the photo area.
+- New canvas: W x (H + F), where F is the footer height.
+- Copy the original image at position (0, 0).
+- Draw only in the additional area starting at y = H.
+- Opaque black background and high-contrast white text. No semitransparent overlay.
+- Scale text and spacing with image width, leaving sufficient margins; long valid camera names must not be clipped.
+- Default single-line style, for example: `testkamera | Akku: 87% | 26.11.2026 14:58:21`.
+- DEATTI DL04 example: 5120 x 2880 pixels plus an illustrative 120-pixel footer gives 5120 x 3000 pixels. The 120 pixels are an example calculation, not an established default height.
 
-Das heruntergeladene JPEG bleibt bytegenau unverändert. Die Versandkopie muss neu als JPEG kodiert werden; daher ist sie nicht byteidentisch und die dekodierten Pixel können durch JPEG-Kompression geringfügig abweichen. Keine Veränderung des Bildausschnitts oder der Bildauflösung des Fotobereichs. Geeignete JPEG-Qualität und Schriftwahl werden bei der Umsetzung getestet.
+The downloaded JPEG remains byte-identical. The delivery copy must be re-encoded as JPEG, so its bytes differ and decoded pixels may vary slightly due to JPEG compression. Do not alter the crop or resolution of the photo area. Test JPEG quality and font selection during implementation.
 
-## Konfiguration (Entwurf, noch nicht unterstützt)
+## Configuration (draft, not supported yet)
 
-Pro Kamera optional innerhalb des vorhandenen [[cameras]]-Profils:
+Optional per-camera subsection within the existing [[cameras]] profile:
 
 ```toml
 [cameras.image_footer]
 enabled = false
 ```
 
-Das Beispiel ist ein geplanter TOML-Unterabschnitt, keine jetzt gültige Einstellung. Weitere vorgeschlagene Optionen für Stil, angezeigte Felder, Zeitformat, Zeitzone, Hintergrund- und Schriftfarbe sowie Schriftgröße, Abstände und Höhe werden bei der Implementierung festgelegt. Version 1 soll ohne zusätzliche Einstellungen einen einheitlichen schwarzen Balken mit weißen Angaben erzeugen. Standardmäßig deaktiviert; alte Konfigurationen müssen unverändert funktionieren.
+This is a planned TOML subsection, not a currently accepted option. Further proposed controls for style, displayed fields, time format, time zone, background/text colors, font size, spacing and height will be defined during implementation. Version 1 should produce a consistent black strip with white information without additional settings. Disabled by default; existing configurations must continue to work unchanged.
 
-## Verarbeitung und Sicherheit
+## Processing and safety
 
-1. SD-Original herunterladen und wie bisher über MD5, JPEG-Validierung und lokalen SHA256-Downloadnachweis prüfen.
-2. Bei deaktivierter Option die unveränderten Originalbytes wie bisher als Anhang verwenden.
-3. Bei aktivierter Option nach der Originalprüfung und vor SMTP eine separate Versandkopie mit erweitertem Bildbereich erzeugen. Originaldatei niemals überschreiben; keine dauerhafte zweite Bildsammlung erforderlich.
-4. Versandkopie auf JPEG-Format, vollständigen Fotobereich, erwartete Abmessungen, zulässige Größe und korrekten Anhang prüfen. Die bestehende Original-Hash-Prüfung bleibt erhalten; der bearbeitete MIME-Anhang benötigt eine eigene Prüfung gegen die erzeugte Kopie, nicht gegen den Originalhash.
-5. Originalen Kameradateinamen als Anhangsnamen beibehalten; bestehender Betreff und E-Mail-Metadaten bleiben erhalten. Pro Kamera und auch im Gruppenmodus jede Aufnahme mit ihren eigenen Ereignisdaten verarbeiten.
-6. Bei Fehlern der Fußzeilenerzeugung keine unbemerkte Rückkehr zum unbeschrifteten Anhang und kein Versand mit falschen Metadaten; Original und ausstehender Versandstatus bleiben erhalten. Fehler lokal klassifizieren. Keine erneute Kameraübertragung allein wegen eines Renderingfehlers.
-7. Bestehenden Schutz gegen doppelten Versand, SMTP-Wiederholungsregeln, Aufbewahrungsfristen und Originalnachweise erhalten. Versandkopie und tatsächlich verwendete Metadaten müssen bei der späteren Umsetzung nachvollziehbar geprüft werden können.
+1. Download the SD original and verify it as before using MD5, JPEG validation and the local SHA256 download receipt.
+2. If disabled, attach the unchanged original bytes as before.
+3. If enabled, create a separate expanded-canvas delivery copy after original verification and before SMTP. Never overwrite the original; no permanent second image collection is necessary.
+4. Validate the delivery copy for JPEG format, full photo area, expected dimensions, allowed size and correct attachment. Keep original-hash verification; validate the modified MIME attachment against the generated copy, not against the original hash.
+5. Preserve the original camera filename as attachment name, existing subject and mail metadata. Process each photo with its own event data, including grouped delivery and multiple cameras.
+6. On footer-generation failure, do not silently fall back to an unlabelled attachment or deliver incorrect metadata; preserve the original and pending delivery state. Classify the error locally. No camera re-download solely because rendering failed.
+7. Preserve duplicate-delivery protection, SMTP retry rules, retention and original receipts. The generated copy and actual metadata used must be auditable in the future implementation.
 
-## Abnahmetests
+## Acceptance tests
 
-- Option aus: Anhang SHA256-identisch zum Original, keine Änderung der bisherigen Pipeline.
-- Option an: Originaldatei SHA256-identisch vor und nach Verarbeitung; Breite unverändert, Höhe um Fußzeile erhöht; Fotobereich vollständig und ohne Überlagerung.
-- Inhalt mit Kameraname, Akku, Aufnahmedatum und -uhrzeit korrekt; unbekannter Akku; Winter-/Sommerzeit und Zeitumstellung.
-- Kleine und große Bildauflösungen, lange Kameranamen, Tag-/Nachtbilder, passende Textgröße und JPEG-Qualität.
-- Zwei Kameraprofile mit unterschiedlichen Einstellungen; Einzel- und Gruppenmodus.
-- Fehler bei Erzeugung und Größenprüfung ohne Versand oder erneuten Kamerazugriff; kein doppelter Versand nach Wiederholung.
-- Zunächst synthetische Testbilder, dann privater SMTP-Test, erst danach Kompatibilität mit Revierwelt prüfen.
+- Disabled: attachment SHA256 matches the original; existing pipeline unchanged.
+- Enabled: original SHA256 identical before and after processing; unchanged width, height increased by footer height; complete photo area without overlay.
+- Correct camera name, battery, capture date and time; unknown battery; winter/summer time and clock transitions.
+- Small and large resolutions, long aliases, day/night images, appropriate font size and JPEG quality.
+- Two camera profiles with different settings; single and grouped delivery.
+- Generation and size-validation failures without delivery or another camera access; no duplicate delivery after retry.
+- Synthetic images first, then private SMTP tests, then Revierwelt compatibility.
 
-## Nicht Bestandteil von Version 1
+## Out of scope for version 1
 
-GPS, Temperatur, Mondphase, PIR-Status, Signalstärke, Herstellerlogos, mehrzeilige oder herstellerspezifische Layouts. Keine Firmwareänderung und keine Änderung am Bild auf der SD-Karte.
+GPS, temperature, moon phase, PIR status, signal strength, vendor logos, multiline or vendor-specific layouts. No firmware modification or change to the image on the SD card.

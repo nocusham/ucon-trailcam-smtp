@@ -20,4 +20,6 @@ Phase 4a: one new legacy probe/tool module identity test; architecture guards in
 
 Phase 4b: runtime now lives in src/ucon_trailcam_smtp/. Tests use qualified imports and mock paths. Five new package-layout tests cover checkout/installed secret-path behavior, module identity, isolated src imports and six CLI help pairs; 211/211 passed at 9bc9a70 in 2.038 s, along with all nine legacy CLI help checks (owner-provided output). Run full discovery with the existing virtual environment from the separate checkout. The package-only import test uses a temporary working directory and src on PYTHONPATH; it is not a wheel-install test. Actual installation and release artifact validation remain deferred.
 
-Phase 5a: three offline configuration-template tests check parsing, safe defaults, empty credential values using a temporary private file, and relocation. Expected full suite 214. No real .env or config.local.toml is read.
+Phase 5a: three offline configuration-template tests check parsing, safe defaults, empty credential values using a temporary private file, and relocation. Full 214-test suite passed at cda3649 in 2.033 s (owner-provided output). No real .env or config.local.toml is read.
+
+Phase 5b changes documentation only; no new test count. The next complete run follows source-language review in phase 5c.

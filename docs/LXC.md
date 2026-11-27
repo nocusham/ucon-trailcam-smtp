@@ -1,6 +1,6 @@
 # Proxmox VE LXC deployment plan
 
-**Deferred:** continue all development and tests on the existing Ubuntu test server. Create the LXC only after application functionality is validated.
+**Deferred:** continue development and tests on the existing Ubuntu reference server. The commands below are a historical planning sketch, not approved production installation instructions. Create the LXC only after reference validation, release packaging and SDK licensing gates are satisfied.
 
 Target: native Python service in an unprivileged Debian 13 LXC under Proxmox VE 9.x (user's host reports 9.2.32). No Docker, nesting, privileged container, or device passthrough required for this stage. Suggested starting allocation: 1–2 vCPU, 1 GiB RAM, 8–16 GiB root disk; standard bridged IPv4 networking with DNS and internet access. Adjust storage for original photos and retention later. Do not enable port forwarding or public inbound services. The container must be able to initiate HTTPS, HTTP snapshot downloads, UDP relay traffic and SMTP to the configured mail server. Allow stateful responses, DNS and package updates. The provider/backend may change destinations.
 
@@ -42,3 +42,5 @@ Keep data directories private and included in backups; use separate test and pro
 ## Repository packaging prerequisite
 
 Before creating the production LXC, separate runtime modules, tests, diagnostic tools, deployment files and configuration templates; install a pinned validated release rather than the development checkout. See [REPOSITORY_LAYOUT.md](REPOSITORY_LAYOUT.md). No test data or private credentials are shipped. Perform the long-duration reference-server test before migrating.
+
+Current restructuring status (2026-11-27): source layout and configuration templates are in place on the separate development branch; 214 automated tests passed at cda3649. The older setup sketch above is not the final release installation procedure. Production deployment files, installed-package validation, dependency locking, licensing and live regression are still pending. Keep the current L3 checkout untouched.

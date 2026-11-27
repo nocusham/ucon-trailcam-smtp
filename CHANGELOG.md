@@ -10,7 +10,9 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
-- Phase 5a: move public configuration and credential templates into config/, translate comments into English and update setup commands and links. Active template values are unchanged (static comparison passed), including the example alias. Private configuration locations and runtime code are unchanged. Three new offline template checks; expected full suite 214 pending reference-server execution.
+- Phase 5b: translate credentials, health-alert and planned image-footer guides into English; normalize mixed-language headings, update current README status and branch-specific setup instructions, and distinguish historical evidence from current validation. Preserve localized subject/footer examples, technical findings and private state. Documentation only; source-language review follows in phase 5c.
+
+- Phase 5a: move public configuration and credential templates into config/, translate comments into English and update setup commands and links. Active template values are unchanged (static comparison passed), including the example alias. Private configuration locations and runtime code are unchanged. Three new offline template checks; reference-server full suite 214/214 passed at cda3649 in 2.033 s (owner-provided output).
 
 - Phase 4b: move 36 runtime modules to src/ucon_trailcam_smtp, update internal/test imports and mock targets, retain six thin root CLI launchers, and add development-only pyproject metadata. Checkout .env lookup remains at the repository root; an installed package uses explicit secret-file or environment values rather than an implicit file beside installed code. Add five tests for checkout/installed credential lookup, legacy runtime module identity, package-only imports outside the checkout and six normalized CLI comparisons. Reference-server full suite 211/211 passed at 9bc9a70 in 2.038 s and all nine legacy CLI help checks passed (owner-provided output); installed-package validation remains pending. No dependency upgrade, live operations, production installation or release.
 

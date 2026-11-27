@@ -1,4 +1,6 @@
-# Development history / Entwicklungshistorie
+# Development history
+
+This document preserves historical development checkpoints, including commands and plans as they existed at the time. For current instructions and validation status, see [README](../README.md), [SERVICE.md](SERVICE.md) and [REPOSITORY_LAYOUT.md](REPOSITORY_LAYOUT.md).
 
 **Reference camera identification — 2026-11-26:** The owner confirmed the manufacturer DEATTI and model DL04 on the camera and packaging. The historical label `H4` below refers to that same test camera. The origin of the label is not established by this archive; it is not a verified alternative model or internal hardware designation. Historical experiment wording is preserved. Current documentation uses DEATTI DL04.
 
@@ -6,7 +8,7 @@ Historical investigation log, archived on 2026-11-26. These entries describe the
 
 Experimental self-hosted SMTP bridge for Ucon 4G trail cameras. No camera firmware modifications or paid cloud storage intended. The UBIA backend is still required for authentication and relay connectivity.
 
-## Status / Projektstand
+## Status at the historical checkpoint
 
 Target: H4 LTE trail camera, Ucon Android app, using a personal SIM since at least the tests on 2026-11-25 (user correction), no paid cloud-storage subscription reported. Field observation (2026-11-25): motion recordings did not generate app notifications in the initial test configuration; a later PIR test on 2026-11-26 did produce an almost immediate Android notification with thumbnail, according to the user (no paid storage subscription reported). Initially SD recordings became visible only after actively connecting; later Android PIR notifications included a snapshot. Whether a server can obtain the event metadata directly remains unknown. Field test: Python 3.14.4 imports and account/device discovery work; SDK 0.1.14 and 0.1.16 both receive live video and metadata frames but no recognized SD event response, even with known photos on the SD card. H4 live listing now works without AVCTRL (18/18 records in 8.0 s). A live activity original was independently reconstructed from the Python wire capture and matched the corrected Android reference byte-for-byte. The corrected codec and normal metadata-driven activity thumbnail/original and network-wake original downloads passed live tests W/X/Y, with matching MD5 on all three files. SMTP is not implemented yet.
 
@@ -289,7 +291,7 @@ All 45 unit tests passed on the user's server. The live provider-independent clo
 
 The user requires full SD originals for production SMTP; cloud thumbnails are adequate for development/testing only. Cloud events remain the preferred trigger source. Do not silently substitute a thumbnail for an unavailable original in production. The original retrieval worker and persistent delivery queue are still missing. P4P reliability and stream-stop testing remain separate tasks.
 
-### Manual SMTP test / Manueller SMTP-Test
+### Manual SMTP test
 
 `smtp_probe.py` validates a local image with the same full decoder and adds it unchanged as an attachment. Without `--send` it only validates, with no SMTP connection. For a manual real test use your own server and addresses; STARTTLS (587) or implicit TLS (465) with certificate verification are supported. SMTP authentication is optional for an authorized TLS relay; if a username is configured and SMTP_PASSWORD is not set, the password is prompted locally.
 
@@ -428,7 +430,7 @@ With the correct UID this should preview three images and three messages without
 
 ## Persistent local credentials and annotated configuration
 
-The single-camera profile preview passed for three verified originals. The project now reads a protected local .env file directly, without executing shell code or exporting its values to the environment. See [credential setup](CREDENTIALS.md). Private Ucon and SMTP passwords remain in .env; only the public Revierwelt password "mail" may be specified literally in a camera SMTP profile for the matching host and recipient domain. The German configuration template explains every supported field; existing config.local.toml is not overwritten. Both local files remain ignored by Git. The private credential reader checks ownership and mode (400/600), rejects symlinks and malformed/duplicate entries, and reads literal values with file precedence over existing environment variables. Eight new tests plus existing Ucon and queue routing tests passed locally (29 tests). The actual server login with .env, the legacy SMTP settings integration and eventual systemd/reboot behavior still need validation. No LXC setup or Revierwelt test yet.
+The single-camera profile preview passed for three verified originals. The project now reads a protected local .env file directly, without executing shell code or exporting its values to the environment. See [credential setup](CREDENTIALS.md). Private Ucon and SMTP passwords remain in .env; only the public Revierwelt password "mail" may be specified literally in a camera SMTP profile for the matching host and recipient domain. The configuration template (German at that checkpoint, now translated into English) explains every supported field; existing config.local.toml is not overwritten. Both local files remain ignored by Git. The private credential reader checks ownership and mode (400/600), rejects symlinks and malformed/duplicate entries, and reads literal values with file precedence over existing environment variables. Eight new tests plus existing Ucon and queue routing tests passed locally (29 tests). The actual server login with .env, the legacy SMTP settings integration and eventual systemd/reboot behavior still need validation. No LXC setup or Revierwelt test yet.
 
 ## Persistent credentials confirmed; stable camera selection
 
@@ -486,7 +488,7 @@ The second command is login/discovery only; neither opens a P4P session or sends
 - [x] Implement manual SMTP image attachment probe with certificate verification and mocked transport tests.
 - [x] Validate live SMTP delivery to the user's own TLS mail server.
 - [ ] Validate Revierwelt delivery and implement persistent delivery queue with retry/uncertain-delivery handling.
-- [ ] Add tests with synthetic fixtures, Docker and setup documentation in German and English.
+- [ ] Historical plan: add synthetic tests, Docker and bilingual setup documentation (superseded by the native LXC and English-only repository plan).
 
 ## References
 

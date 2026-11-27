@@ -6,12 +6,12 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 
 **Development status (2026-11-27):** the DEATTI DL04 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested. The reference-server soak run reached 1,529 cycles; six new SMTP acceptances and six relay openings were reported in the latest cumulative counters, all six messages were confirmed received by the owner, and three transient cloud failures recovered automatically. The process restart completed 3/3 cycles without error, relay or resend; the queue remained at ten sent events. Sustained outages, actual SMTP/SD failure recovery and production deployment remain pending. Do not treat this version as an unattended production release.
 
-## Current status / Aktueller Stand
+## Current status
 
 | Component | Status |
 | --- | --- |
 | Python / SDK | Python 3.14.4 on Ubuntu test server; SDK 0.1.16 pinned |
-| Unit tests | 175 passed on the configured test server |
+| Unit tests | 214/214 passed on the restructuring branch at cda3649 (2.033 s); live regression pending |
 | Ucon cloud event query | Live confirmed, no client-initiated P4P session |
 | Cloud watch | 6/6 successful polls with one login; new event and duplicate detection confirmed |
 | Camera selection | Exact UID from enabled local camera profile; live cloud query and relay credential discovery confirmed |
@@ -23,7 +23,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 | SMTP grouped | MIME preview confirmed; real grouped delivery not tested |
 | Camera-specific SMTP | Live single-camera preview; distinct two-camera routes tested synthetically |
 | Credentials | Private .env loaded successfully without exported credentials; mode 600 confirmed |
-| Continuous service / retry | Pending |
+| Continuous service / retry | Integrated; normal reference-server soak and restart validated; sustained failure recovery pending |
 | Proxmox LXC / systemd | Deferred until application validated |
 | Revierwelt | Single-image guard implemented; live delivery deferred |
 
@@ -31,15 +31,18 @@ The DEATTI DL04 works with a personal SIM in the reference tests. Cloud event ty
 
 ## Installation and local configuration
 
+These source-checkout instructions describe the restructuring branch, not a production release. Select the branch explicitly in a new development checkout; never switch the active L3 checkout. The default main branch still uses its historical root templates.
+
 Linux, Python 3.12+ as required by the pinned SDK; use a private checkout and an unprivileged user. For current development stay on the existing Ubuntu test server. Do not create the production LXC yet.
 
 ```sh
 git clone https://github.com/nocusham/ucon-trailcam-smtp.git
 cd ucon-trailcam-smtp
+git switch refactor/repository-layout
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m unittest -v
+python -m unittest discover -s tests -t . -v
 umask 077
 test -e .env || cp config/.env.example .env
 test -e config.local.toml || cp config/config.example.toml config.local.toml
@@ -48,11 +51,11 @@ nano .env
 nano config.local.toml
 ```
 
-On updates use `git pull` and rerun tests. Do not overwrite existing local configuration. The annotated English template [config.example.toml](config/config.example.toml) explains every field. See [credential setup](docs/CREDENTIALS.md) for literal KEY=value syntax, password sources, file ownership and restart behavior. File values override existing environment variables; never source the .env as shell code. Use a separate password entry for each private SMTP credential as needed. Only the public Revierwelt password "mail" is permitted directly in the profile, restricted to the known server and recipient domain. The test suite must never read the real credential file. Earlier credential assertions were fixed in commit 49f6de4; any exposed password should be rotated.
+For an inactive development checkout, review changes before updating and rerun tests. Never update the active L3 checkout. Do not overwrite existing local configuration. The annotated English template [config.example.toml](config/config.example.toml) explains every field. See [credential setup](docs/CREDENTIALS.md) for literal KEY=value syntax, password sources, file ownership and restart behavior. File values override existing environment variables; never source the .env as shell code. Use a separate password entry for each private SMTP credential as needed. Only the public Revierwelt password "mail" is permitted directly in the profile, restricted to the known server and recipient domain. The test suite must never read the real credential file. Earlier credential assertions were fixed in commit 49f6de4; any exposed password should be rotated.
 
 Each camera profile has an independent UID, enabled flag and SMTP host, port, security, sender, recipient, username, password reference, mode and limit. Names are local aliases, not account device indices. Configured-camera image subjects use `UCON testkamera - 15.01.2026 14:52:05 MEZ` (capture date/time in Europe/Berlin with MEZ/MESZ, not server or delivery time). Grouped subjects also include the number of originals and their capture-time range. Original attachment names and bytes are unchanged. Legacy unconfigured SMTP probes retain their original subjects. No fallback to a global destination. Revierwelt requires a distinct recipient for each camera and one attachment per message. Private destinations may use grouped mode, but never mix images from different cameras. One recipient per camera is currently supported. Use STARTTLS or implicit TLS with certificate verification for private mail. Revierwelt's TLS support is not confirmed.
 
-## Current test workflow (manual, not a daemon)
+## Manual diagnostic workflow (historical reference tests)
 
 Examples use the configured alias `testkamera`, replace it locally. All commands below assume an activated virtual environment. Never publish real UIDs, account names, passwords, signed URLs, packet captures, private images or database contents.
 
@@ -170,7 +173,9 @@ The first sequential service is implemented in trailcam_service.py; see [SERVICE
 
 Code 20005 is observed for a wrong password, not a proven exhaustive vendor error mapping. The login-specific retry suspension is implemented in the bounded persistent intake test, not yet in the full service.
 
-## Roadmap / Weitere Entwicklung
+## Roadmap
+
+Completed development milestones and remaining validation gates are distinguished below. See the restructuring section and [service evidence](docs/SERVICE.md) for the latest test results.
 
 - [x] DEATTI DL04 original transfer, cloud event intake, matching, persistent file receipt and SMTP test.
 - [x] Per-camera SMTP profiles, protected credentials, UID-based cloud and device discovery.
@@ -178,11 +183,11 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Integrate UID-based real SD transfer and multi-camera processing on the current server.
 - [x] Implement optional independent alarm SMTP configuration and persistent incident notification core (11 local tests).
 - [x] Validate manual alert SMTP live (test mail received).
-- [ ] Wire observation/dispatch into the service for outstanding original download failures, no extra active camera health checks; validate passive telemetry and wire the optional disabled-by-default inactivity state into automatic dispatch.
+- [x] Integrate observation/dispatch and optional inactivity state into the service, without extra active camera checks; live automatic alert delivery remains pending.
 - [x] Persistent download retry core with explicit retry-aware SD batch test (core tested locally; live integration pending).
 - [x] Persistent intake cursor, startup cutoff, bounded catch-up and login-specific retry block in bounded test (nine core tests).
-- [ ] Validate bounded intake live, complete service integration, freshness/pagination validation and automatic alert dispatch.
-- [ ] Continuous service with independent cloud, camera and delivery failure handling; configuration for intervals and retention.
+- [x] Validate normal bounded intake and integrate service processing; freshness/pagination and automatic alert delivery still require live validation.
+- [x] Integrate continuous service, retry handling and optional retention; sustained outage, multi-camera isolation and actual deletion tests remain pending.
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.
 - [ ] Test wake after extended idle, event reliability, mobile data use, pagination and service entitlement.
 - [x] Nominal 24-hour soak run (1,529 cycles), recipient confirmation and three-cycle process restart test on the existing Ubuntu reference server; longer field validation remains open.
@@ -194,13 +199,13 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Afterwards investigate Xega XG-23 (UBox), with separate account authentication, provider-scoped failure handling and a validated SD-original transfer. See [UBox research and camera compatibility test plan](docs/UBOX_RESEARCH.md); compatibility is unconfirmed.
 - [ ] Discuss small upstream SDK fixes with the maintainer after application validation; clarify licensing before redistribution.
 
-## Documentation / Dokumentation
+## Documentation
 
 - [Annotated camera configuration](config/config.example.toml)
-- [Credential setup (Deutsch)](docs/CREDENTIALS.md)
-- [Optional health alerts (Deutsch)](docs/ALERTS.md)
+- [Credential setup](docs/CREDENTIALS.md)
+- [Optional health alerts](docs/ALERTS.md)
 - [Deferred native Proxmox LXC plan](docs/LXC.md)
-- [Planned optional image footer (Deutsch)](docs/IMAGE_FOOTER.md)
+- [Planned optional image footer](docs/IMAGE_FOOTER.md)
 - [UBox protocol research and additional-camera test plan](docs/UBOX_RESEARCH.md)
 - [Full historical development and protocol analysis](docs/DEVELOPMENT_HISTORY.md)
 - [Development changelog](CHANGELOG.md)
@@ -217,8 +222,8 @@ Optional [retention] enabled=false, days=30 (1–3650). Age is measured from con
 
 Repository packaging and production/test separation are planned for the LXC transition; see [repository layout](docs/REPOSITORY_LAYOUT.md).
 
-The reference-server soak and process restart runs are complete with the existing test database, private SMTP and cleanup disabled. See [final results](docs/SERVICE.md#l1-and-l2-final-results-2026-11-27). All six new L1 messages were confirmed received. The camera is USB-powered; battery life and SIM data consumption require a separate field test. Next: validate the new [sanitized diagnostics](docs/SERVICE.md#sanitized-service-diagnostics-post-l1l2) on the development server, then restructure the repository, followed by versioned packaging and LXC validation. Resolve SDK licensing before public production distribution.
+The reference-server soak and process restart runs are complete with the existing test database, private SMTP and cleanup disabled. See [final results](docs/SERVICE.md#l1-and-l2-final-results-2026-11-27). All six new L1 messages were confirmed received. L1/L2 used USB power. L3 continues on the separate reference checkout without the supplied solar panel; battery endurance and SIM data consumption are not yet established. Sanitized diagnostics and the restructuring branch have passed automated regression; versioned packaging, live regression and LXC validation remain pending. Resolve SDK licensing before public production distribution.
 
 ## Repository restructuring (development branch)
 
-Phases 1 and 2 separate synthetic tests from runtime modules and extract shared mail and cloud REST functions (`mail_message.py`, `cloud_api.py`). Phase 3a extracts the shared relay adapter into `sdk_relay.py`, so the service no longer imports the diagnostic probe. The existing SDK and relay behavior are retained. All three new adapter regression tests passed on the reference server (0.041 s); the full 197-test suite passed on the reference server (0.273 s) at 3c8693b with SDK 0.1.16, covering phases 1, 2 and 3a. Live regression remains pending. Phase 3b isolates credential and SD-card SDK imports in `sdk_credentials.py` and `sdk_sdcard.py`; `sdk_relay.py` and `h4_crypto.py` remain the relay and crypto boundaries. All 200 tests passed on the reference server at c93cbf2 (0.297 s). Phase 3c extracts the shared legacy SMTP settings reader into `smtp_settings.py`, removes the final direct import of a pure diagnostic probe from runtime-capable root modules, and adds four tests (204 expected). The full 204-test suite passed at 7540fd4 (0.324 s), and all nine legacy CLI help checks passed. Phase 4a moves the three pure diagnostic implementations to tools/ and keeps root compatibility launchers; see [manual tools](tools/README.md). All 205 tests passed at 5aadfbf (0.325 s), as did all nine legacy CLI help checks. The initial new-tool help comparison stopped at the first tool because argparse displays the module invocation name and wraps usage differently. A new offline test compares normalized usage and the unchanged help body for all three tools; the corrected test passed at 9f9f8cf in 0.584 s, covering all three tools. Phase 4a is complete with 205 previous passing tests and one additional passing test; the combined 206-test suite has not yet been run in a single invocation. Phase 4b moves the runtime into `src/ucon_trailcam_smtp/` and introduces development-only packaging metadata (`0.0.0.dev0`). Six runtime CLI launchers at the root preserve existing commands; tools and tests import the namespaced package. From a source checkout, the implicit `.env` remains at the repository root. An installed package does not search for an implicit `.env`; use an explicit protected `UCON_SECRETS_FILE` or environment values. The full 211-test suite passed at 9bc9a70 in 2.038 s, along with all nine legacy CLI help checks. Phase 5a moves the two public example templates into config/ and translates their comments without changing active values; see [configuration templates](config/README.md). Three new template tests bring the expected suite to 214, pending validation. Package installation and release artifact validation remain deferred. From the repository root run `python -m unittest discover -s tests -t . -v`. Existing service and probe CLI commands remain valid in this phase. See [repository layout](docs/REPOSITORY_LAYOUT.md). Do not update a running reference test checkout or deploy this branch as production.
+Phases 1 and 2 separate synthetic tests from runtime modules and extract shared mail and cloud REST functions (`mail_message.py`, `cloud_api.py`). Phase 3a extracts the shared relay adapter into `sdk_relay.py`, so the service no longer imports the diagnostic probe. The existing SDK and relay behavior are retained. All three new adapter regression tests passed on the reference server (0.041 s); the full 197-test suite passed on the reference server (0.273 s) at 3c8693b with SDK 0.1.16, covering phases 1, 2 and 3a. Live regression remains pending. Phase 3b isolates credential and SD-card SDK imports in `sdk_credentials.py` and `sdk_sdcard.py`; `sdk_relay.py` and `h4_crypto.py` remain the relay and crypto boundaries. All 200 tests passed on the reference server at c93cbf2 (0.297 s). Phase 3c extracts the shared legacy SMTP settings reader into `smtp_settings.py`, removes the final direct import of a pure diagnostic probe from runtime-capable root modules, and adds four tests (204 expected). The full 204-test suite passed at 7540fd4 (0.324 s), and all nine legacy CLI help checks passed. Phase 4a moves the three pure diagnostic implementations to tools/ and keeps root compatibility launchers; see [manual tools](tools/README.md). All 205 tests passed at 5aadfbf (0.325 s), as did all nine legacy CLI help checks. The initial new-tool help comparison stopped at the first tool because argparse displays the module invocation name and wraps usage differently. A new offline test compares normalized usage and the unchanged help body for all three tools; the corrected test passed at 9f9f8cf in 0.584 s, covering all three tools. Phase 4a is complete with 205 previous passing tests and one additional passing test; the combined 206-test suite has not yet been run in a single invocation. Phase 4b moves the runtime into `src/ucon_trailcam_smtp/` and introduces development-only packaging metadata (`0.0.0.dev0`). Six runtime CLI launchers at the root preserve existing commands; tools and tests import the namespaced package. From a source checkout, the implicit `.env` remains at the repository root. An installed package does not search for an implicit `.env`; use an explicit protected `UCON_SECRETS_FILE` or environment values. The full 211-test suite passed at 9bc9a70 in 2.038 s, along with all nine legacy CLI help checks. Phase 5a moves the two public example templates into config/ and translates their comments without changing active values; see [configuration templates](config/README.md). The three new template tests are included in the successful 214/214 reference-server run at cda3649 (2.033 s). Phase 5b translates the remaining German guides, normalizes headings and clarifies current versus historical status. Phase 5c reviews source language separately. Package installation and release artifact validation remain deferred. From the repository root run `python -m unittest discover -s tests -t . -v`. Existing service and probe CLI commands remain valid in this phase. See [repository layout](docs/REPOSITORY_LAYOUT.md). Do not update a running reference test checkout or deploy this branch as production.

@@ -1,0 +1,52 @@
+# Deployment preparation
+
+**Development only.** Phases 1–5 passed automated reference-server regression (214/214 at 46799db). The active L3 checkout and virtual environment must remain unchanged. Do not deploy or publish a production release yet.
+
+## Staged plan
+
+| Phase | Scope |
+| --- | --- |
+| 6a | Read-only inventory of the verified reference Python environment |
+| 6b | Exact runtime dependency constraints, build tooling selection, local wheel build and isolated installation checks |
+| 6c | Native systemd service and dedicated unprivileged service account, permissions and explicit paths |
+| 6d | Installation/update tooling, private state backup and rollback procedures |
+| 6e | Versioned release layout and artifact validation |
+
+Production installation and live validation remain later gates. The SDK license is unresolved: do not bundle its code or publish production artifacts until redistribution requirements are clarified. No SDK replacement is planned in this phase.
+
+## Intended filesystem layout
+
+These are proposed deployment locations, not installed paths:
+
+| Location | Purpose |
+| --- | --- |
+| /opt/ucon-trailcam-smtp/releases/ | Versioned application installations, not writable by the service user |
+| /opt/ucon-trailcam-smtp/current | Selected installed version |
+| /etc/ucon-trailcam-smtp/ | Private operator configuration and explicit protected credential file |
+| /var/lib/ucon-trailcam-smtp/ | Persistent SQLite queue, receipts and original media |
+| systemd journal | Sanitized service logs |
+
+Use a dedicated unprivileged service account. Credentials must satisfy the existing owner and mode 400/600 checks. No secrets in the service command line or unit text. Use new production queue and media locations; never copy the reference-test queue into production. Preserve state on updates and fail closed on incompatible upgrades. A code rollback is not automatically a database rollback; later procedures must account for irreversible SMTP acceptance and uncertain receipts.
+
+## 6a: capture the reference baseline
+
+On the reference server, use the Python executable from the already validated virtual environment, without installing or upgrading anything. The following commands query installed metadata only; they do not access cameras, SMTP, databases or configuration files.
+
+```sh
+(
+set -e
+export PYTHONDONTWRITEBYTECODE=1
+PY="$HOME/ucon-trailcam-smtp/.venv/bin/python"
+
+"$PY" -c 'import sys, platform; print("Python:", sys.version.split()[0]); print("Platform:", sys.platform, platform.machine())'
+"$PY" -m pip --disable-pip-version-check list --format=freeze
+"$PY" -m pip --disable-pip-version-check show p4p-camera-sdk httpx httpcore Pillow | grep -E '^(Name|Version|Requires):'
+"$PY" -m pip --disable-pip-version-check check
+)
+```
+
+Review the output before sharing. Record only relevant package names, installed versions, dependency relationships and compatibility findings. Do not publish the full environment inventory indiscriminately, private paths, index configuration, URLs containing credentials or secret values. Do not use an unreviewed pip freeze output as a production lock.
+
+The existing requirements.txt and pyproject.toml agree on the direct requirements, but Pillow is a range and transitive requirements are not fully pinned. The exact installed KCP distribution/version and other dependencies must be determined from the working environment. Build tools are separate from the runtime dependency set. Python 3.14 on Ubuntu does not establish Python 3.13 compatibility on Debian 13; validate the target separately. Exact version constraints alone do not establish hash-verified, cross-platform reproducibility.
+
+Next: choose constraints from the verified dependency closure and build a local development wheel in an isolated environment. Do not install the project into the existing reference virtual environment, enable a service or create a production LXC.

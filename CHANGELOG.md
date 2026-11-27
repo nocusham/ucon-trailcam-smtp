@@ -10,7 +10,9 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
-- Phase 5c: inspect all 89 Python files for German-language candidates; retain intentional German image subjects and alert emails, MEZ/MESZ, example aliases and synthetic metadata. No runtime or test changes needed in this targeted language review. Record exceptions and scope; final 214-test regression pending.
+- Phase 6a: document deployment and packaging stages, intended runtime/config/state separation, and read-only dependency inventory procedure. Capture actual versions of the working reference environment, including transitive KCP dependencies and build tooling, before selecting exact constraints. Inventory pending; no package, dependency, runtime, systemd or host changes.
+
+- Phase 5c: inspect all 89 Python files for German-language candidates; retain intentional German image subjects and alert emails, MEZ/MESZ, example aliases and synthetic metadata. No runtime or test changes needed in this targeted language review. Record exceptions and scope; final phase-5 reference-server regression 214/214 passed at 46799db in 2.041 s (owner-provided terminal output).
 
 - Phase 5b: translate credentials, health-alert and planned image-footer guides into English; normalize mixed-language headings, update current README status and branch-specific setup instructions, and distinguish historical evidence from current validation. Preserve localized subject/footer examples, technical findings and private state. Documentation only; source-language review follows in phase 5c.
 

@@ -1,6 +1,6 @@
 # Planned repository layout for LXC transition
 
-Status: phases 1 through 5a automated validation passed; phases 5b and 5c documentation and source-language review complete, final automated regression and live regression pending on `refactor/repository-layout`, based on the validated `163f46b` runtime. The reference-server cold-weather run (L3) must remain on its current checkout. Do not merge or switch that checkout during L3. Reference-server retention preview, normal SMTP, nominal 24-hour soak (1,529 cycles), recipient receipt of all six new messages and normal process restart (3/3 cycles) are complete within the evidence limits in [SERVICE.md](SERVICE.md#l1-and-l2-final-results-2026-11-27). Improve sanitized diagnostics before restructuring; preserve verified behavior and repeat the full test suite.
+Status: phases 1 through 5 automated validation passed; phase 6a dependency inventory pending, live regression pending on `refactor/repository-layout`, based on the validated `163f46b` runtime. The reference-server cold-weather run (L3) must remain on its current checkout. Do not merge or switch that checkout during L3. Reference-server retention preview, normal SMTP, nominal 24-hour soak (1,529 cycles), recipient receipt of all six new messages and normal process restart (3/3 cycles) are complete within the evidence limits in [SERVICE.md](SERVICE.md#l1-and-l2-final-results-2026-11-27). Improve sanitized diagnostics before restructuring; preserve verified behavior and repeat the full test suite.
 
 ```text
 src/                 installable runtime package
@@ -116,3 +116,11 @@ Intentional localization exceptions retained without changes:
 - Planned image footer retains its localized example, including Akku; the feature remains unimplemented.
 
 No source, dependency or test changes in phases 5b/5c. The next reference-server check should run the complete 214-test suite at the final phase-5 commit in the separate worktree. Phase 6 can then prepare deployment and package validation. Future deployment files must follow the English-language policy. SDK license, installed-package verification and live regression remain open; keep main and active L3 untouched.
+
+Phase 5 final verification (2026-11-27): the owner reported commit `46799db`, `Ran 214 tests in 2.041s` and `OK`. Phases 1–5 are complete for automated regression; actual wheel installation, dependency locking, live regression, licensing and deployment remain open.
+
+## Phase 6a: reference dependency inventory
+
+Before changing dependency constraints, obtain the actual installed versions and dependency metadata from the reference virtual environment that passed the regression tests. In particular, determine the installed KCP distribution and version from SDK dependency metadata rather than guessing. Record Python and architecture, runtime distributions and available build tooling, and pip check status. Do not install, upgrade or remove packages in the active L3 environment. Only relevant dependency versions and compatibility findings should enter the repository; no private paths, credentials, environment dumps or package index settings. See [deployment preparation](../deploy/README.md).
+
+Phase 6 is divided into 6a inventory, 6b exact dependency constraints and isolated package build/install, 6c systemd and permission design, 6d installation/update/backup/rollback tooling, and 6e release layout and artifact validation. Separate installed immutable code from private configuration and persistent state. Validate first outside the active reference checkout, then in the planned unprivileged Debian 13 LXC in later phases. The current test environment is evidence for its own Python/platform only, not a verified Debian 13 lock. Do not redistribute the SDK while licensing remains unresolved; no production release or live operations at this stage.

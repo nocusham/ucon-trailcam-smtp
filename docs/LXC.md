@@ -44,3 +44,5 @@ Keep data directories private and included in backups; use separate test and pro
 Before creating the production LXC, separate runtime modules, tests, diagnostic tools, deployment files and configuration templates; install a pinned validated release rather than the development checkout. See [REPOSITORY_LAYOUT.md](REPOSITORY_LAYOUT.md). No test data or private credentials are shipped. Perform the long-duration reference-server test before migrating.
 
 Current restructuring status (2026-11-27): source layout and configuration templates are in place on the separate development branch; 214 automated tests passed at cda3649. The older setup sketch above is not the final release installation procedure. Production deployment files, installed-package validation, dependency locking, licensing and live regression are still pending. Keep the current L3 checkout untouched.
+
+Phase 5 final checkpoint: 214/214 tests passed at 46799db. Phase 6 deployment preparation is tracked in [deploy/README.md](../deploy/README.md); the LXC is still deferred.

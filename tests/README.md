@@ -25,3 +25,5 @@ Phase 5a: three offline configuration-template tests check parsing, safe default
 Phase 5b changes documentation only; no new test count. The next complete run follows source-language review in phase 5c.
 
 Phase 5c: targeted source-language review identified only intentional localization/fixture exceptions; no new tests or code changes. Run the full 214-test suite at the final phase-5 commit to close the checkpoint. Existing tests continue to verify German mail localization.
+
+Final phase-5 regression: 214/214 passed at 46799db in 2.041 s (owner-provided terminal output). Phase 6a requests a read-only reference-environment inventory; do not modify the active L3 virtual environment. Actual isolated installation tests follow in phase 6b.

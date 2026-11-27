@@ -10,6 +10,8 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
+- Phase 3a: move the unchanged DiagnosticRelay class and relay_compat context manager from probe.py into sdk_relay.py. The service imports the shared adapter directly; the probe retains its CLI and both helper exports. Add three regression tests for shared identity and SDK patch/output restoration on normal exit and timeout. Static extraction checks passed; execution with the real pinned SDK and full expected 197-test suite pending. No SDK replacement, protocol or runtime behavior change.
+
 - Phase 2: extract the unchanged REST/account-selection functions and ApiError into cloud_api.py. Service and intake no longer depend on the cloud diagnostic entrypoint, which retains its CLI and helper exports. Six new mocked tests passed locally with a synthetic SDK interface; full 194-test suite with the installed SDK remains pending. No protocol, configuration, database or retry behavior changes.
 
 - Phase 1: move test modules to `tests/`; extract shared mail construction and sending wrapper from the SMTP probe. Preserve the existing runtime CLI, config/secret discovery and delivery behavior. 29 targeted tests passed locally under umask 002 with both discovery commands; full relocated test suite pending. No production release or merge during L3.

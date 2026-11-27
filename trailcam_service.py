@@ -21,7 +21,7 @@ from media_retention import parse_retention, cleanup
 
 def download_one(db, args, profile, devices, policy, settings):
     from camera_selection import select_device, relay_credentials
-    from probe import DiagnosticRelay, relay_compat
+    from sdk_relay import DiagnosticRelay, relay_compat
     from queue_download import load_rows, download_batch
     from h4_events import list_events_staged
     from h4_download import download_photo

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from PIL import Image
 from cloud_image import ImageError
-from smtp_probe import load_image, build_message, send_message
+from mail_message import load_image, build_message, send_message
 
 
 class SmtpProbeTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class SmtpProbeTests(unittest.TestCase):
                 load_image(path)
 
     def test_starttls_before_auth_and_send(self):
-        with patch('smtp_probe.smtplib.SMTP') as factory:
+        with patch('smtp_transport.smtplib.SMTP') as factory:
             client = factory.return_value.__enter__.return_value
             client.send_message.return_value = {}
             send_message(object(), 'example.invalid', 587, 'starttls', 'user', 'secret')
@@ -31,7 +31,7 @@ class SmtpProbeTests(unittest.TestCase):
                              ['ehlo', 'starttls', 'ehlo', 'login', 'send_message'])
 
     def test_no_send_after_tls_failure(self):
-        with patch('smtp_probe.smtplib.SMTP') as factory:
+        with patch('smtp_transport.smtplib.SMTP') as factory:
             client = factory.return_value.__enter__.return_value
             client.starttls.side_effect = OSError('TLS failure')
             with self.assertRaises(OSError):
@@ -40,7 +40,7 @@ class SmtpProbeTests(unittest.TestCase):
             client.send_message.assert_not_called()
 
     def test_implicit_tls_without_auth(self):
-        with patch('smtp_probe.smtplib.SMTP_SSL') as factory:
+        with patch('smtp_transport.smtplib.SMTP_SSL') as factory:
             client = factory.return_value.__enter__.return_value
             client.send_message.return_value = {}
             send_message(object(), 'example.invalid', 465, 'tls')
@@ -49,7 +49,7 @@ class SmtpProbeTests(unittest.TestCase):
             client.send_message.assert_called_once()
 
     def test_plain_smtp_explicit_mode(self):
-        with patch('smtp_probe.smtplib.SMTP') as factory:
+        with patch('smtp_transport.smtplib.SMTP') as factory:
             client = factory.return_value.__enter__.return_value
             client.send_message.return_value = {}
             send_message(object(), 'example.invalid', 5025, 'none', 'user', 'secret')

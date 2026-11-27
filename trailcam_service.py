@@ -72,7 +72,7 @@ async def run(args):
     from cloud_probe import ApiError, discover_devices, list_devices, list_cloud_events
     from event_queue import open_queue, ingest_events
     from queue_download import batch_lock
-    from smtp_probe import load_image, build_message, send_message
+    from mail_message import load_image, build_message, send_message
     from ucon_auth import read_credentials
     if version('p4p-camera-sdk') != '0.1.16':
         raise ValueError('Pinned SDK required')

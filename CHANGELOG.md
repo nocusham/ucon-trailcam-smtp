@@ -8,6 +8,11 @@ This records development milestones, not a published production release.
 
 - The owner confirmed DEATTI as the manufacturer and DL04 as the model designation printed on the camera and retail box on 2026-11-26. The earlier `H4` label in the development history refers to this same reference camera; its origin is not established. It must not be presented as a confirmed manufacturer model or hardware designation. No runtime changes or new compatibility claims.
 
+### Repository restructuring (development branch)
+
+- Phase 1: move test modules to `tests/`; extract shared mail construction and sending wrapper from the SMTP probe. Preserve the existing runtime CLI, config/secret discovery and delivery behavior. Full relocated test suite pending. No production release or merge during L3.
+- Reference server D1: 188/188 tests passed with umask 0002; D2: three successful idle cycles. Owner reported six new images sent when installing the camera for L3. L3 is an ongoing unplugged outdoor test, with the supplied solar panel intentionally omitted; battery endurance and data usage are not yet established.
+
 ### Sanitized diagnostics (post-soak development)
 
 - D1 reported 183/185 passing with two retention fixture failures. Reproduced both under umask 002; explicit private creation of fixture key/attempt directories fixes the implicit parent-mode issue. Real download root creation now also requests mode 0700 explicitly. Existing permissions and deletion safeguards unchanged. Added three permission regression tests; 17 targeted retention/download tests passed under each of umask 002, 022 and 077 locally. Full 188-test server rerun and D2 pending.

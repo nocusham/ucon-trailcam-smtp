@@ -218,3 +218,7 @@ Optional [retention] enabled=false, days=30 (1–3650). Age is measured from con
 Repository packaging and production/test separation are planned for the LXC transition; see [repository layout](docs/REPOSITORY_LAYOUT.md).
 
 The reference-server soak and process restart runs are complete with the existing test database, private SMTP and cleanup disabled. See [final results](docs/SERVICE.md#l1-and-l2-final-results-2026-11-27). All six new L1 messages were confirmed received. The camera is USB-powered; battery life and SIM data consumption require a separate field test. Next: validate the new [sanitized diagnostics](docs/SERVICE.md#sanitized-service-diagnostics-post-l1l2) on the development server, then restructure the repository, followed by versioned packaging and LXC validation. Resolve SDK licensing before public production distribution.
+
+## Repository restructuring (development branch)
+
+Phase 1 separates synthetic tests from runtime modules and extracts shared mail functions. From the repository root run `python -m unittest discover -s tests -t . -v`. Existing service and probe CLI commands remain valid in this phase. See [repository layout](docs/REPOSITORY_LAYOUT.md). Do not update a running reference test checkout or deploy this branch as production.

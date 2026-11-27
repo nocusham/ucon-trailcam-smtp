@@ -1,6 +1,6 @@
 # Planned repository layout for LXC transition
 
-Status: design only; current reference-server commands remain unchanged until the restructuring is performed. Reference-server retention preview, normal SMTP, nominal 24-hour soak (1,529 cycles), recipient receipt of all six new messages and normal process restart (3/3 cycles) are complete within the evidence limits in [SERVICE.md](SERVICE.md#l1-and-l2-final-results-2026-11-27). Improve sanitized diagnostics before restructuring; preserve verified behavior and repeat the full test suite.
+Status: phase 1 in progress on `refactor/repository-layout`, based on the validated `163f46b` runtime. The reference-server cold-weather run (L3) must remain on its current checkout. Do not merge or switch that checkout during L3. Reference-server retention preview, normal SMTP, nominal 24-hour soak (1,529 cycles), recipient receipt of all six new messages and normal process restart (3/3 cycles) are complete within the evidence limits in [SERVICE.md](SERVICE.md#l1-and-l2-final-results-2026-11-27). Improve sanitized diagnostics before restructuring; preserve verified behavior and repeat the full test suite.
 
 ```text
 src/                 installable runtime package
@@ -39,3 +39,7 @@ The UBox source review suggests separating account/provider-specific REST authen
 ## SDK boundary and licensing gate
 
 Keep the pinned SDK behind a narrow, testable transport/authentication interface rather than spreading its imports throughout the service. Preserve the working DL04 path and existing failure/receipt guarantees. A replacement is a contingency, not a current implementation requirement. Distinguish independently developed code and MIT-licensed ubox-p4p components from SDK-specific code without a confirmed project-wide license. Clarify permissions before public production distribution; do not bundle the SDK while terms remain unresolved. Avoid copying unlicensed implementations into a replacement. A license clarification request draft exists; posting through the connected GitHub integration was denied, and no maintainer response is known. Do not treat the existing NOTICE as a repository-wide MIT grant.
+
+## Phase 1: test separation and SMTP extraction
+
+Move all existing test modules into the `tests` package, retaining their test cases. Use `python -m unittest discover -s tests -t . -v` from the repository root. Extract image loading, MIME construction and the send wrapper into `mail_message.py`; the service and alerts no longer import the SMTP diagnostic CLI. Keep the legacy probe entrypoint and helper exports, message content, attachment bytes, send boundary, credentials path, database and CLI flags unchanged. The runtime is still at the root until cloud and P4P extraction are complete. Next: extract cloud REST functions, isolate the SDK relay adapter from `probe.py`, then move the runtime under `src/` and manual entrypoints under `tools/`. Move templates and translate maintained documentation as part of those subsequent phases. Do not build production artifacts or bundle the SDK at this point. The full relocated test suite and live regression checks are required before merge.

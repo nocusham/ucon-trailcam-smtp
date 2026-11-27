@@ -11,3 +11,8 @@ config.local.*
 *.pcap*
 media/
 data/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage

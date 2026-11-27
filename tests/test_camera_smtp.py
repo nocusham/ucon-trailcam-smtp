@@ -6,7 +6,7 @@ from unittest.mock import Mock
 from PIL import Image
 import hashlib
 
-import test_queue_smtp
+from tests import test_queue_smtp
 from camera_smtp import Camera, load_profiles, route_batch
 from queue_smtp import DeliveryError, process, ready_rows
 

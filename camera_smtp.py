@@ -171,7 +171,7 @@ def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=Fa
 
 def main():
     from queue_download import batch_lock
-    from smtp_probe import load_image, build_message, send_message
+    from mail_message import load_image, build_message, send_message
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True, type=Path)
     parser.add_argument('--queue-db', required=True, type=Path)

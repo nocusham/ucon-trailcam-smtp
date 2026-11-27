@@ -224,7 +224,7 @@ def dispatch_due(db, settings, now, cameras, send, *, emit=print, inactivity_sco
 
 def smtp_sender(settings, environ=None):
     from local_credentials import read_secret_values
-    from smtp_probe import send_message
+    from mail_message import send_message
     values = read_secret_values() if environ is None else environ
     password = values.get(settings.password_env) if settings.username else None
     if settings.username and not password:

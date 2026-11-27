@@ -27,3 +27,5 @@ Phase 5b changes documentation only; no new test count. The next complete run fo
 Phase 5c: targeted source-language review identified only intentional localization/fixture exceptions; no new tests or code changes. Run the full 214-test suite at the final phase-5 commit to close the checkpoint. Existing tests continue to verify German mail localization.
 
 Final phase-5 regression: 214/214 passed at 46799db in 2.041 s (owner-provided terminal output). Phase 6a requests a read-only reference-environment inventory; do not modify the active L3 virtual environment. Actual isolated installation tests follow in phase 6b.
+
+Phase 6b: run bash deploy/check-package.sh /path/to/reference/python from the separate test worktree. This requires access to the package index or equivalent approved package source, creates a temporary isolated venv, checks a local project wheel and installed CLI/imports, and reruns all 214 tests against a committed source archive using freshly installed reference versions. It does not install into the reference environment or execute live operations. Actual run pending.

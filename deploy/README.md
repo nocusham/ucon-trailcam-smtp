@@ -47,6 +47,18 @@ PY="$HOME/ucon-trailcam-smtp/.venv/bin/python"
 
 Review the output before sharing. Record only relevant package names, installed versions, dependency relationships and compatibility findings. Do not publish the full environment inventory indiscriminately, private paths, index configuration, URLs containing credentials or secret values. Do not use an unreviewed pip freeze output as a production lock.
 
-The existing requirements.txt and pyproject.toml agree on the direct requirements, but Pillow is a range and transitive requirements are not fully pinned. The exact installed KCP distribution/version and other dependencies must be determined from the working environment. Build tools are separate from the runtime dependency set. Python 3.14 on Ubuntu does not establish Python 3.13 compatibility on Debian 13; validate the target separately. Exact version constraints alone do not establish hash-verified, cross-platform reproducibility.
+Before phase 6b, requirements.txt and pyproject.toml agreed on direct requirements, but Pillow was a range and transitive requirements were not fully pinned. The exact installed KCP distribution/version and other dependencies must be determined from the working environment. Build tools are separate from the runtime dependency set. Python 3.14 on Ubuntu does not establish Python 3.13 compatibility on Debian 13; validate the target separately. Exact version constraints alone do not establish hash-verified, cross-platform reproducibility.
 
 Next: choose constraints from the verified dependency closure and build a local development wheel in an isolated environment. Do not install the project into the existing reference virtual environment, enable a service or create a production LXC.
+
+## 6a result and 6b package verification
+
+Owner-reported inventory on 2026-11-27: Python 3.14.4, Linux x86_64, SDK 0.1.16, KCP 0.1.6, Pillow 12.3.0; pip check reported no broken requirements. Exact reported versions are recorded in [requirements-reference.txt](requirements-reference.txt) and [requirements-build.txt](requirements-build.txt). The reference list includes observed support packages, including packaging and typing_extensions, without asserting that each is required on all platforms. Source requirements constrain dependency resolution to these versions. Project metadata declares the direct dependencies; deployment must also use the reference constraints. No dependency upgrade is intended.
+
+From the separate test worktree at the phase-6b commit, run:
+
+```sh
+bash deploy/check-package.sh "$HOME/ucon-trailcam-smtp/.venv/bin/python"
+```
+
+The script requires package-index access (or a configured approved package source), git, tar and an interpreter supporting venv. It installs only into a temporary private virtual environment; if any step fails, it stops and removes the temporary directory. It archives tracked source from HEAD, not working-tree changes or private configuration. It builds only the project wheel locally, checks that no tools/tests/templates/private state/SDK code are inside it, installs it, checks installed imports and --help outside the checkout, and runs the 214 source tests. No service start or live network operation other than package retrieval; no production deployment or published artifact. Report the failing step and sanitized error on failure rather than changing dependency versions. Exact version matching is not hash verification, and the Debian 13/Python 3.13 target still needs its own installation test. SDK redistribution terms remain unresolved.

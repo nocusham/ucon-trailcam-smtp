@@ -10,7 +10,9 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
-- Phase 6a: document deployment and packaging stages, intended runtime/config/state separation, and read-only dependency inventory procedure. Capture actual versions of the working reference environment, including transitive KCP dependencies and build tooling, before selecting exact constraints. Inventory pending; no package, dependency, runtime, systemd or host changes.
+- Phase 6b: pin direct Pillow requirement and constrain development installs to observed reference versions; separate exact build-tool requirements. Add local wheel content validation and temporary isolated environment build/install, installed import/console checks and full source regression. The reference snapshot is not a hash lock or Debian 13 validation. Actual package checks pending; no runtime code changes or publication.
+
+- Phase 6a: document deployment and packaging stages, intended runtime/config/state separation, and read-only dependency inventory procedure. Capture actual versions of the working reference environment, including transitive KCP dependencies and build tooling, before selecting exact constraints. Inventory completed: Python 3.14.4, Linux x86_64, SDK 0.1.16, KCP 0.1.6, Pillow 12.3.0, pip check reported no broken requirements (owner-provided output). No host changes.
 
 - Phase 5c: inspect all 89 Python files for German-language candidates; retain intentional German image subjects and alert emails, MEZ/MESZ, example aliases and synthetic metadata. No runtime or test changes needed in this targeted language review. Record exceptions and scope; final phase-5 reference-server regression 214/214 passed at 46799db in 2.041 s (owner-provided terminal output).
 

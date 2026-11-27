@@ -188,7 +188,7 @@ def process(db, rows, *, load_image, build_message, sender, recipient, send=None
 def main():
     from queue_download import batch_lock
     from mail_message import load_image, build_message, send_message
-    from smtp_probe import read_smtp_settings
+    from smtp_settings import read_smtp_settings
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--queue-db', required=True, type=Path)

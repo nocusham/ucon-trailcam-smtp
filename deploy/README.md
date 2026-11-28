@@ -59,13 +59,13 @@ All modes share one queue and one worker. Never run them concurrently.
 The same runtime and explicit absolute config/queue/media paths apply.
 No service is started or enabled automatically by installation.
 
-## Approved retention requirements (not implemented yet)
+## Approved retention requirements (implementation in progress)
 
 The owner confirmed these configurable defaults on 2026-11-28:
 
 | Data / behavior | Default |
 | --- | --- |
-| Detailed event metadata | 90 days |
+| Detailed event metadata | 90 days from capture time, except unresolved state |
 | SMTP delivery receipts / duplicate detection | 90 days after confirmed SMTP acceptance |
 | Maximum capture age for automatic cloud event queries, image downloads and SMTP | 90 days |
 | Camera telemetry history | 90 days |
@@ -83,19 +83,44 @@ resend safeguards remain to be reviewed; expired delivery receipts mean
 prior delivery cannot always be determined. No camera SD-card deletion.
 Journal retention remains the administrator's responsibility.
 
-The owner confirmed a configurable 90-day telemetry history, not merely
-the latest snapshot; sampling/storage policy remains to be approved.
-The existing latest-state tracking must continue to support alarms.
-Before runtime changes, obtain owner decisions on deletion versus local
-retention of expired unsent/uncertain originals, how to handle known or
-unknown previous delivery in manual mode, and metadata age reference.
-Do not infer authorization to delete unaccepted originals from the
-instruction to stop sending. Do not silently discard unresolved
-deliveries or bypass duplicate checks. The existing disabled-by-default retention
-code has not been changed. Document decisions before implementing each
-major step; preserve the current L3 run. Update backup rotation must not
-silently delete manually created backups; implementation policy to be
-reviewed before S4.
+Owner-approved additional decisions: delete definitely unsent local
+originals after the automatic capture-age limit; preserve uncertain
+originals and their unresolved state until explicit manual resolution.
+Known successful deliveries are not resent unless the operator explicitly
+requests --resend. Detailed metadata retention starts at capture time;
+retain data necessary to resolve unfinished/uncertain state. Historical
+telemetry records each fresh successful device observation (normally
+about every 15 minutes), without additional requests or fabricated cached
+samples. The latest-state table remains for alarms. Manual delivery
+cannot guarantee duplicate detection after receipt expiry; exact preview,
+confirmation and CLI details require review before implementation.
+
+Implementation checkpoints:
+- R1: shared configurable automatic age boundary. Implemented
+  [retention].automatic_days (default 90, 1–3650 integer days) in bounded
+  cloud event windows, service download selection and service SMTP selection.
+  Inclusive capture cutoff; fresh queue still starts at current time.
+  Stale cursor catch-up skips expired backlog, retains the one-hour window
+  and commits the cursor only after successful store. No deletion or
+  schema change; older downloaded/uncertain state remains for now.
+  Explicit existing diagnostic date-range commands retain their old
+  behavior; the new manual historical delivery/resend workflow is pending.
+  Six additional tests (259 expected), reference verification pending.
+- R2: safe media cleanup after 24 hours from SMTP acceptance, expired
+  definitely unsent originals, metadata and receipt pruning with
+  unresolved-state protection, retry/health consistency and backup
+  compatibility. Review deletion/ordering and independent configurable
+  periods before implementing.
+- R3: 90-day fresh-observation telemetry history and pruning.
+- R4: explicit manual camera/date-range delivery and --resend safeguards.
+
+The legacy enabled/days media-cleanup configuration is unchanged in R1
+and remains disabled by default. The approved 24-hour default takes
+effect only in R2. No deletion in R1, no automatic migration, no permanent
+image archive. The existing uncertainty block remains in effect.
+Document decisions before each major implementation; preserve L3.
+Update backup rotation must not silently delete manually created backups;
+review implementation before S4.
 
 ## Simplification implementation checkpoints
 
@@ -131,6 +156,6 @@ verifies the development ZIP, installs the extracted project wheel,
 checks pip/imports/CLI outside the checkout and runs the regression suite.
 No live service, root access, or actual production data. No third-party
 wheels are bundled; SDK licensing and native KCP/target dependency
-validation remain open. S1 passed: owner confirmed commit 56979da, 253 tests in 2.141 s and final package/development bundle success. Before S2, agree on the runtime retention/manual delivery details above; no implementation without owner decisions.
+validation remain open. S1 passed: owner confirmed commit 56979da, 253 tests in 2.141 s and final package/development bundle success. Complete R1–R4 before final installer configuration; review the next major step with the owner before implementing.
 
 See ../docs/PRODUCTION_READINESS.md and ../docs/LXC.md for release gates.

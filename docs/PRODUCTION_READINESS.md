@@ -12,7 +12,7 @@ prototype-specific tests, not runtime regression coverage.
 ## Remaining gates
 
 - S1 passed: owner confirmed 56979da, 253/253 in 2.141 s and package/development bundle success.
-- Retention/manual delivery: approved configurable defaults and age rules are recorded in deploy/README.md. The automatic 90-day capture-age boundary applies to cloud event queries, downloads and SMTP; expired events stop automatic retries. Explicit manual camera/date-range delivery may bypass age. Telemetry history is 90 days, and receipt/image retention starts at confirmed SMTP acceptance. Outstanding deletion, manual resend, sampling and metadata-age decisions require owner approval. No permanent image archival in the first release.
+- Retention/manual delivery: owner approved deleting expired definitely unsent originals, retaining uncertain originals/status until manual resolution, explicit --resend for known successful deliveries, metadata age from capture, telemetry history per fresh observation. R1 implements shared configurable automatic capture-age boundary across cloud event queries, download and SMTP; six additional tests (259 expected) pending. No deletions/schema changes yet. R2–R4 cleanup, telemetry and historical manual delivery pending; review next major step before implementation. No permanent image archival in first release.
 - S2–S4: implement and validate simple install, logging, optional systemd
   user/system units, backup, update and uninstall, with user-selected
   paths and no root requirement. Preserve private state; no automatic start.

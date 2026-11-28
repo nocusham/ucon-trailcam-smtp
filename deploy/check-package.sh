@@ -13,9 +13,10 @@ export PIP_NO_CACHE_DIR=1
 unset PYTHONPATH PYTHONHOME
 
 echo "=== Committed source ==="
-git -C "$ROOT" rev-parse --short HEAD
+COMMIT=$(git -C "$ROOT" rev-parse HEAD)
+echo "${COMMIT:0:12}"
 mkdir "$WORK/source" "$WORK/wheels" "$WORK/empty"
-git -C "$ROOT" archive HEAD | tar -xf - -C "$WORK/source"
+git -C "$ROOT" archive "$COMMIT" | tar -xf - -C "$WORK/source"
 SOURCE="$WORK/source"
 
 echo "=== Separate Python environment ==="
@@ -50,6 +51,18 @@ wheels=("$WORK/wheels/"*.whl)
 [[ "${#wheels[@]}" -eq 1 ]]
 "$PY" "$SOURCE/deploy/check_wheel.py" "${wheels[0]}" "$SOURCE/src"
 
+echo "=== Build and verify local development release bundle ==="
+BUNDLE="$WORK/ucon-trailcam-smtp-dev-${COMMIT:0:12}.zip"
+(
+    cd "$SOURCE"
+    "$PY" -m deploy.release_bundle build --source "$SOURCE" --wheel "${wheels[0]}" \
+        --commit "$COMMIT" --destination "$BUNDLE"
+    "$PY" -m deploy.release_bundle verify --bundle "$BUNDLE" --commit "$COMMIT"
+)
+# Exact allowlist, regular file attributes and every digest were verified.
+mkdir "$WORK/bundle"
+"$PY" -m zipfile -e "$BUNDLE" "$WORK/bundle"
+echo "Development bundle extracted to temporary directory."
 echo "=== Install only the project wheel ==="
 "$PY" -m pip install --no-deps "${wheels[0]}"
 "$PY" -m pip check
@@ -89,9 +102,9 @@ mkdir "$WORK/wheelhouse" "$WORK/install-root" "$WORK/install-root/releases"
     -r "$SOURCE/deploy/requirements-reference.txt" -r "$SOURCE/deploy/requirements-build.txt"
 digest=$(sha256sum "${wheels[0]}" | cut -d' ' -f1)
 (
-    cd "$SOURCE"
+    cd "$WORK/bundle"
     "$PY" -m deploy.prepare_release --root "$WORK/install-root" \
-        --release dev-check --wheel "${wheels[0]}" --sha256 "$digest" \
+        --release dev-check --wheel "$WORK/bundle/dist/$(basename "${wheels[0]}")" --sha256 "$digest" \
         --wheelhouse "$WORK/wheelhouse"
 )
 [[ -f "$WORK/install-root/releases/dev-check/.ready" ]]
@@ -104,4 +117,4 @@ echo "=== Full source regression using freshly installed dependencies ==="
     cd "$SOURCE"
     "$PY" -m unittest discover -s tests -t . -v
 )
-echo "Package and versioned staging checks passed."
+echo "Package, development bundle and versioned staging checks passed."

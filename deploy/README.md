@@ -160,7 +160,7 @@ validation remain open. S1 passed: owner confirmed commit 56979da, 253 tests in 
 
 See ../docs/PRODUCTION_READINESS.md and ../docs/LXC.md for release gates.
 
-## SMTP throughput requirement (design review pending)
+## SMTP throughput (D2 verified offline)
 
 The owner requires paced image delivery during backlog processing; no bulk burst of e.g. 90 individual messages. Current per-camera image batch limits and service cycle interval are not a persistent email-rate limit. Owner approved a configurable 30-second minimum interval globally across image SMTP messages, no additional daily cap, oldest eligible ready images first, and the same manual delivery rate by default with an explicit per-invocation override. Provider limits may require lower rates. The owner confirmed persistence of the last SMTP attempt across restart in SQLite, and alert priority with the same global minimum interval. D2 implements the initial service-cycle-based scheduler and shared persisted attempt accounting; historical manual workflow remains pending.
 
@@ -203,5 +203,21 @@ standalone SMTP/alert test probes without queue state are diagnostics,
 outside the service gate; do not run them concurrently with the service.
 Manual R4 workflow must reuse the same queue and gate. New optional
 smtp_pacing table is included in reviewed backup schema; no existing
-table migration. Seven new tests (269 expected), reference verification
-pending. No actual SMTP or camera operations in these tests.
+table migration. D2 owner confirmed 55/55 targeted tests in 0.150 s and
+269/269 full regression in 2.261 s at 8db4b0d. Expected HTTP and synthetic
+wheel messages. No actual SMTP or camera operations in these tests.
+
+## R2 design review (pending owner approval)
+
+Approved retention durations remain unchanged. Discuss cleanup cadence,
+protection of minimal deduplication records until automatic eligibility
+ends even if independently configured receipt retention is shorter,
+handling of untracked partial/orphan files, and crash-safe file deletion
+before implementing R2. Never delete uncertain originals or remote SD
+files. Coordinate local file/receipt pruning under the existing queue
+lock; retain evidence for failed deletions. Existing cleanup unlinks
+before committing its receipt, so interruption reconciliation needs a
+focused regression test. Do not introduce general-purpose privileged
+or transactional deployment frameworks. Proposed rules are not approved
+or implemented. R2 must preserve backup validation and manual resend
+semantics; review before code changes.

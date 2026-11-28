@@ -166,3 +166,5 @@ See [development history](docs/DEVELOPMENT_HISTORY.md) for detailed earlier expe
 - D1: global/per-camera sequential download batch limit (default 3, integer 1–100 experimental); explicit service CLI override; same chosen limit for selection and transfer. Preserve bounded SD window, per-original commits and retry behavior; SMTP image limits unchanged. Three synthetic tests (262 expected), not yet reference-validated. Owner approved SQLite SMTP pacing persistence and alert priority; D2 implementation pending.
 
 - D1 verified 18/18 targeted (0.035 s), 262/262 full (2.154 s), d855099. D2 adds shared persisted SMTP pacing (default 30 seconds, configurable 1–3600), alarm priority, oldest eligible global image selection, one image message per cycle, explicit queue/camera diagnostic override and additive optional schema table. Seven new tests (269 expected), reference pending. No fixed daily limit or independent SMTP timer; manual R4 remains pending.
+
+- D2 validation: owner confirmed 8db4b0d, 55/55 targeted (0.150 s), 269/269 full (2.261 s). R2 cleanup design review pending; no runtime changes.

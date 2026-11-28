@@ -11,7 +11,7 @@ from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from pathlib import Path
 from ucon_trailcam_smtp.safe_diagnostics import error_fields
-from ucon_trailcam_smtp.history_receipts import exclusion, protected
+from ucon_trailcam_smtp.history_receipts import exclusion, event_uncertain
 
 
 @dataclass(frozen=True)
@@ -234,15 +234,74 @@ def inspect_original(db, root, root_fd, row, *, apply, now, expire=False):
     return size
 
 
+def reconcile_historical(db, *, apply):
+    """Reconcile known manual success without rewriting automatic receipts."""
+    if not table_exists(db, 'historical_deliveries'):
+        return 0
+    rows = db.execute("""SELECT e.camera_uid,e.itemid,e.et_utc,e.state
+        FROM events e WHERE e.state IN ('pending','downloaded','expired')
+        AND EXISTS (SELECT 1 FROM historical_deliveries h WHERE
+            h.camera_uid=e.camera_uid AND h.itemid=e.itemid AND h.accepted_utc>0
+            AND h.et_utc=e.et_utc)""" + exclusion(db,'e',uncertain_only=True)
+        + no_receipt(db,'deliveries') + no_receipt(db,'delivery_routes')
+        + ' ORDER BY e.et_utc,e.camera_uid,e.itemid LIMIT 1000').fetchall()
+    changed = 0
+    with db:
+        if apply:
+            db.execute('BEGIN IMMEDIATE')
+        for uid,ident,stamp,state in rows:
+            if db.execute('SELECT 1 FROM historical_deliveries WHERE camera_uid=? AND itemid=? '
+                          'AND (et_utc<>? OR accepted_utc<=0) LIMIT 1',(uid,ident,stamp)).fetchone():
+                continue
+            original = (db.execute('SELECT 1 FROM downloads WHERE camera_uid=? AND itemid=?',
+                                   (uid,ident)).fetchone() if table_exists(db,'downloads') else None)
+            removal = (db.execute('SELECT removed_utc FROM media_cleanup WHERE camera_uid=? AND itemid=?',
+                                  (uid,ident)).fetchone() if table_exists(db,'media_cleanup') else None)
+            if (state=='downloaded' and not original) or (state=='pending' and original) or (removal and not original):
+                continue
+            if state=='expired' and original and not removal:
+                continue
+            if apply:
+                db.execute('UPDATE events SET state=? WHERE camera_uid=? AND itemid=?',
+                           ('sent_manual' if original else 'sent_history',uid,ident))
+                discard_expired_retry(db,uid,ident)
+            changed += 1
+    return changed
+
+
+def historical_candidates(db, cutoff, *, apply):
+    if not all(table_exists(db,t) for t in ('historical_deliveries','downloads')):
+        return []
+    has_cleanup = table_exists(db,'media_cleanup')
+    join = ' LEFT JOIN media_cleanup c ON c.camera_uid=e.camera_uid AND c.itemid=e.itemid' if has_cleanup else ''
+    age = ('((c.itemid IS NULL AND h.accepted<=?) OR c.removed_utc=0)'
+           if has_cleanup else 'h.accepted<=?')
+    state = "e.state='sent_manual'" if apply else "e.state IN ('sent_manual','downloaded')"
+    return db.execute("""SELECT e.camera_uid,e.itemid,d.path,d.sha256,d.size
+        FROM events e JOIN downloads d USING(camera_uid,itemid)
+        JOIN (SELECT camera_uid,itemid,MIN(et_utc) AS stamp,MAX(accepted_utc) AS accepted
+              FROM historical_deliveries GROUP BY camera_uid,itemid
+              HAVING MIN(et_utc)=MAX(et_utc) AND COUNT(*)=COUNT(accepted_utc)
+              AND MIN(accepted_utc)>0) h
+        ON h.camera_uid=e.camera_uid AND h.itemid=e.itemid AND h.stamp=e.et_utc"""
+        + join + ' WHERE ' + state + ' AND ' + age
+        + no_receipt(db,'deliveries') + no_receipt(db,'delivery_routes')
+        + ' ORDER BY h.accepted,e.camera_uid,e.itemid',(cutoff,)).fetchall()
+
+
 def cleanup(db, root, policy, now, *, apply=False, emit=print):
     if apply and not policy.enabled:
         raise ValueError('Enable retention explicitly before deleting files')
     if type(now) is not int or now <= 0:
         raise ValueError('Invalid cleanup timestamp')
+    reconciled = reconcile_historical(db,apply=apply)
+    if reconciled:
+        emit(f'Retention: historical_reconciled={reconciled}; apply={apply}.')
     cutoff = capture_cutoff(now, policy.automatic_days)
     pending_count = expire_pending(db, cutoff, apply=apply)
     emit(f'Retention: expired_pending={pending_count}; apply={apply}.')
     rows = [(row, False) for row in candidates(db, now - policy.image_seconds)]
+    rows += [(row, False) for row in historical_candidates(db, now - policy.image_seconds, apply=apply)]
     # Finish interrupted expired deletions and process expired unsent originals.
     rows += [(row, True) for row in expired_candidates(db, cutoff)]
     if not rows:
@@ -327,6 +386,65 @@ def prune_metadata(db, root, policy, now, *, apply=False, emit=print):
             return False
         return False
 
+    # Retire detailed manual receipts independently of automatic acceptance.
+    # Keep the last evidence while an original is still awaiting cleanup.
+    historical_retired = historical_compacted = 0
+    if 'historical_deliveries' in tables:
+        with db:
+            if apply:
+                db.execute('BEGIN IMMEDIATE')
+            groups = db.execute("""SELECT camera_uid,itemid,MIN(et_utc),MAX(et_utc),MAX(accepted_utc)
+                FROM historical_deliveries GROUP BY camera_uid,itemid
+                HAVING COUNT(*)=COUNT(accepted_utc) AND MIN(accepted_utc)>0
+                ORDER BY MAX(accepted_utc),camera_uid,itemid""").fetchall()
+            for uid,ident,stamp,last_stamp,last_accept in groups:
+                if historical_retired+historical_compacted>=1000:
+                    break
+                event = db.execute('SELECT et_utc,state,metadata_json FROM events WHERE camera_uid=? AND itemid=?',
+                                   (uid,ident)).fetchone()
+                if stamp!=last_stamp or (event and event[0]!=stamp):
+                    continue
+                if event and event[1] not in ('sent','sent_manual','sent_history'):
+                    continue
+                original = one('downloads','itemid',uid,ident)
+                removal = one('media_cleanup','itemid',uid,ident)
+                if event and event[1]=='sent_manual' and (not original or not cleaned(uid,ident)):
+                    continue
+                if (event is None or event[1]=='sent_history') and (original or removal):
+                    continue
+                if (event is None or event[1] in ('sent_manual','sent_history')) and (
+                        one('deliveries','itemid',uid,ident) or one('delivery_routes','itemid',uid,ident)):
+                    continue
+                old_metadata = stamp<=meta_cutoff
+                outside_auto = stamp<auto_cutoff
+                if last_accept<=receipt_cutoff and apply:
+                    if event and event[1]=='sent_manual':
+                        remove_related(uid,ident)
+                        db.execute("UPDATE events SET state='sent_history' WHERE camera_uid=? AND itemid=?",(uid,ident))
+                    elif event is None and not (old_metadata and outside_auto):
+                        raw, = db.execute('SELECT metadata_json FROM historical_deliveries '
+                                          'WHERE camera_uid=? AND itemid=? ORDER BY accepted_utc DESC,message_id LIMIT 1',
+                                          (uid,ident)).fetchone()
+                        db.execute("INSERT INTO events(camera_uid,itemid,et_utc,metadata_json,state) "
+                                   "VALUES (?,?,?,?,'sent_history')",(uid,ident,stamp,raw))
+                if old_metadata:
+                    minimal = json.dumps({'itemid':ident,'et_utc':stamp,'type':1},ensure_ascii=False,allow_nan=False)
+                    args = (uid,ident,minimal,receipt_cutoff)
+                    sql = "camera_uid=? AND itemid=? AND metadata_json<>? AND accepted_utc>?"
+                    if apply:
+                        historical_compacted += db.execute('UPDATE historical_deliveries SET metadata_json=? WHERE '+sql,
+                                                           (minimal,*args)).rowcount
+                        if event and event[1]=='sent_manual':
+                            db.execute('UPDATE events SET metadata_json=? WHERE camera_uid=? AND itemid=?',(minimal,uid,ident))
+                    else:
+                        historical_compacted += db.execute('SELECT count(*) FROM historical_deliveries WHERE '+sql,args).fetchone()[0]
+                sql = 'camera_uid=? AND itemid=? AND accepted_utc<=?'
+                args = (uid,ident,receipt_cutoff)
+                if apply:
+                    historical_retired += db.execute('DELETE FROM historical_deliveries WHERE '+sql,args).rowcount
+                else:
+                    historical_retired += db.execute('SELECT count(*) FROM historical_deliveries WHERE '+sql,args).fetchone()[0]
+        emit(f'Retention historical: compacted={historical_compacted}, retired={historical_retired}; apply={apply}.')
     compacted = retired = deleted = 0
     with db:
         if apply:
@@ -337,8 +455,8 @@ def prune_metadata(db, root, policy, now, *, apply=False, emit=print):
         for uid, ident, stamp, state, raw in rows:
             if compacted + retired + deleted >= 1000:
                 break
-            if protected(db,uid,ident):
-                continue  # Historical evidence lifecycle follows in R4c.2.
+            if event_uncertain(db,uid,ident):
+                continue
             old_metadata = stamp <= meta_cutoff
             outside_auto = stamp < auto_cutoff
             delivery = one('deliveries', 'accepted_utc', uid, ident)

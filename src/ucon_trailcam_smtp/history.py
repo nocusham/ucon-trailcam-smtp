@@ -40,10 +40,10 @@ def local_events(db, uid, begin, end):
     rows = db.execute("SELECT itemid,et_utc,state FROM events WHERE camera_uid=? "
                       "AND et_utc>=? AND et_utc<? AND json_extract(metadata_json,'$.type')=1",
                       (uid,begin,end)).fetchall()
-    known = {'pending','downloaded','sent','uncertain','expired','sent_history'}
+    known = {'pending','downloaded','sent','uncertain','expired','sent_history','sent_manual'}
     if any(state not in known for _,_,state in rows):
         raise ValueError('Unexpected local event state')
-    local = {ident:(stamp,state) for ident,stamp,state in rows}
+    local = {ident:(stamp,'sent_history' if state=='sent_manual' else state) for ident,stamp,state in rows}
     for ident,(stamp,state,_) in observations(db,uid,begin,end).items():
         prior = local.get(ident)
         if prior and prior[0]!=stamp:

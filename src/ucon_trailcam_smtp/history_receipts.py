@@ -80,12 +80,12 @@ def reserve(db, uid, records, message_id, now, route, *, resend=False, allow_unk
                                       (uid,ident)).fetchone()
             if accepted is not None and (type(accepted[0]) is not int or accepted[0]<=0):
                 raise ValueError('Unresolved original SMTP receipt')
-            known = bool(prior or accepted or (event and event[1] in ('sent','sent_history')))
+            known = bool(prior or accepted or (event and event[1] in ('sent','sent_history','sent_manual')))
             if known and not resend:
                 raise ValueError('Known prior delivery requires --resend')
             if not known and event is None and not allow_unknown:
                 raise ValueError('Unknown prior delivery requires --allow-unknown-history')
-            if event and event[1] not in ('pending','downloaded','expired','sent','sent_history'):
+            if event and event[1] not in ('pending','downloaded','expired','sent','sent_history','sent_manual'):
                 raise ValueError('Unexpected original event state')
             db.execute('INSERT INTO historical_deliveries VALUES (?,?,?,?,?,NULL,?,?,?,?,?)',
                        (uid,ident,message_id,stamp,now,json.dumps(rec['metadata'],ensure_ascii=False,allow_nan=False),

@@ -39,6 +39,20 @@ def rollback_unsent(db, rows, message_id, now):
     return delay
 
 
+def record_setup_failure(db, uid, now):
+    """Shared camera cooldown for a proven pre-submission historical failure."""
+    with db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute('''CREATE TABLE IF NOT EXISTS smtp_retries (
+            camera_uid TEXT PRIMARY KEY, failures INTEGER NOT NULL,
+            last_failure INTEGER NOT NULL, next_due INTEGER NOT NULL)''')
+        prior = db.execute('SELECT failures FROM smtp_retries WHERE camera_uid=?',(uid,)).fetchone()
+        failures = (prior[0] if prior else 0)+1
+        delay = min(3600,300*2**min(failures-1,10))
+        db.execute('INSERT OR REPLACE INTO smtp_retries VALUES (?,?,?,?)',(uid,failures,now,now+delay))
+    return delay
+
+
 def clear_retry(db, uid):
     if table_exists(db, 'smtp_retries'):
         with db:

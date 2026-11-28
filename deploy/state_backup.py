@@ -136,6 +136,9 @@ def check_state(db_path, media, original_media):
             raise BackupError('Missing required intake tables')
         if db.execute("SELECT 1 FROM events WHERE state IS NULL OR state NOT IN ('pending','downloaded','sent','uncertain','expired','sent_history') LIMIT 1").fetchone():
             raise BackupError('Unknown event state')
+        if 'historical_deliveries' in tables and db.execute(
+                'SELECT 1 FROM historical_deliveries WHERE accepted_utc IS NULL LIMIT 1').fetchone():
+            raise BackupError('Unresolved historical SMTP; preserve external export and resolve before verified backup')
         counts = dict(db.execute('SELECT state,count(*) FROM events GROUP BY state'))
         if counts.get('sent', 0) or counts.get('uncertain', 0):
             if 'deliveries' not in tables:

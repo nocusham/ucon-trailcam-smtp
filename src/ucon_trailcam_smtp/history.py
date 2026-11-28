@@ -1,4 +1,4 @@
-"""Preview or explicitly export one configured camera's historical photo events."""
+"""Preview, export or explicitly send one configured camera's historical photos."""
 import argparse
 import asyncio
 from collections import Counter
@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import sqlite3
 import time
+import tomllib
 from zoneinfo import ZoneInfo
 
 from ucon_trailcam_smtp.camera_selection import profile_uid, select_device
@@ -18,6 +19,7 @@ from ucon_trailcam_smtp.queue_download import batch_lock
 from ucon_trailcam_smtp.event_metadata import event_metadata
 from ucon_trailcam_smtp.service_download import effective_batch_limit
 from ucon_trailcam_smtp.history_receipts import observations
+from ucon_trailcam_smtp.smtp_pacing import parse_interval, validate_interval
 from ucon_trailcam_smtp.safe_diagnostics import cloud_fields, error_fields
 
 
@@ -117,10 +119,21 @@ async def run(args):
     limit = effective_batch_limit(profile,args.batch_limit)
     begin,end = date_range(args.first,args.last,args.tz,int(time.time()))
     with batch_lock(args.queue_db), closing(sqlite3.connect(
-            args.queue_db.resolve().as_uri()+'?mode=ro',uri=True)) as db:
+            args.queue_db.resolve().as_uri()+('?mode=rw' if args.send else '?mode=ro'),uri=True)) as db:
         if login_blocked(db):
             print('Login blocked; correct credentials and explicitly resume using the service command first.')
             return 1
+        if args.send:
+            from ucon_trailcam_smtp.history_send import preflight
+            from ucon_trailcam_smtp.local_credentials import read_secret_values
+            from ucon_trailcam_smtp.mail_message import send_message
+            from ucon_trailcam_smtp.smtp_pacing import Pacer
+            with args.config.open('rb') as source:
+                interval = parse_interval(tomllib.load(source).get('smtp_pacing'))
+            if args.smtp_interval is not None:
+                interval = validate_interval(args.smtp_interval)
+            smtp_password = preflight(db,profile,read_secret_values())
+            pacer = Pacer(db,interval)
         account,password = read_credentials(interactive=False)
         async with httpx.AsyncClient(timeout=30,follow_redirects=False) as client:
             headers,devices = await discover_devices(client,account,password)
@@ -134,6 +147,14 @@ async def run(args):
             if version('p4p-camera-sdk') != '0.1.16':
                 raise ValueError('Pinned SDK required')
             counts, local, remote = result
+            if args.send:
+                from ucon_trailcam_smtp.history_send import eligible, send_export
+                return export_history(db, uid, local, remote, args.output_dir, limit,
+                    partial(relay_batch, device), select=lambda state: eligible(state,args.resend,args.allow_unknown_history),
+                    on_complete=lambda root: send_export(db,profile,root,pacer,
+                        lambda msg: send_message(msg,profile.host,profile.port,profile.security,
+                                                 profile.username or None,smtp_password),
+                        resend=args.resend,allow_unknown=args.allow_unknown_history))
             return export_history(db, uid, local, remote, args.output_dir, limit,
                                   partial(relay_batch, device))
         counts = result
@@ -155,7 +176,11 @@ def main(argv=None):
     parser.add_argument('--to',dest='last',required=True,type=dt.date.fromisoformat,
                         help='Inclusive local end date')
     parser.add_argument('--tz',default='Europe/Berlin')
-    parser.add_argument('--download',action='store_true',help='Export verified originals; no SMTP')
+    parser.add_argument('--download',action='store_true',help='Export verified originals')
+    parser.add_argument('--send',action='store_true',help='Explicitly submit eligible exported originals by SMTP')
+    parser.add_argument('--resend',action='store_true',help='Permit known previous delivery to be sent again')
+    parser.add_argument('--allow-unknown-history',action='store_true',help='Permit possible duplicates when delivery history is unknown')
+    parser.add_argument('--smtp-interval',type=int,help='Override shared minimum SMTP interval (1–3600 seconds)')
     parser.add_argument('--output-dir',type=Path,help='Private parent directory for a new export')
     parser.add_argument('--batch-limit',type=int,help='Override sequential originals per relay (1–100)')
     args = parser.parse_args(argv)
@@ -163,13 +188,21 @@ def main(argv=None):
         parser.error('--download requires --output-dir; preview does not use it')
     if args.batch_limit is not None and (not args.download or not 1 <= args.batch_limit <= 100):
         parser.error('--batch-limit requires --download and range 1–100')
+    if args.send and not args.download:
+        parser.error('--send requires --download and --output-dir')
+    if (args.resend or args.allow_unknown_history or args.smtp_interval is not None) and not args.send:
+        parser.error('SMTP overrides require --send')
+    if args.smtp_interval is not None and not 1 <= args.smtp_interval <= 3600:
+        parser.error('--smtp-interval must be 1–3600')
     logging.disable(logging.CRITICAL)
     try:
         return asyncio.run(run(args))
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
-        print(f'History stopped; {error_fields(exc)} {cloud_fields(exc)}. No queue changes; partial exports may remain.')
+        print(f'History stopped; {error_fields(exc)} {cloud_fields(exc)}. Partial exports may remain.')
+        if args.send:
+            print('Check persisted historical receipts before another send; do not assume no mail was submitted.')
         return 1
 
 

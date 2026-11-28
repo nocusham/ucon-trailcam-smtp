@@ -106,12 +106,12 @@ def relay_batch(device, begin, end):
         yield events,fetch
 
 
-def export_history(db,uid,local,remote,parent,limit,open_batch,*,emit=print):
+def export_history(db,uid,local,remote,parent,limit,open_batch,*,emit=print,select=None,on_complete=None):
     """Export independent copies; never write primary queue or receipt state."""
     validate_batch_limit(limit)
     root = new_export(parent)
     emit(f'Private history export created: {root}')
-    exported = skipped = 0
+    exported = skipped = excluded = 0
     pending = []
     candidates = {}
     for ident in local.keys() | remote.keys():
@@ -138,6 +138,9 @@ def export_history(db,uid,local,remote,parent,limit,open_batch,*,emit=print):
             delivery = one(db,'deliveries','accepted_utc',uid,ident)
             if state=='uncertain' or event_uncertain(db,uid,ident) or (delivery is not None and delivery[0] is None):
                 skipped += 1
+                continue
+            if select is not None and not select(state):
+                excluded += 1
                 continue
             original = local_original(db,uid,ident,stamp,state)
             if original is None:
@@ -183,5 +186,10 @@ def export_history(db,uid,local,remote,parent,limit,open_batch,*,emit=print):
                     record_export(manifest,root,uid,ident,stamp,state,raw,sd,dest,details,'sd')
                     exported += 1
             emit(f'History export: verified={exported}, skipped={skipped}, remaining={len(pending)}.')
-    emit(f'History export complete: verified={exported}, skipped={skipped}; no SMTP or queue changes.')
-    return int(bool(skipped))
+    emit(f'History export complete: verified={exported}, skipped={skipped}, excluded={excluded}; no SMTP or queue changes during export.')
+    # Do not silently send a partial request after a missing or ambiguous match.
+    if skipped:
+        return 1
+    if on_complete is not None and exported:
+        return on_complete(root)
+    return 0

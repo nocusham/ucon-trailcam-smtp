@@ -126,3 +126,21 @@ class HistoryRetentionTests(unittest.TestCase):
         self.assertEqual(self.clean(),(1,8,0))
         self.prune()
         self.assertFalse(protected(self.db,'a','a'))
+
+
+    def test_automatic_and_manual_receipt_ages_remain_independent(self):
+        stamp=self.now-100*DAY
+        path=self.add('a',stamp,self.now-2*DAY)
+        with self.db:
+            self.db.execute("UPDATE events SET state='sent' WHERE itemid='a'")
+            self.db.execute("INSERT INTO deliveries VALUES ('a','a',?)",(self.now-99*DAY,))
+        self.assertEqual(self.clean(),(1,8,0))
+        self.prune()
+        self.assertFalse(path.exists())
+        self.assertEqual(self.db.execute('SELECT count(*) FROM deliveries').fetchone(),(0,))
+        self.assertTrue(protected(self.db,'a','a'))
+        self.assertEqual(local_events(self.db,'a',1,self.now),{'a':(stamp,'sent_history')})
+        self.now+=89*DAY
+        self.prune()
+        self.assertFalse(protected(self.db,'a','a'))
+        self.assertEqual(self.db.execute('SELECT count(*) FROM events').fetchone(),(0,))

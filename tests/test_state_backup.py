@@ -168,6 +168,37 @@ class StateBackupTests(unittest.TestCase):
         self.assertEqual(self.create(), {'pending':1,'sent_history':1})
         self.assertEqual(verify_backup(self.backup)['event_counts'], {'pending':1,'sent_history':1})
 
+    def historical_fixture(self, accepted):
+        from deploy.schema_compatibility import DDL
+        with closing(sqlite3.connect(self.db)) as db, db:
+            db.execute(DDL['historical_deliveries'])
+            db.execute("UPDATE events SET state='sent_manual' WHERE itemid='a'")
+            db.execute('DELETE FROM deliveries')
+            db.execute('INSERT INTO historical_deliveries VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                       ('synthetic','a','fixture-manual',100,120,accepted,
+                        '{"itemid":"a","et_utc":100,"type":1}',
+                        str(self.root/'external-export.jpg'),'a'*64,18,'{}'))
+
+    def test_historical_acceptance_backup_and_external_export_exclusion(self):
+        self.historical_fixture(123)
+        self.original.unlink()
+        with closing(sqlite3.connect(self.db)) as db, db:
+            db.executescript("""
+                CREATE TABLE media_cleanup(camera_uid TEXT,itemid TEXT,removed_utc INTEGER,size INTEGER);
+                INSERT INTO media_cleanup VALUES ('synthetic','a',200,18);
+            """)
+        self.assertEqual(self.create(), {'pending':1,'sent_manual':1})
+        self.assertEqual(verify_backup(self.backup)['event_counts'], {'pending':1,'sent_manual':1})
+        self.assertFalse((self.backup/'state/media/external-export.jpg').exists())
+        with closing(sqlite3.connect(self.backup/'state/events.sqlite3')) as db:
+            self.assertEqual(db.execute('SELECT accepted_utc FROM historical_deliveries').fetchone(), (123,))
+
+    def test_historical_uncertain_backup_refused(self):
+        self.historical_fixture(None)
+        with self.assertRaisesRegex(BackupError,'Unresolved historical SMTP'):
+            self.create()
+        self.assertFalse((self.backup/'manifest.json').exists())
+
     def test_inconsistent_delivery_receipt_refused(self):
         with closing(sqlite3.connect(self.db)) as db, db:
             db.execute('UPDATE deliveries SET accepted_utc=NULL')

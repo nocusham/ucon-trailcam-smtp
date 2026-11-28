@@ -10,7 +10,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 from ucon_trailcam_smtp.cloud_intake import Intake, init_intake, resume_login
-from ucon_trailcam_smtp.camera_telemetry import init_telemetry, record_snapshot, fresh_scopes
+from ucon_trailcam_smtp.camera_telemetry import init_telemetry, record_snapshot, fresh_scopes, prune_history
 from ucon_trailcam_smtp.download_retry import init_retry, parse_retry, reserve, record_failure, sync_download_health
 from ucon_trailcam_smtp.health_alerts import load_alerts, dispatch_due, due_notices, smtp_sender
 from ucon_trailcam_smtp.service_cycle import run_cycle
@@ -152,10 +152,14 @@ async def run(args):
                             automatic_days=retention.automatic_days)
             cycle = failed = 0
             next_cleanup = 0
+            next_history_cleanup = 0
             while args.loop or cycle < args.cycles:
                 cycle += 1
                 started = time.monotonic()
                 print(f'Service cycle {cycle}')
+                if time.monotonic() >= next_history_cleanup:
+                    prune_history(db, int(time.time()), retention.telemetry_days, apply=True)
+                    next_history_cleanup = time.monotonic() + 3600
                 if cleanup_enabled and time.monotonic() >= next_cleanup:
                     try:
                         now = int(time.time())

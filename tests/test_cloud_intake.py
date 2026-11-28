@@ -201,3 +201,18 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshots, [(1000, set()), (2020, {'a'})])
         self.assertEqual(len(refreshes), 2)
         self.assertEqual(self.logins, 1)
+
+
+    async def test_history_only_fresh_responses_even_if_event_list_fails(self):
+        async def refresh(headers):
+            return [{'device_uid':'a','dynamic_info':{'battery':90}}]
+        self.worker.refresh_devices = refresh
+        await self.worker.cycle(1000)
+        await self.worker.cycle(1060)
+        self.api_error = ApiError('failed',stage='cloud event list',http_status=503)
+        self.assertEqual(await self.worker.cycle(1900),'error')
+        self.assertEqual(await self.worker.cycle(1960),'deferred')
+        self.api_error = None
+        self.assertEqual(await self.worker.cycle(2020),'ok')
+        self.assertEqual(self.db.execute('SELECT observed_utc,battery FROM camera_telemetry_history '
+                                        'ORDER BY observed_utc').fetchall(),[(1000,None),(1900,90),(2020,90)])

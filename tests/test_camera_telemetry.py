@@ -1,6 +1,6 @@
 import sqlite3
 import unittest
-from ucon_trailcam_smtp.camera_telemetry import init_telemetry, record_snapshot, fresh_scopes
+from ucon_trailcam_smtp.camera_telemetry import init_telemetry, record_snapshot, fresh_scopes, record_history, prune_history
 from ucon_trailcam_smtp.health_alerts import AlertSettings, due_notices, build_alert
 
 
@@ -81,3 +81,60 @@ class TelemetryTests(unittest.TestCase):
         self.snap(info=info, enabled=True)
         self.assertEqual(self.snap(info=info, enabled=True), 'unchanged')
         self.assertEqual(self.notices(self.now), [])
+
+
+    def test_history_fresh_unchanged_values_and_no_secrets(self):
+        info = {'latest_active_utc': self.now-60, 'battery': 95, 'signal': 3,
+                'online_state':'2', 'is_battery_charging':False, 'is_low_power':True,
+                'secret':'private'}
+        devices = [{'device_uid':'a','dynamic_info':info,'device_pwd':'private'},
+                   {'device_uid':'other','dynamic_info':info}]
+        record_history(self.db,['a'],devices,self.now)
+        record_history(self.db,['a'],devices,self.now+900)
+        record_history(self.db,['a'],devices,self.now+900)
+        self.assertEqual(self.db.execute('SELECT * FROM camera_telemetry_history ORDER BY observed_utc').fetchall(),
+                         [('a',self.now,self.now-60,95,3,'2',0,1),
+                          ('a',self.now+900,self.now-60,95,3,'2',0,1)])
+        self.assertEqual(self.db.execute('SELECT count(*) FROM camera_telemetry').fetchone(),(0,))
+
+    def test_history_missing_values_not_carried_forward(self):
+        self.snap(info={'latest_active_utc':self.now-60,'battery':100})
+        record_history(self.db,['a'],[{'device_uid':'a','dynamic_info':{
+            'battery':True,'signal':-1,'latest_active_utc':self.now+5000,'online_state':'private'}}],self.now+900)
+        self.assertEqual(self.db.execute('SELECT latest_active_utc,battery,signal,online_state,charging,low_power '
+                                        'FROM camera_telemetry_history').fetchone(),(None,)*6)
+        self.assertEqual(self.db.execute('SELECT battery FROM camera_telemetry').fetchone(),(100,))
+
+    def test_history_camera_scope_and_atomic_validation(self):
+        devices = [{'device_uid':'a'}, {'device_uid':'b'}]
+        with self.assertRaises(ValueError):
+            record_history(self.db,['a','missing'],devices,self.now)
+        record_history(self.db,['a','b'],devices,self.now)
+        self.assertEqual(self.db.execute('SELECT camera_uid FROM camera_telemetry_history ORDER BY camera_uid').fetchall(),
+                         [('a',),('b',)])
+        with self.assertRaises(ValueError):
+            record_history(self.db,['a'],devices+[devices[0]],self.now+1)
+
+    def test_history_retention_boundary_preview_and_latest_state(self):
+        self.snap(info={'battery':99})
+        days = 90
+        cutoff = self.now-days*86400
+        devices = [{'device_uid':'a','dynamic_info':{'battery':80}}]
+        for t in (cutoff-1,cutoff,cutoff+1,self.now):
+            record_history(self.db,['a'],devices,t)
+        before = self.db.serialize()
+        self.assertEqual(prune_history(self.db,self.now,days,emit=lambda _:None),2)
+        self.assertEqual(self.db.serialize(),before)
+        self.assertEqual(prune_history(self.db,self.now,days,apply=True,emit=lambda _:None),2)
+        self.assertEqual(self.db.execute('SELECT observed_utc FROM camera_telemetry_history ORDER BY observed_utc').fetchall(),
+                         [(cutoff+1,),(self.now,)])
+        self.assertEqual(self.db.execute('SELECT battery FROM camera_telemetry').fetchone(),(99,))
+
+    def test_history_config_and_missing_table(self):
+        from ucon_trailcam_smtp.media_retention import parse_retention
+        self.assertEqual(parse_retention(None).telemetry_days,90)
+        self.assertEqual(parse_retention({'telemetry_days':7}).telemetry_days,7)
+        for v in (True,0,3651,'90'):
+            with self.subTest(v=v), self.assertRaises(ValueError):
+                parse_retention({'telemetry_days':v})
+        self.assertEqual(prune_history(self.db,self.now,apply=True),0)

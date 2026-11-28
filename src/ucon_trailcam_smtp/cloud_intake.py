@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ucon_trailcam_smtp.health_alerts import init_health, observe
 from ucon_trailcam_smtp.safe_diagnostics import cloud_fields, error_fields
-from ucon_trailcam_smtp.camera_telemetry import REFRESH_SECONDS, init_telemetry, record_snapshot
+from ucon_trailcam_smtp.camera_telemetry import REFRESH_SECONDS, init_telemetry, record_snapshot, record_history, prune_history
 from ucon_trailcam_smtp.media_retention import capture_cutoff, parse_retention
 
 
@@ -108,6 +108,9 @@ class Intake:
             for uid in self.uids:
                 if sum(isinstance(d, dict) and d.get('device_uid') == uid for d in devices) != 1:
                     raise self.api_error('Configured camera missing or ambiguous', stage='device discovery', diagnostic_kind='camera_selection')
+            if fresh_devices:
+                record_history(db, self.uids, devices, now)
+            for uid in self.uids:
                 begin, end = window(db, uid, now, automatic_days=self.automatic_days)
                 if end <= begin:
                     self.emit('Cloud intake baseline initialized; no elapsed interval yet.')
@@ -196,7 +199,11 @@ async def run(args):
                             refresh_devices=lambda h: list_devices(client, h), on_devices=on_devices,
                             automatic_days=retention.automatic_days)
             results = []
+            next_history_cleanup = 0
             for i in range(args.cycles):
+                if time.monotonic() >= next_history_cleanup:
+                    prune_history(db, int(time.time()), retention.telemetry_days, apply=True)
+                    next_history_cleanup = time.monotonic() + 3600
                 status = await intake.cycle(int(time.time()))
                 results.append(status)
                 if status == 'blocked':

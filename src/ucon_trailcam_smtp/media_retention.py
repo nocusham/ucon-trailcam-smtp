@@ -22,6 +22,7 @@ class Retention:
     metadata_days: int = 90
     delivery_receipt_days: int = 90
     incomplete_days: int = 7
+    telemetry_days: int = 90
 
     @property
     def image_seconds(self):
@@ -32,7 +33,7 @@ def parse_retention(raw):
     if raw is None:
         return Retention()
     if not isinstance(raw, dict) or set(raw) - {'enabled', 'days', 'automatic_days', 'sent_image_hours',
-                                                     'metadata_days', 'delivery_receipt_days', 'incomplete_days'}:
+                                                     'metadata_days', 'delivery_receipt_days', 'incomplete_days', 'telemetry_days'}:
         raise ValueError('Invalid retention configuration')
     enabled, days = raw.get('enabled', True), raw.get('days', 1)
     if type(enabled) is not bool or type(days) is not int or not 1 <= days <= 3650:
@@ -46,9 +47,10 @@ def parse_retention(raw):
     metadata_days = raw.get('metadata_days', 90)
     receipt_days = raw.get('delivery_receipt_days', 90)
     incomplete_days = raw.get('incomplete_days', 7)
-    if any(type(v) is not int or not 1 <= v <= 3650 for v in (metadata_days, receipt_days, incomplete_days)):
-        raise ValueError('Invalid metadata, delivery receipt or incomplete attempt retention days')
-    return Retention(enabled, days, automatic_days, hours, metadata_days, receipt_days, incomplete_days)
+    telemetry_days = raw.get('telemetry_days', 90)
+    if any(type(v) is not int or not 1 <= v <= 3650 for v in (metadata_days, receipt_days, incomplete_days, telemetry_days)):
+        raise ValueError('Invalid metadata, receipt, incomplete attempt or telemetry retention days')
+    return Retention(enabled, days, automatic_days, hours, metadata_days, receipt_days, incomplete_days, telemetry_days)
 
 
 def capture_cutoff(now, automatic_days=90):
@@ -394,6 +396,7 @@ def main():
     import tomllib
     from ucon_trailcam_smtp.queue_download import batch_lock
     from ucon_trailcam_smtp.download_attempts import cleanup_attempts
+    from ucon_trailcam_smtp.camera_telemetry import prune_history
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--queue-db', type=Path, required=True)
@@ -411,6 +414,7 @@ def main():
             _, attempt_skipped = cleanup_attempts(db, args.output_dir, now, policy.incomplete_days,
                                                   apply=args.apply)
             skipped += attempt_skipped
+            prune_history(db, now, policy.telemetry_days, apply=args.apply)
         return int(bool(skipped))
     except (Exception, KeyboardInterrupt) as exc:
         print(f'Retention stopped; {error_fields(exc)}.')

@@ -25,6 +25,52 @@ def flag(value):
     return int(value) if type(value) is bool else None
 
 
+def record_history(db, uids, devices, now):
+    """Record only the values in a fresh, validated device-list response.
+
+    The current alarm snapshot has its own continuity rules. History never
+    carries forward missing values and never backfills from that snapshot.
+    """
+    if type(now) is not int or now <= 0:
+        raise ValueError('Invalid telemetry observation time')
+    rows = []
+    for uid in uids:
+        matches = [d for d in devices if isinstance(d, dict) and d.get('device_uid') == uid]
+        if len(matches) != 1:
+            raise ValueError('Missing or ambiguous history camera')
+        info = matches[0].get('dynamic_info')
+        if not isinstance(info, dict) or info.get('device_uid', uid) != uid:
+            info = {}
+        online = info.get('online_state')
+        online = online if isinstance(online, str) and len(online) <= 3 and online.isascii() and online.isdigit() else None
+        rows.append((uid, now, integer(info.get('latest_active_utc'), 1, min(now, 4102444800)),
+                     integer(info.get('battery'), 0, 100), integer(info.get('signal'), 0, 255),
+                     online, flag(info.get('is_battery_charging')), flag(info.get('is_low_power'))))
+    with db:
+        db.execute('''CREATE TABLE IF NOT EXISTS camera_telemetry_history (
+            camera_uid TEXT NOT NULL, observed_utc INTEGER NOT NULL,
+            latest_active_utc INTEGER, battery INTEGER, signal INTEGER,
+            online_state TEXT, charging INTEGER, low_power INTEGER,
+            PRIMARY KEY(camera_uid,observed_utc))''')
+        db.executemany('INSERT OR IGNORE INTO camera_telemetry_history VALUES (?,?,?,?,?,?,?,?)', rows)
+
+
+def prune_history(db, now, days=90, *, apply=False, emit=print):
+    """Age by observation time only; never delete the current alarm snapshot."""
+    if type(now) is not int or now <= 0 or type(days) is not int or not 1 <= days <= 3650:
+        raise ValueError('Invalid telemetry history retention')
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='camera_telemetry_history'").fetchone():
+        return 0
+    cutoff = now - days * 86400
+    if apply:
+        with db:
+            count = db.execute('DELETE FROM camera_telemetry_history WHERE observed_utc<=?', (cutoff,)).rowcount
+    else:
+        count, = db.execute('SELECT count(*) FROM camera_telemetry_history WHERE observed_utc<=?', (cutoff,)).fetchone()
+    emit(f'Telemetry history: {"removed" if apply else "would_remove"}={count}.')
+    return count
+
+
 def record_snapshot(db, uid, device, now, *, enabled=False, days=7,
                     photo_utc=None, coverage_end=None):
     """Fresh successful device response only; never persist raw API values.

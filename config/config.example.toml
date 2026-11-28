@@ -135,3 +135,5 @@ delivery_receipt_days = 90
 # Minimal known-delivery marker survives while automatic eligibility or metadata requires it.
 # Uncommitted registered download attempts: days since creation and last file activity.
 incomplete_days = 7
+# Fresh cloud telemetry observations, days since observation (1–3650).
+telemetry_days = 90

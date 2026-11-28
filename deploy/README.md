@@ -301,6 +301,9 @@ unregistered attempts and directories created before registration during
 a crash are not automatically removed; filenames alone are not proof of
 ownership. No migration of existing tables; schema checker accepts the
 new optional table, older schema checkers do not. Six new synthetic tests
-(291 expected), reference verification pending. Historical
-telemetry and manual resend remain R3/R4. No automatic VACUUM, no live
+Owner confirmed 44/44 targeted in 0.109 s and 291/291 full in 2.235 s at 365414a. Historical telemetry and manual resend follow in R3/R4. No automatic VACUUM, no live
 changes. Keep L3 running at its original commit.
+
+## R3 telemetry history
+
+Record one allowlisted observation per configured camera and fresh validated device-list response, keyed by camera UID and observation UTC second. Store actual reported battery, signal, online state, charging, low power, and latest activity; missing/invalid values are NULL, not carried forward. Identical values on later fresh responses are retained. Fresh device responses are recorded even if subsequent event listing fails; cached devices, failed discovery and duplicate same-second observations do not generate extra samples. Existing camera_telemetry current snapshot and alarm semantics remain unchanged. No backfill, no extra network requests, no private raw payloads. Optional camera_telemetry_history table and schema checker updated; earlier validators reject it. [retention].telemetry_days defaults to 90 (integer 1–3650); prune by observation age at startup and hourly independently of image deletion, including intake-only runs. Manual retention preview/apply includes history. No VACUUM. Six new tests (297 expected), reference verification pending. R4 historical delivery remains pending.

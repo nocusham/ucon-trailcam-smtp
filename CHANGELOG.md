@@ -160,3 +160,5 @@ This records development milestones, not a published production release.
 See [development history](docs/DEVELOPMENT_HISTORY.md) for detailed earlier experiments and superseded findings.
 
 - Record R1 validation (259/259, 2.136 s, 41b3361) and new owner requirement for bounded SMTP backlog throughput. Rate policy and implementation pending approval; no runtime changes.
+
+- Record approved global 30-second image SMTP pacing, no daily limit, oldest eligible first and explicit manual interval override. Record configurable camera connection download-batch requirement; distinguish sequential batches from unverified parallel transfers. Documentation only; restart persistence, configuration scope and controlled batch tests pending review.

@@ -33,3 +33,5 @@ venv, activate new cameras, create production LXC, merge or publish based
 on offline tests alone.
 
 SMTP pacing for automated and manual backlog delivery is an additional owner requirement. Review concrete rate and scope before implementation; current per-cycle batch limits alone are insufficient. R1 verification passed at 41b3361, 259/259 in 2.136 s.
+
+Owner-approved SMTP pacing: 30 seconds globally, no daily cap, oldest eligible images first, manual interval override. Restart persistence and alert/scheduling details pending review. Configurable downloads per camera relay are additionally required; actual device limits unknown, existing transfers sequential. Review design and controlled batch tests before implementation.

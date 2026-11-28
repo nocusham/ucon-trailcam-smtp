@@ -17,9 +17,12 @@ class PrepareReleaseTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.base = Path(temp.name)
         self.root = self.base / 'opt'
-        (self.root / 'releases').mkdir(parents=True)
+        # Explicit modes: mkdir(parents=True, mode=...) would leave the
+        # implicit parent subject to the caller's umask.
+        self.root.mkdir(mode=0o700)
+        (self.root / 'releases').mkdir(mode=0o700)
         self.house = self.base / 'wheelhouse'
-        self.house.mkdir()
+        self.house.mkdir(mode=0o700)
         self.wheel = self.base / PROJECT_WHEEL
         self.wheel.write_bytes(b'synthetic trusted project wheel')
         self.digest = hashlib.sha256(self.wheel.read_bytes()).hexdigest()
@@ -29,7 +32,8 @@ class PrepareReleaseTests(unittest.TestCase):
     @staticmethod
     def fake_install(directory, wheel, wheelhouse):
         executable = directory / 'venv/bin/ucon-trailcam-smtp'
-        executable.parent.mkdir(parents=True)
+        (directory / 'venv').mkdir(mode=0o700)
+        executable.parent.mkdir(mode=0o700)
         executable.write_text('#!/bin/sh\nexit 99\n', encoding='ascii')
         executable.chmod(0o700)
 
@@ -66,7 +70,7 @@ class PrepareReleaseTests(unittest.TestCase):
 
     def test_wrong_digest_refused_before_installation(self):
         with patch('deploy.prepare_release._install_and_check') as install:
-            with self.assertRaises(ReleaseError):
+            with self.assertRaisesRegex(ReleaseError, 'SHA256 mismatch'):
                 self.prepare(digest='0' * 64)
             install.assert_not_called()
         self.assertFalse((self.root / 'releases/v1').exists())
@@ -75,7 +79,7 @@ class PrepareReleaseTests(unittest.TestCase):
         with patch('deploy.prepare_release._install_and_check', side_effect=self.fake_install) as install:
             directory = self.prepare()
             marker = (directory / '.ready').read_bytes()
-            with self.assertRaises(ReleaseError):
+            with self.assertRaisesRegex(ReleaseError, 'Release already exists'):
                 self.prepare()
             self.assertEqual(install.call_count, 1)
         self.assertEqual((directory / '.ready').read_bytes(), marker)
@@ -85,12 +89,12 @@ class PrepareReleaseTests(unittest.TestCase):
         releases.rmdir()
         releases.symlink_to(self.house)
         with patch('deploy.prepare_release._install_and_check') as install:
-            with self.assertRaises(ReleaseError):
+            with self.assertRaisesRegex(ReleaseError, 'operator-owned directory'):
                 self.prepare()
             releases.unlink()
-            releases.mkdir()
+            releases.mkdir(mode=0o700)
             self.root.chmod(0o777)
-            with self.assertRaises(ReleaseError):
+            with self.assertRaisesRegex(ReleaseError, 'operator-owned directory'):
                 self.prepare()
             install.assert_not_called()
 
@@ -102,7 +106,7 @@ class PrepareReleaseTests(unittest.TestCase):
 
     def test_invalid_id_refused_before_installation(self):
         with patch('deploy.prepare_release._install_and_check') as install:
-            with self.assertRaises(ReleaseError):
+            with self.assertRaisesRegex(ReleaseError, 'Invalid release identifier'):
                 self.prepare('../outside')
             install.assert_not_called()
         self.assertFalse((self.root / 'outside').exists())

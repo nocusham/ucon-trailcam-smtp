@@ -68,7 +68,7 @@ class SchemaCompatibilityTests(unittest.TestCase):
         for name in sorted(DDL.keys() - REQUIRED):
             self.db.execute(DDL[name])
             check_schema(self.db)
-        self.assertEqual(check_schema(self.db)['tables'], 12)
+        self.assertEqual(check_schema(self.db)['tables'], 13)
 
     def test_missing_required_table(self):
         self.db.execute('DROP TABLE camera_telemetry')

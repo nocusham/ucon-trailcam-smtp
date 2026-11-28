@@ -21,6 +21,7 @@ class Retention:
     sent_image_hours: int | None = None
     metadata_days: int = 90
     delivery_receipt_days: int = 90
+    incomplete_days: int = 7
 
     @property
     def image_seconds(self):
@@ -31,7 +32,7 @@ def parse_retention(raw):
     if raw is None:
         return Retention()
     if not isinstance(raw, dict) or set(raw) - {'enabled', 'days', 'automatic_days', 'sent_image_hours',
-                                                     'metadata_days', 'delivery_receipt_days'}:
+                                                     'metadata_days', 'delivery_receipt_days', 'incomplete_days'}:
         raise ValueError('Invalid retention configuration')
     enabled, days = raw.get('enabled', True), raw.get('days', 1)
     if type(enabled) is not bool or type(days) is not int or not 1 <= days <= 3650:
@@ -44,9 +45,10 @@ def parse_retention(raw):
         raise ValueError('Invalid sent image hours or conflicting legacy days')
     metadata_days = raw.get('metadata_days', 90)
     receipt_days = raw.get('delivery_receipt_days', 90)
-    if any(type(v) is not int or not 1 <= v <= 3650 for v in (metadata_days, receipt_days)):
-        raise ValueError('Invalid metadata or delivery receipt retention days')
-    return Retention(enabled, days, automatic_days, hours, metadata_days, receipt_days)
+    incomplete_days = raw.get('incomplete_days', 7)
+    if any(type(v) is not int or not 1 <= v <= 3650 for v in (metadata_days, receipt_days, incomplete_days)):
+        raise ValueError('Invalid metadata, delivery receipt or incomplete attempt retention days')
+    return Retention(enabled, days, automatic_days, hours, metadata_days, receipt_days, incomplete_days)
 
 
 def capture_cutoff(now, automatic_days=90):
@@ -391,6 +393,7 @@ def prune_metadata(db, root, policy, now, *, apply=False, emit=print):
 def main():
     import tomllib
     from ucon_trailcam_smtp.queue_download import batch_lock
+    from ucon_trailcam_smtp.download_attempts import cleanup_attempts
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--queue-db', type=Path, required=True)
@@ -405,6 +408,9 @@ def main():
             now = int(time.time())
             _, _, skipped = cleanup(db, args.output_dir, policy, now, apply=args.apply)
             prune_metadata(db, args.output_dir, policy, now, apply=args.apply)
+            _, attempt_skipped = cleanup_attempts(db, args.output_dir, now, policy.incomplete_days,
+                                                  apply=args.apply)
+            skipped += attempt_skipped
         return int(bool(skipped))
     except (Exception, KeyboardInterrupt) as exc:
         print(f'Retention stopped; {error_fields(exc)}.')

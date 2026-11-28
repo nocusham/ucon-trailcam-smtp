@@ -66,6 +66,7 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(len(paths), 2)
         self.assertNotEqual(paths[0], paths[1])
         self.assertTrue(all(Path(r[0]).name == 'original.jpg' for r in paths))
+            self.assertEqual(db.execute('SELECT count(*) FROM download_attempts').fetchone(), (0,))
 
     def test_new_managed_directories_private_with_group_umask(self):
         old = os.umask(0o002)
@@ -119,3 +120,6 @@ class BatchTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.run_batch(invalid)
         self.assertEqual(self.states(), ['pending'] * 3)
+        with closing(sqlite3.connect(self.db)) as db:
+            attempt, = db.execute('SELECT path FROM download_attempts').fetchone()
+            self.assertTrue(Path(attempt).is_dir())

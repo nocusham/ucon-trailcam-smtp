@@ -17,6 +17,7 @@ from ucon_trailcam_smtp.service_cycle import run_cycle
 from ucon_trailcam_smtp.safe_diagnostics import allowed, error_fields
 from ucon_trailcam_smtp.service_download import plan_download, effective_batch_limit, MAX_BATCH_LIMIT
 from ucon_trailcam_smtp.media_retention import parse_retention, cleanup, capture_cutoff, prune_metadata
+from ucon_trailcam_smtp.download_attempts import cleanup_attempts
 from ucon_trailcam_smtp.smtp_pacing import Pacer, parse_interval
 
 
@@ -161,6 +162,9 @@ async def run(args):
                         _, _, skipped = cleanup(db, args.output_dir, retention, now, apply=True)
                         failed += int(bool(skipped))
                         prune_metadata(db, args.output_dir, retention, now, apply=True)
+                        _, skipped = cleanup_attempts(db, args.output_dir, now, retention.incomplete_days,
+                                                      apply=True)
+                        failed += int(bool(skipped))
                     except (OSError, ValueError) as exc:
                         print(f'Retention stopped; stage=retention {error_fields(exc)}.')
                         failed += 1

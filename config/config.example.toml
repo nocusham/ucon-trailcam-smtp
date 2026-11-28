@@ -133,4 +133,5 @@ sent_image_hours = 24
 metadata_days = 90
 delivery_receipt_days = 90
 # Minimal known-delivery marker survives while automatic eligibility or metadata requires it.
-# Incomplete attempt cleanup follows separately.
+# Uncommitted registered download attempts: days since creation and last file activity.
+incomplete_days = 7

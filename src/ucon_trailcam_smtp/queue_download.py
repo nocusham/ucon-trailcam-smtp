@@ -9,6 +9,7 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 
 from ucon_trailcam_smtp.event_match import match_events
+from ucon_trailcam_smtp.download_attempts import register_attempt
 
 
 @contextmanager
@@ -55,7 +56,7 @@ def check_existing(path, uid, rows, begin, end, validate):
                     raise ValueError('Stored original missing or changed; manual repair required')
 
 
-def record_download(path, uid, ident, stamp, sd, dest, details):
+def record_download(path, uid, ident, stamp, sd, dest, details, *, attempt=None):
     with closing(sqlite3.connect(path, timeout=10)) as db, db:
         db.execute('BEGIN IMMEDIATE')
         db.execute('''CREATE TABLE IF NOT EXISTS downloads (
@@ -69,6 +70,13 @@ def record_download(path, uid, ident, stamp, sd, dest, details):
             raise ValueError('Queue entry changed during download')
         db.execute('INSERT INTO downloads VALUES (?,?,?,?,?,?,?,?)',
                    (uid, ident, sd, str(dest.resolve()), *details))
+        if attempt is not None:
+            if dest.resolve().parent != attempt:
+                raise ValueError('Original is outside its registered attempt')
+            cur = db.execute('DELETE FROM download_attempts WHERE path=? AND camera_uid=? AND itemid=?',
+                             (str(attempt), uid, ident))
+            if cur.rowcount != 1:
+                raise ValueError('Missing registered download attempt')
 
 
 def download_batch(session, path, uid, rows, begin, end, events, output, limit, download, validate,
@@ -94,6 +102,7 @@ def download_batch(session, path, uid, rows, begin, end, events, output, limit, 
         folder.mkdir(mode=0o700, exist_ok=True)
         attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=folder))
         # A unique attempt directory prevents overwrite after interruption.
+        register_attempt(path, uid, ident, attempt)
         try:
             dest = download(session, event, 3, attempt / f'event4_{sd}_original.jpg',
                             preserve_filename=True)
@@ -102,7 +111,7 @@ def download_batch(session, path, uid, rows, begin, end, events, output, limit, 
                 on_failure(ident, 'download_timeout')
             raise
         details = digest_file(dest, validate)
-        record_download(path, uid, ident, stamp, sd, dest, details)
+        record_download(path, uid, ident, stamp, sd, dest, details, attempt=attempt)
         completed += 1
         session.stage_notes.append(f'Queue original committed: cloud={stamp}, SD={sd}, '
                                    f'{details[2]}x{details[3]}, {details[1]} bytes')

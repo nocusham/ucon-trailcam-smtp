@@ -2,7 +2,7 @@
 
 No runtime imports or migrations. Inspect only a verified standalone backup,
 never the active queue. Literal DDL from the audited runtime at cff4b87,
-with the additive optional D2 smtp_pacing table; no migration of existing
+with the additive optional D2 smtp_pacing and R2c download_attempts tables; no migration of existing
 tables. Changes require explicit compatibility review.
 """
 from contextlib import closing
@@ -33,6 +33,9 @@ DDL = {
     'delivery_routes': """CREATE TABLE IF NOT EXISTS delivery_routes (
                 camera_uid TEXT NOT NULL, itemid TEXT NOT NULL,
                 route_json TEXT NOT NULL, PRIMARY KEY(camera_uid,itemid))""",
+    'download_attempts': """CREATE TABLE IF NOT EXISTS download_attempts (
+            path TEXT PRIMARY KEY, camera_uid TEXT NOT NULL, itemid TEXT NOT NULL,
+            created_utc INTEGER NOT NULL)""",
     'download_retries': """CREATE TABLE IF NOT EXISTS download_retries (
             camera_uid TEXT NOT NULL, itemid TEXT NOT NULL,
             last_attempt INTEGER NOT NULL, next_due INTEGER NOT NULL,
@@ -84,7 +87,7 @@ def expected_rows(tables):
 def check_schema(db):
     """Read-only check of exact SQLite catalog, including autoindexes.
 
-    All six startup tables are required. Six lazily created tables are
+    All six startup tables are required. Seven lazily created tables are
     optional, but must have exactly the reviewed schema when present.
     This deliberately rejects even benign unreviewed schema differences.
     """

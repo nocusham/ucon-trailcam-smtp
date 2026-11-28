@@ -32,6 +32,7 @@ class ConfigTemplateTests(unittest.TestCase):
         self.assertFalse(parse_alerts(raw['alerts']).enabled)
         self.assertTrue(parse_retention(raw['retention']).enabled)
         self.assertEqual(parse_retention(raw['retention']).image_seconds, 86400)
+        self.assertEqual(parse_retention(raw['retention']).incomplete_days, 7)
         self.assertEqual(parse_retry(raw['download_retry']), parse_retry(None))
         from ucon_trailcam_smtp.smtp_pacing import parse_interval
         self.assertEqual(parse_interval(raw['smtp_pacing']), 30)

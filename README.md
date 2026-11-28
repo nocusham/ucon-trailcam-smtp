@@ -11,7 +11,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 | Component | Status |
 | --- | --- |
 | Python / SDK | Python 3.14.4 on Ubuntu test server; SDK 0.1.16 pinned |
-| Unit tests | 328/328 passed at 4cfbabe (2.271 s) before simplification; reduced-suite verification pending; live regression pending |
+| Unit tests | 253/253 passed at 56979da (2.141 s), package/development bundle check passed; live regression pending |
 | Ucon cloud event query | Live confirmed, no client-initiated P4P session |
 | Cloud watch | 6/6 successful polls with one login; new event and duplicate detection confirmed |
 | Camera selection | Exact UID from enabled local camera profile; live cloud query and relay credential discovery confirmed |
@@ -232,4 +232,6 @@ Phases 1 and 2 separate synthetic tests from runtime modules and extract shared 
 
 ### Deployment simplification (current)
 
-The owner approved the ten decisions recorded in [deploy/README.md](deploy/README.md). The fixed-path root handoff, whole-venv integrity approval, release pointer, privileged update and systemd prototype are removed from the active tree in S1; the final prototype c895064 remains in history and its 340-test suite was not run. Runtime, dependency pins, project wheel/ZIP checks, configuration/schema and full offline backup helpers are retained. Expected reduced suite: 253 tests, verification pending. New installer, logging, systemd templates, update and uninstall follow in separate checkpoints. No production deployment, merge, L3 or new camera changes.
+The owner approved the ten decisions recorded in [deploy/README.md](deploy/README.md). The fixed-path root handoff, whole-venv integrity approval, release pointer, privileged update and systemd prototype are removed from the active tree in S1; the final prototype c895064 remains in history and its 340-test suite was not run. Runtime, dependency pins, project wheel/ZIP checks, configuration/schema and full offline backup helpers are retained. Reduced suite: 253/253 passed in 2.141 s at 56979da, with owner-confirmed package/development bundle success. New installer, logging, systemd templates, update and uninstall follow in separate checkpoints. No production deployment, merge, L3 or new camera changes.
+
+Retention requirements (approved, not implemented): configurable 90-day detailed metadata, delivery receipt and automatic SMTP image-age limits, manual older-image delivery, 24-hour post-acceptance image cleanup, 30-day file logs and three update backups. Permanent image archival deferred. Discuss remaining behavioral choices before runtime implementation. See [deployment contract](deploy/README.md#approved-retention-requirements-not-implemented-yet).

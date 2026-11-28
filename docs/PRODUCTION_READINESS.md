@@ -11,7 +11,8 @@ prototype-specific tests, not runtime regression coverage.
 
 ## Remaining gates
 
-- S1: validate the reduced suite and isolated package/development ZIP.
+- S1 passed: owner confirmed 56979da, 253/253 in 2.141 s and package/development bundle success.
+- Retention/manual delivery: approved configurable defaults are recorded in deploy/README.md; outstanding behavioral choices require owner approval before changing runtime. No permanent image archival in the first release.
 - S2–S4: implement and validate simple install, logging, optional systemd
   user/system units, backup, update and uninstall, with user-selected
   paths and no root requirement. Preserve private state; no automatic start.

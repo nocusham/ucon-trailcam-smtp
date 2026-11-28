@@ -59,6 +59,36 @@ All modes share one queue and one worker. Never run them concurrently.
 The same runtime and explicit absolute config/queue/media paths apply.
 No service is started or enabled automatically by installation.
 
+## Approved retention requirements (not implemented yet)
+
+The owner confirmed these configurable defaults on 2026-11-28:
+
+| Data / behavior | Default |
+| --- | --- |
+| Detailed event metadata | 90 days |
+| SMTP delivery receipts / duplicate detection | 90 days |
+| Maximum image capture age for automatic SMTP | 90 days |
+| Local file logs | 30 days (also 5 MB / five rotated files) |
+| Automatic update backups retained | 3 |
+| Local image cleanup after successful SMTP acceptance | 24 hours |
+
+No permanent image archival option in the first release; defer to a
+future release. Never delete unsent or uncertain images merely because
+SMTP acceptance has not been recorded. Manual delivery of older images
+must be possible, independently of the automatic age limit, subject to
+source availability and explicit selection. No camera SD-card deletion.
+Journal retention remains the administrator's responsibility.
+
+Before runtime changes, discuss and obtain owner decisions on manual
+selection and explicit resends, stale pending/downloaded/uncertain events,
+age reference for metadata and receipts, and whether automatic downloads
+also observe the age limit. Do not silently discard unresolved deliveries
+or bypass duplicate checks. The existing disabled-by-default retention
+code has not been changed. Document decisions before implementing each
+major step; preserve the current L3 run. Update backup rotation must not
+silently delete manually created backups; implementation policy to be
+reviewed before S4.
+
 ## Simplification implementation checkpoints
 
 | Checkpoint | Scope |
@@ -93,6 +123,6 @@ verifies the development ZIP, installs the extracted project wheel,
 checks pip/imports/CLI outside the checkout and runs the regression suite.
 No live service, root access, or actual production data. No third-party
 wheels are bundled; SDK licensing and native KCP/target dependency
-validation remain open. S1 verification pending.
+validation remain open. S1 passed: owner confirmed commit 56979da, 253 tests in 2.141 s and final package/development bundle success. Before S2, agree on the runtime retention/manual delivery details above; no implementation without owner decisions.
 
 See ../docs/PRODUCTION_READINESS.md and ../docs/LXC.md for release gates.

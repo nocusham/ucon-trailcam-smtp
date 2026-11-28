@@ -1,6 +1,6 @@
 # Repository layout and historical development checkpoints
 
-Current status: owner-approved simplification S1; see [deployment architecture](../deploy/README.md). Phases 1–5 and 7a remain valid. The historical phase 6–7b fixed-path deployment prototype below is superseded; commands and file references in that history are not current instructions. Last confirmed suite 328/328 at 4cfbabe; c895064 (340 expected) was not run. Reduced suite 253 expected, pending verification. Keep main/L3 on 163f46b.
+Current status: owner-approved simplification S1; see [deployment architecture](../deploy/README.md). Phases 1–5 and 7a remain valid. The historical phase 6–7b fixed-path deployment prototype below is superseded; commands and file references in that history are not current instructions. Last confirmed suite 328/328 at 4cfbabe; c895064 (340 expected) was not run. Reduced suite 253/253 passed in 2.141 s at 56979da, with owner-confirmed package/development bundle success. Keep main/L3 on 163f46b.
 
 ```text
 src/                 installable runtime package

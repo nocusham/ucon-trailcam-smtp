@@ -31,19 +31,18 @@ async def run_cycle(profiles, *, cloud, devices, download, deliver, alerts,
                 failed = True
     elif download_enabled:
         emit('Cloud not ready; defer all camera downloads.')
-    for p in profiles:
-        try:
-            failed |= bool(deliver(p))
-        except sqlite3.Error:
-            raise
-        except Exception as exc:
-            emit(f'Camera {p.name}: delivery stopped; stage=delivery {error_fields(exc)}.')
-            failed = True
     try:
         failed |= bool(alerts(status))
     except sqlite3.Error:
         raise
     except Exception as exc:
         emit(f'Alarm dispatch stopped; stage=alarm_dispatch {error_fields(exc)}.')
+        failed = True
+    try:
+        failed |= bool(deliver(profiles))
+    except sqlite3.Error:
+        raise
+    except Exception as exc:
+        emit(f'Image delivery stopped; stage=delivery {error_fields(exc)}.')
         failed = True
     return int(failed)

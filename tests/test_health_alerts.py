@@ -86,6 +86,20 @@ class HealthAlertTests(unittest.TestCase):
         self.send.side_effect = None
         self.assertEqual(self.dispatch(4500), (1, 0))
 
+    def test_shared_pacer_defers_without_marking_alarm_attempt(self):
+        from ucon_trailcam_smtp.smtp_pacing import Pacer, NANOSECONDS
+        now = 900
+        self.check('login', 'ucon', 0, code=20005, blocked=True)
+        pacer = Pacer(self.db, clock=lambda: now * NANOSECONDS)
+        self.assertTrue(pacer.reserve())
+        self.assertEqual(dispatch_due(self.db, self.settings, now, self.cameras, self.send,
+                                      pacer=pacer, emit=lambda _: None), (0, 0))
+        self.assertEqual(self.db.execute('SELECT last_attempt FROM health_incidents').fetchone(), (None,))
+        now += 30
+        self.assertEqual(dispatch_due(self.db, self.settings, now, self.cameras, self.send,
+                                      pacer=pacer, emit=lambda _: None), (1, 0))
+        self.assertFalse(pacer.reserve())
+
     def test_disabled_and_unknown_camera(self):
         self.check('camera', 'unknown', 0)
         self.check('camera', 'unknown', 86400)

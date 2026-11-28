@@ -5,6 +5,11 @@
 # Store private passwords in .env, not in this file.
 # Create a separate [[cameras]] section for each camera.
 
+[smtp_pacing]
+# Global minimum seconds between image and alarm SMTP attempts (1–3600).
+# No daily limit; persisted in the queue. A service cycle may delay further.
+interval_seconds = 30
+
 [download]
 # Sequential originals per relay; 1–100 (experimental software cap).
 # Start with the validated conservative default; large batches are unverified.

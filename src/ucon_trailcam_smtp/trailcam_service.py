@@ -17,6 +17,7 @@ from ucon_trailcam_smtp.service_cycle import run_cycle
 from ucon_trailcam_smtp.safe_diagnostics import allowed, error_fields
 from ucon_trailcam_smtp.service_download import plan_download, effective_batch_limit, MAX_BATCH_LIMIT
 from ucon_trailcam_smtp.media_retention import parse_retention, cleanup, capture_cutoff
+from ucon_trailcam_smtp.smtp_pacing import Pacer, parse_interval
 
 
 def download_one(db, args, profile, devices, policy, settings, *, automatic_days=90):
@@ -85,6 +86,7 @@ async def run(args):
         raw = tomllib.load(source)
         policy = parse_retry(raw.get('download_retry'))
         retention = parse_retention(raw.get('retention'))
+        smtp_interval = parse_interval(raw.get('smtp_pacing'))
     if args.cleanup and not retention.enabled:
         raise ValueError('--cleanup requires retention.enabled=true')
     with closing(open_queue(args.queue_db)):
@@ -105,12 +107,20 @@ async def run(args):
                                          days=p.inactivity_days, photo_utc=photo,
                                          coverage_end=now if p.uid in covered else None)
                 print(f'Camera {p.name}: cloud telemetry saved; inactivity={status}')
-        def deliver(p):
+        pacer = Pacer(db, smtp_interval)
+        priority_pending = False
+        def deliver(selected):
+            if priority_pending and args.send:
+                print('Image SMTP deferred; due alarm has priority.')
+                return 0
             now = int(time.time())
-            return route_batch(db, [p], capture_cutoff(now, retention.automatic_days), now + 1,
+            return route_batch(db, selected, capture_cutoff(now, retention.automatic_days), now + 1,
                                send_enabled=args.send,
-                               load_image=load_image, build_message=build_message, send_message=send_message)
+                               load_image=load_image, build_message=build_message, send_message=send_message,
+                               pacer=pacer if args.send else None)
         def alarms(status):
+            nonlocal priority_pending
+            priority_pending = False
             now = int(time.time())
             # Photo fallback remains observation-only until completeness is verified.
             capable = {uid for uid, in db.execute("SELECT camera_uid FROM camera_telemetry WHERE source='cloud_activity'")}
@@ -120,8 +130,12 @@ async def run(args):
                 count = len(due_notices(db, settings, now, cameras, inactivity_scopes=scopes))
                 print(f'Alarm preview: due={count}; no alarm SMTP.')
                 return 0
+            priority_pending = bool(due_notices(db, settings, now, cameras, inactivity_scopes=scopes))
             accepted, failed = dispatch_due(db, settings, now, cameras,
-                                            lambda msg: smtp_sender(settings)(msg), inactivity_scopes=scopes)
+                                            lambda msg: smtp_sender(settings)(msg), inactivity_scopes=scopes,
+                                            pacer=pacer)
+            priority_pending = bool(due_notices(db, settings, int(time.time()), cameras,
+                                                inactivity_scopes=scopes))
             print(f'Alarms: accepted={accepted}, failed={failed}')
             return int(bool(failed))
         async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:

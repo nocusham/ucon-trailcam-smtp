@@ -59,6 +59,8 @@ DDL = {
     'media_cleanup': """CREATE TABLE IF NOT EXISTS media_cleanup (
                 camera_uid TEXT NOT NULL,itemid TEXT NOT NULL,removed_utc INTEGER NOT NULL,
                 size INTEGER NOT NULL,PRIMARY KEY(camera_uid,itemid))""",
+    'smtp_pacing': """CREATE TABLE IF NOT EXISTS smtp_pacing (
+                id INTEGER PRIMARY KEY CHECK(id=1), last_attempt_ns INTEGER NOT NULL)""",
     'smtp_retries': """CREATE TABLE IF NOT EXISTS smtp_retries (
             camera_uid TEXT PRIMARY KEY, failures INTEGER NOT NULL,
             last_failure INTEGER NOT NULL, next_due INTEGER NOT NULL)""",
@@ -81,7 +83,7 @@ def expected_rows(tables):
 def check_schema(db):
     """Read-only check of exact SQLite catalog, including autoindexes.
 
-    All six startup tables are required. Five lazily created tables are
+    All six startup tables are required. Six lazily created tables are
     optional, but must have exactly the reviewed schema when present.
     This deliberately rejects even benign unreviewed schema differences.
     """

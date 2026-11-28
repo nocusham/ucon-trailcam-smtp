@@ -14,6 +14,7 @@ from ucon_trailcam_smtp.mail_subject import camera_subject
 from ucon_trailcam_smtp.smtp_transport import SafeSMTPFailure, smtp_failure_fields
 from ucon_trailcam_smtp.safe_diagnostics import error_fields
 from ucon_trailcam_smtp.smtp_retry import retry_due, rollback_unsent, clear_retry
+from ucon_trailcam_smtp.smtp_pacing import Pacer, DEFAULT_INTERVAL, validate_interval
 
 
 class DeliveryError(Exception):
@@ -139,7 +140,7 @@ def finish_delivery(db, rows):
 
 
 def process(db, rows, *, load_image, build_message, sender, recipient, send=None, emit=print,
-            mode='single', route=None):
+            mode='single', route=None, pacer=None):
     if len({row[0] for row in rows}) > 1:
         raise DeliveryError('Mixed-camera SMTP batch refused; select a camera profile')
     if send is not None and rows and not retry_due(db, rows[0][0], int(time.time())):
@@ -161,6 +162,9 @@ def process(db, rows, *, load_image, build_message, sender, recipient, send=None
             emit(f"Subject: {msg['Subject']}")
         if send is None:
             continue
+        if pacer is not None and not pacer.reserve():
+            emit('SMTP interval not elapsed; remaining originals deferred.')
+            break
         # All events belonging to this message transition together.
         begin_delivery(db, group, str(msg['Message-ID']), route)
         try:
@@ -200,6 +204,8 @@ def main():
                         help='Single email per image (default) or grouped attachments')
     parser.add_argument('--preview-sent', action='store_true', help='Read-only MIME plan for previously sent originals')
     parser.add_argument('--send', action='store_true', help='Actually send verified originals')
+    parser.add_argument('--smtp-interval', type=int, default=DEFAULT_INTERVAL,
+                        help='Manual minimum interval between attempts, seconds (1–3600)')
     args = parser.parse_args()
     if args.mode not in ('single', 'grouped'):
         parser.error('SMTP_MODE must be single or grouped')
@@ -208,6 +214,7 @@ def main():
     if not 1 <= args.limit <= 10:
         parser.error('--limit must be 1–10')
     try:
+        validate_interval(args.smtp_interval)
         tz = ZoneInfo(args.tz)
         begin = int(dt.datetime.combine(args.day, dt.time.min, tzinfo=tz).timestamp())
         end = int(dt.datetime.combine(args.day + dt.timedelta(days=1), dt.time.min, tzinfo=tz).timestamp())
@@ -235,7 +242,8 @@ def main():
             else:
                 print('Validation only: no SMTP connection or delivery state change.')
             return process(db, rows, load_image=load_image, build_message=build_message,
-                           sender=sender, recipient=recipient, send=send, mode=args.mode)
+                           sender=sender, recipient=recipient, send=send, mode=args.mode,
+                           pacer=Pacer(db, args.smtp_interval) if args.send else None)
     except (Exception, KeyboardInterrupt) as exc:
         print(f'Queue SMTP stopped; {error_fields(exc)}. Check queue state.')
         return 1

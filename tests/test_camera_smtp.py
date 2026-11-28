@@ -85,6 +85,22 @@ class CameraRoutingTests(unittest.TestCase):
         self.assertEqual(send.call_args.args[1], self.b.host)
         self.assertEqual(self.fixture.states(), ['downloaded', 'sent', 'pending'])
 
+    def test_paced_global_oldest_and_deferral(self):
+        from ucon_trailcam_smtp.smtp_pacing import Pacer, NANOSECONDS
+        now = 100 * NANOSECONDS
+        pacer = Pacer(self.db, clock=lambda: now)
+        send = Mock()
+        options = dict(send_enabled=True, environ={'PASS1':'a', 'PASS2':'b'}, pacer=pacer)
+        self.assertEqual(self.route([self.b, self.a], send, **options), 0)
+        self.assertEqual(send.call_args.args[1], self.a.host)
+        self.assertEqual(self.fixture.states(), ['sent','downloaded','pending'])
+        self.assertEqual(self.route([self.b, self.a], send, **options), 0)
+        self.assertEqual(send.call_count, 1)
+        now += 30 * NANOSECONDS
+        self.assertEqual(self.route([self.b, self.a], send, **options), 0)
+        self.assertEqual(send.call_count, 2)
+        self.assertEqual(self.fixture.states(), ['sent','sent','pending'])
+
     def test_missing_password_stops_before_any_send(self):
         send = Mock()
         with self.assertRaises(DeliveryError):

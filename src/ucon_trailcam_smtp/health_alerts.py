@@ -199,10 +199,13 @@ def build_alert(settings, notice=None):
     return msg
 
 
-def dispatch_due(db, settings, now, cameras, send, *, emit=print, inactivity_scopes=()):
+def dispatch_due(db, settings, now, cameras, send, *, emit=print, inactivity_scopes=(), pacer=None):
     """Single service worker under its DB lock; commit attempt before network I/O."""
     accepted = failed = 0
     for n in due_notices(db, settings, now, cameras, inactivity_scopes=inactivity_scopes):
+        if pacer is not None and not pacer.reserve():
+            emit('SMTP interval not elapsed; alarm deferred.')
+            break
         with db:
             db.execute('UPDATE health_incidents SET last_attempt=? WHERE category=? AND scope=?',
                        (now, n.category, n.scope))

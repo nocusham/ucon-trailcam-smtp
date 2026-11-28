@@ -14,6 +14,9 @@ from ucon_trailcam_smtp.queue_smtp import DeliveryError, ready_rows, process, va
 from ucon_trailcam_smtp.local_credentials import read_secret_values
 from ucon_trailcam_smtp.safe_diagnostics import error_fields
 from ucon_trailcam_smtp.service_download import DEFAULT_BATCH_LIMIT, parse_batch_limit
+from ucon_trailcam_smtp.smtp_pacing import Pacer, parse_interval, validate_interval
+from ucon_trailcam_smtp.smtp_retry import retry_due
+import time
 
 
 @dataclass(frozen=True)
@@ -58,7 +61,7 @@ def mailbox(value):
 def load_profiles(path):
     with Path(path).open('rb') as source:
         data = tomllib.load(source)
-    if set(data) - {'cameras', 'alerts', 'download_retry', 'retention', 'download'} or not isinstance(data.get('cameras'), list) or not data['cameras']:
+    if set(data) - {'cameras', 'alerts', 'download_retry', 'retention', 'download', 'smtp_pacing'} or not isinstance(data.get('cameras'), list) or not data['cameras']:
         raise DeliveryError('Expected a nonempty [[cameras]] list')
     from ucon_trailcam_smtp.health_alerts import parse_alerts
     parse_alerts(data.get('alerts'))
@@ -67,6 +70,7 @@ def load_profiles(path):
     from ucon_trailcam_smtp.media_retention import parse_retention
     parse_retention(data.get('retention'))
     default_download = parse_batch_limit(data.get('download'))
+    parse_interval(data.get('smtp_pacing'))
     profiles = []
     names, uids, rw = set(), set(), set()
     for entry in data['cameras']:
@@ -121,9 +125,12 @@ def load_profiles(path):
 
 
 def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=False,
-                load_image, build_message, send_message, environ=None, emit=print):
+                load_image, build_message, send_message, environ=None, emit=print, pacer=None):
     if preview_sent and send_enabled:
         raise DeliveryError('Sent preview cannot send')
+    if send_enabled and pacer is not None and not pacer.due():
+        emit('SMTP interval not elapsed; images deferred.')
+        return 0
     if environ is None:
         environ = read_secret_values() if send_enabled else {}
     state = 'sent' if preview_sent else 'downloaded'
@@ -141,14 +148,23 @@ def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=Fa
             emit(f'Camera {p.name}: blocked by uncertain delivery; no SMTP')
             jobs.append((p, None, None))
             continue
+        if send_enabled and pacer is not None and not retry_due(db, p.uid, int(time.time())):
+            emit(f'Camera {p.name}: SMTP retry not due; deferred.')
+            continue
         items = ready_rows(db, begin, end, p.limit, state, camera_uid=p.uid)
+        if send_enabled and pacer is not None and p.mode == 'single':
+            items = items[:1]
         password = None
         if send_enabled and items and p.username:
             password = p.password or environ.get(p.password_env)
             if not password:
                 raise DeliveryError('Missing configured SMTP password')
         jobs.append((p, items, password))
-    failed = False
+    if send_enabled and pacer is not None:
+        # At most one message per dispatch, globally oldest eligible first.
+        # Grouped messages remain camera-local and are ordered by first image.
+        jobs.sort(key=lambda job: (job[1][0][2], job[1][0][0], job[1][0][1]) if job[1] else (float('inf'), '', ''))
+    failed = any(items is None for _, items, _ in jobs)
     for p, items, password in jobs:
         if items is None:
             failed = True
@@ -163,7 +179,7 @@ def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=Fa
         try:
             code = process(db, items, load_image=load_image, build_message=build_message,
                            sender=p.sender, recipient=p.recipient, mode=p.mode,
-                           send=send if send_enabled else None, route=p.route(), emit=emit)
+                           send=send if send_enabled else None, route=p.route(), emit=emit, pacer=pacer)
         except Exception as exc:
             emit(f'Camera {p.name}: failed; stage=delivery_prepare_or_commit {error_fields(exc)}')
             failed = True
@@ -171,6 +187,8 @@ def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=Fa
             # Stop the invocation on uncertain SMTP outcome (including Ctrl+C).
             if code:
                 return code
+            if send_enabled and pacer is not None:
+                break
     return int(failed)
 
 
@@ -185,11 +203,16 @@ def main():
     parser.add_argument('--camera', help='Select one configured camera name')
     parser.add_argument('--preview-sent', action='store_true')
     parser.add_argument('--send', action='store_true')
+    parser.add_argument('--smtp-interval', type=int, help='Explicit manual interval override (1–3600 seconds)')
     args = parser.parse_args()
     if args.preview_sent and args.send:
         parser.error('--preview-sent cannot be combined with --send')
     try:
         profiles = load_profiles(args.config)
+        with args.config.open('rb') as source:
+            interval = parse_interval(tomllib.load(source).get('smtp_pacing'))
+        if args.smtp_interval is not None:
+            interval = validate_interval(args.smtp_interval)
         if args.camera:
             profiles = [p for p in profiles if p.name == args.camera]
             if not profiles:
@@ -202,7 +225,8 @@ def main():
                 print('Validation only; no SMTP or state changes.')
             return route_batch(db, profiles, begin, end, preview_sent=args.preview_sent,
                                send_enabled=args.send, load_image=load_image,
-                               build_message=build_message, send_message=send_message)
+                               build_message=build_message, send_message=send_message,
+                               pacer=Pacer(db, interval) if args.send else None)
     except (Exception, KeyboardInterrupt) as exc:
         print(f'Camera SMTP stopped; {error_fields(exc)}. Check configuration and queue.')
         return 1

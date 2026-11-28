@@ -69,3 +69,5 @@ D1 adds three tests (262 expected): global/inherited/per-camera download limits 
 D1 result: d855099, 18/18 targeted in 0.035 s, 262/262 full in 2.154 s. D2 adds seven tests (269 expected) for persistence, exact interval boundary, rollback/override, configuration, global order/deferral, shared alarm gate, failed attempt and grouped attachment accounting; updates cycle-order and schema assertions. Synthetic only; reference verification pending.
 
 D2 result: 8db4b0d, 55/55 targeted in 0.150 s and 269/269 full in 2.261 s, expected HTTP and synthetic wheel messages. No live SMTP/camera test. R2 design approval pending.
+
+R2a adds five tests (274 expected): default/config/legacy compatibility, exact 24-hour acceptance boundary, interruption before and after unlink, backup rejection of unfinished deletion. Existing missing/changed/shared file, symlink and uncertainty guards retained. Synthetic only, reference verification pending.

@@ -207,17 +207,43 @@ table migration. D2 owner confirmed 55/55 targeted tests in 0.150 s and
 269/269 full regression in 2.261 s at 8db4b0d. Expected HTTP and synthetic
 wheel messages. No actual SMTP or camera operations in these tests.
 
-## R2 design review (pending owner approval)
+## R2 cleanup (owner-approved design)
 
-Approved retention durations remain unchanged. Discuss cleanup cadence,
-protection of minimal deduplication records until automatic eligibility
-ends even if independently configured receipt retention is shorter,
-handling of untracked partial/orphan files, and crash-safe file deletion
-before implementing R2. Never delete uncertain originals or remote SD
-files. Coordinate local file/receipt pruning under the existing queue
-lock; retain evidence for failed deletions. Existing cleanup unlinks
-before committing its receipt, so interruption reconciliation needs a
-focused regression test. Do not introduce general-purpose privileged
-or transactional deployment frameworks. Proposed rules are not approved
-or implemented. R2 must preserve backup validation and manual resend
-semantics; review before code changes.
+Owner approved cleanup at startup and hourly, retaining minimal delivery
+evidence longer when automatic eligibility would otherwise permit
+duplicates, deletion of clearly identified incomplete download files after
+7 days, and VACUUM only on manual request. No remote SD deletion. Uncertain
+originals and state remain until manual resolution.
+
+R2a implements only accepted-original cleanup, default 24 hours from
+confirmed acceptance, configurable [retention].sent_image_hours (integer
+1–87600). Existing explicitly configured legacy enabled=false or days
+are respected; days and sent_image_hours together are rejected. The new
+template does not offer permanent image archival. The normal --send
+service runs cleanup before its first cycle's network operations and
+hourly thereafter; --cleanup remains an explicit local maintenance
+opt-in for non-send runs. Manual media_retention preview is read-only;
+--apply is required for removal. Up to 100 successful removals per pass
+as before; large backlogs may take longer than an hour.
+
+After verifying the unique managed file against its download receipt,
+commit media_cleanup with removed_utc=0 (pending intent), unlink, fsync
+the containing directory, then commit positive removed_utc. A pending
+intent is eligible even if the interval was increased. Reconcile only
+the known missing basename inside the verified existing attempt directory;
+an absent file without intent or changed file/unsafe directory is not
+silently accepted. Remove empty managed directories only after receipt
+commit. The backup checker refuses pending deletion intents rather than
+reporting a clean backup. No schema DDL change; existing positive cleanup
+receipts are unchanged. This addresses process interruption, not arbitrary
+filesystem damage or every power-loss scenario. Five additional tests
+(274 expected), reference verification pending.
+
+Remaining R2b: expired definitely unsent images, metadata and delivery
+receipt pruning, retry/health consistency and minimal deduplication
+evidence across independently configured periods; ensure interrupted
+unsent deletion cannot permit a resend or invalid backup. R2c: identify
+incomplete download attempts and remove only verified application-owned
+uncommitted files after 7 days; unknown files untouched. Historical
+telemetry and manual resend remain R3/R4. No automatic VACUUM, no live
+changes. Keep L3 running at its original commit.

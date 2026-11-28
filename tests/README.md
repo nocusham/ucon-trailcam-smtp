@@ -79,3 +79,5 @@ R2b.1 result: 124d2fb, 47/47 targeted (0.089 s), 278/278 full (2.205 s). R2b.2 a
 R2b.2 result: b6936e8, 47/47 targeted (0.099 s), 285/285 full (2.221 s). R2c adds six tests (291 expected): retention config, read-only preview/age boundary/empty and unregistered directories, recent activity, committed/uncertain protections, unknown contents/symlink/hardlink protection, missing attempt reconciliation. Existing queue download and schema assertions extended for atomic registration completion and optional table. Synthetic only; reference verification pending.
 
 R2c result: 365414a, 44/44 targeted (0.109 s), 291/291 full (2.235 s). R3 adds six tests (297 expected): history scope/allowlist, unchanged fresh values and duplicate protection, missing values, age boundary and read-only preview, configuration, fresh observations despite later event-list failure. Existing alarm tests and schema assertions retained; synthetic only, reference verification pending.
+
+R3 result: c1f4199, 52/52 targeted (0.110 s), 297/297 full (2.264 s). Synthetic validation only. R4 design approval pending.

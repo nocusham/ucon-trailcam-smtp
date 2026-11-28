@@ -178,3 +178,5 @@ See [development history](docs/DEVELOPMENT_HISTORY.md) for detailed earlier expe
 - R2b.2 verified 47/47 targeted (0.099 s), 285/285 full (2.221 s), b6936e8. R2c adds persistent uncommitted-attempt registration before transfer, atomic receipt/registration completion, and conservative seven-day registered-attempt cleanup, configurable, preserving committed/uncertain and unknown files. Optional download_attempts schema table; six tests (291 expected), reference pending. Legacy unregistered attempts not automatically deleted.
 
 - R2c verified 44/44 targeted (0.109 s), 291/291 full (2.235 s), 365414a. R3 records fresh device telemetry history with allowlisted fields, NULL for missing values, no cached samples or extra requests; configurable 90-day observation retention, startup/hourly pruning and manual preview/apply. Optional schema table, current alarm snapshot unchanged. Six tests (297 expected), verification pending.
+
+- R3 owner verified 52/52 targeted (0.110 s), 297/297 full (2.264 s), c1f4199. Record R4 historical delivery design review; no runtime changes.

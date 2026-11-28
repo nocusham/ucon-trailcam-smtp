@@ -51,3 +51,5 @@ R2b.1 verified 124d2fb, 47/47 targeted in 0.089 s and 278/278 full in 2.205 s. R
 R2b.2 owner confirmed b6936e8, 47/47 targeted in 0.099 s, 285/285 full in 2.221 s. R2c registered-attempt cleanup implemented, default seven days since creation and last activity; optional download_attempts table reviewed, six tests (291 expected), pending reference verification. Legacy unregistered files retained. No live changes. R3/R4 and deployment/live validation remain pending.
 
 R2c verified 365414a, 44/44 targeted in 0.109 s, 291/291 full in 2.235 s. R3 fresh observation history implemented, independent 90-day configurable pruning and optional schema table, six tests (297 expected), reference pending. No backfill or live change. R4 and deployment/live validation pending.
+
+R3 verified c1f4199, 52/52 targeted in 0.110 s and 297/297 full in 2.264 s. R4 design approval pending; explicit historical range, preview, resend evidence and manual-only processing isolation require review. Live validation remains pending.

@@ -46,6 +46,16 @@ class RetentionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cleanup(self.db, self.root, Retention(), self.now, apply=True)
 
+    def test_automatic_age_configuration(self):
+        from ucon_trailcam_smtp.media_retention import capture_cutoff
+        self.assertEqual(parse_retention(None).automatic_days, 90)
+        self.assertEqual(parse_retention({'automatic_days': 7}).automatic_days, 7)
+        self.assertEqual(capture_cutoff(100 * 86400, 90), 10 * 86400)
+        self.assertEqual(capture_cutoff(100, 90), 0)
+        for value in (True, 0, -1, 3651, '90', 1.5):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                parse_retention({'automatic_days': value})
+
     def test_preview_no_changes(self):
         path = self.add('old')
         self.assertEqual(self.run_cleanup(), (1, path.stat().st_size, 0))

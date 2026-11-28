@@ -72,6 +72,19 @@ class CameraRoutingTests(unittest.TestCase):
         self.route([self.a], send, preview_sent=True)
         self.assertEqual(send.call_count, 1)
 
+    def test_automatic_capture_window_excludes_old_smtp_rows(self):
+        from ucon_trailcam_smtp.media_retention import capture_cutoff
+        now = 90 * 86400 + 200
+        send = Mock()
+        self.assertEqual(route_batch(
+            self.db, [self.a, self.b], capture_cutoff(now), now + 1,
+            load_image=self.fixture.load, build_message=self.build,
+            send_message=send, send_enabled=True, environ={'PASS2':'b'},
+            emit=lambda _: None), 0)
+        self.assertEqual(send.call_count, 1)
+        self.assertEqual(send.call_args.args[1], self.b.host)
+        self.assertEqual(self.fixture.states(), ['downloaded', 'sent', 'pending'])
+
     def test_missing_password_stops_before_any_send(self):
         send = Mock()
         with self.assertRaises(DeliveryError):

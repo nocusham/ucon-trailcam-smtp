@@ -108,6 +108,10 @@ max_minutes = 360
 # Remove local originals only after confirmed SMTP acceptance.
 # No deletion without explicit --cleanup (service) or --apply (manual tool).
 [retention]
+# Maximum capture age for automatic event queries, downloads and SMTP (1–3650 days).
+# A new queue still starts at installation time, not this far in the past.
+automatic_days = 90
+# Legacy cleanup settings remain until the new cleanup implementation is complete.
 enabled = false
 # Days since SMTP acceptance, not capture time (1–3650, default 30).
 days = 30

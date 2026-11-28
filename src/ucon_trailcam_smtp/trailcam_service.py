@@ -16,10 +16,10 @@ from ucon_trailcam_smtp.health_alerts import load_alerts, dispatch_due, due_noti
 from ucon_trailcam_smtp.service_cycle import run_cycle
 from ucon_trailcam_smtp.safe_diagnostics import allowed, error_fields
 from ucon_trailcam_smtp.service_download import plan_download
-from ucon_trailcam_smtp.media_retention import parse_retention, cleanup
+from ucon_trailcam_smtp.media_retention import parse_retention, cleanup, capture_cutoff
 
 
-def download_one(db, args, profile, devices, policy, settings):
+def download_one(db, args, profile, devices, policy, settings, *, automatic_days=90):
     from ucon_trailcam_smtp.camera_selection import select_device, relay_credentials
     from ucon_trailcam_smtp.sdk_relay import DiagnosticRelay, relay_compat
     from ucon_trailcam_smtp.queue_download import load_rows, download_batch
@@ -30,7 +30,7 @@ def download_one(db, args, profile, devices, policy, settings):
     uid = profile.uid
     threshold = settings.threshold('camera')
     sync_download_health(db, uid, now, threshold)
-    plan = plan_download(db, uid, now, args.batch_limit)
+    plan = plan_download(db, uid, now, args.batch_limit, automatic_days=automatic_days)
     if plan is None:
         print(f'Camera {profile.name}: no due originals; no relay.')
         return 0
@@ -105,7 +105,9 @@ async def run(args):
                                          coverage_end=now if p.uid in covered else None)
                 print(f'Camera {p.name}: cloud telemetry saved; inactivity={status}')
         def deliver(p):
-            return route_batch(db, [p], 0, int(time.time()) + 1, send_enabled=args.send,
+            now = int(time.time())
+            return route_batch(db, [p], capture_cutoff(now, retention.automatic_days), now + 1,
+                               send_enabled=args.send,
                                load_image=load_image, build_message=build_message, send_message=send_message)
         def alarms(status):
             now = int(time.time())
@@ -129,7 +131,8 @@ async def run(args):
                             query=lambda h,u,b,e: list_cloud_events(client,h,u,b,e),
                             store=lambda u,items: ingest_events(args.queue_db,u,items),
                             api_error=ApiError, interval=args.interval,
-                            refresh_devices=lambda h: list_devices(client,h), on_devices=on_devices)
+                            refresh_devices=lambda h: list_devices(client,h), on_devices=on_devices,
+                            automatic_days=retention.automatic_days)
             cycle = failed = 0
             next_cleanup = 0
             while args.loop or cycle < args.cycles:
@@ -138,7 +141,8 @@ async def run(args):
                 print(f'Service cycle {cycle}')
                 failed += await run_cycle(profiles, cloud=lambda: intake.cycle(int(time.time())),
                                           devices=lambda: intake.session[1],
-                                          download=lambda p,d: download_one(db,args,p,d,policy,settings),
+                                          download=lambda p,d: download_one(db,args,p,d,policy,settings,
+                                                                          automatic_days=retention.automatic_days),
                                           deliver=deliver, alerts=alarms, download_enabled=args.download)
                 if args.cleanup and time.monotonic() >= next_cleanup:
                     try:

@@ -29,6 +29,21 @@ class PlanTests(unittest.TestCase):
         self.insert('after', 86401)
         self.assertEqual(plan_download(self.db, 'a', 86410, 3), (86399, 86411, ['before','after']))
 
+    def test_automatic_capture_age_and_boundary(self):
+        now = 100 * 86400
+        cutoff = now - 90 * 86400
+        self.insert('expired', cutoff - 1)
+        self.insert('boundary', cutoff)
+        self.insert('recent', cutoff + 1)
+        self.assertEqual(plan_download(self.db, 'a', now, 3),
+                         (cutoff, cutoff + 3600, ['boundary','recent']))
+        self.assertEqual(self.db.execute('SELECT count(*) FROM events').fetchone(), (3,))
+
+    def test_configured_age_excludes_expired_originals(self):
+        now = 100 * 86400
+        self.insert('old', now - 2 * 86400)
+        self.assertIsNone(plan_download(self.db, 'a', now, 3, automatic_days=1))
+
     def test_bound_and_cooldown(self):
         self.insert('old', 100)
         self.insert('later', 4000)

@@ -82,6 +82,27 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calls[-1], ('a', 4900, 8800))
         self.assertEqual(self.logins, 2)
 
+    async def test_expired_backlog_skipped_without_advancing_failed_cursor(self):
+        now = 1000 + 100 * 86400
+        cutoff = now - 90 * 86400
+        self.api_error = ApiError('failure', stage='cloud event list', http_status=503)
+        self.assertEqual(await self.worker.cycle(now), 'error')
+        self.assertEqual(self.calls[-1], ('a', cutoff, cutoff + 3600))
+        self.assertEqual(self.db.execute('SELECT last_end FROM cloud_cursors').fetchone(), (1000,))
+        self.api_error = None
+        self.assertEqual(await self.worker.cycle(now + 120), 'ok')
+        self.assertEqual(self.calls[-1], ('a', cutoff + 120, cutoff + 3720))
+        self.assertEqual(self.db.execute('SELECT last_end FROM cloud_cursors').fetchone(), (cutoff + 3720,))
+
+    async def test_configured_age_and_no_expired_overlap(self):
+        self.worker.automatic_days = 1
+        now = 1000 + 2 * 86400
+        cutoff = now - 86400
+        with self.db:
+            self.db.execute('UPDATE cloud_cursors SET last_end=?', (cutoff + 10,))
+        await self.worker.cycle(now)
+        self.assertEqual(self.calls[-1], ('a', cutoff, cutoff + 3610))
+
     async def test_api_failure_preserves_cursor_and_cooldown(self):
         await self.worker.cycle(1060)
         self.api_error = ApiError('failure', stage='cloud event list', http_status=503)

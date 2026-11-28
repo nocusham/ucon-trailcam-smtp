@@ -17,17 +17,28 @@ from ucon_trailcam_smtp.safe_diagnostics import error_fields
 class Retention:
     enabled: bool = False
     days: int = 30
+    automatic_days: int = 90
 
 
 def parse_retention(raw):
     if raw is None:
         return Retention()
-    if not isinstance(raw, dict) or set(raw) - {'enabled', 'days'}:
+    if not isinstance(raw, dict) or set(raw) - {'enabled', 'days', 'automatic_days'}:
         raise ValueError('Invalid retention configuration')
     enabled, days = raw.get('enabled', False), raw.get('days', 30)
     if type(enabled) is not bool or type(days) is not int or not 1 <= days <= 3650:
         raise ValueError('Invalid retention options')
-    return Retention(enabled, days)
+    automatic_days = raw.get('automatic_days', 90)
+    if type(automatic_days) is not int or not 1 <= automatic_days <= 3650:
+        raise ValueError('Invalid automatic image age limit')
+    return Retention(enabled, days, automatic_days)
+
+
+def capture_cutoff(now, automatic_days=90):
+    """Inclusive lower capture-time bound for automatic processing."""
+    if type(now) is not int or now < 0 or type(automatic_days) is not int or not 1 <= automatic_days <= 3650:
+        raise ValueError('Invalid automatic capture window')
+    return max(0, now - automatic_days * 86400)
 
 
 def table_exists(db, name):

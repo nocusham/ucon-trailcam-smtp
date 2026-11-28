@@ -3,12 +3,14 @@ import argparse
 import asyncio
 import datetime as dt
 import time
+import tomllib
 from contextlib import closing
 from pathlib import Path
 
 from ucon_trailcam_smtp.health_alerts import init_health, observe
 from ucon_trailcam_smtp.safe_diagnostics import cloud_fields, error_fields
 from ucon_trailcam_smtp.camera_telemetry import REFRESH_SECONDS, init_telemetry, record_snapshot
+from ucon_trailcam_smtp.media_retention import capture_cutoff, parse_retention
 
 
 MAX_STEP = 3600
@@ -43,11 +45,14 @@ def resume_login(db):
         db.execute('UPDATE cloud_runtime SET failures=0,next_due=0 WHERE id=1')
 
 
-def window(db, uid, now):
+def window(db, uid, now, *, automatic_days=90):
     start, last = db.execute('SELECT start_utc,last_end FROM cloud_cursors WHERE camera_uid=?', (uid,)).fetchone()
     if now < last:
         raise ValueError('Clock moved behind persisted cloud cursor')
-    return max(start, last - OVERLAP), min(now, last + MAX_STEP)
+    cutoff = capture_cutoff(now, automatic_days)
+    # Skip expired backlog without widening the normal one-hour catch-up.
+    # Do not change the cursor until the bounded query/store succeeds.
+    return max(start, last - OVERLAP, cutoff), min(now, max(last, cutoff) + MAX_STEP)
 
 
 def photo_items(items, uid, begin, end):
@@ -59,13 +64,15 @@ def photo_items(items, uid, begin, end):
 
 class Intake:
     def __init__(self, db, uids, *, discover, query, store, api_error, interval=60, emit=print,
-                 refresh_devices=None, on_devices=None):
+                 refresh_devices=None, on_devices=None, automatic_days=90):
         self.db, self.uids = db, tuple(uids)
         self.discover, self.query, self.store = discover, query, store
         self.api_error, self.interval, self.emit = api_error, interval, emit
         self.session = None
         self.refresh_devices, self.on_devices = refresh_devices, on_devices
         self.last_refresh = None
+        capture_cutoff(0, automatic_days)
+        self.automatic_days = automatic_days
 
     def backoff(self, now):
         failures, = self.db.execute('SELECT failures FROM cloud_runtime WHERE id=1').fetchone()
@@ -101,7 +108,7 @@ class Intake:
             for uid in self.uids:
                 if sum(isinstance(d, dict) and d.get('device_uid') == uid for d in devices) != 1:
                     raise self.api_error('Configured camera missing or ambiguous', stage='device discovery', diagnostic_kind='camera_selection')
-                begin, end = window(db, uid, now)
+                begin, end = window(db, uid, now, automatic_days=self.automatic_days)
                 if end <= begin:
                     self.emit('Cloud intake baseline initialized; no elapsed interval yet.')
                     continue
@@ -157,6 +164,8 @@ async def run(args):
     profiles = [p for p in load_profiles(args.config) if p.enabled]
     if not profiles:
         raise ValueError('No enabled cameras')
+    with args.config.open('rb') as source:
+        retention = parse_retention(tomllib.load(source).get('retention'))
     # Create privately before locking; do not promote historical queues.
     with closing(open_queue(args.queue_db)):
         pass
@@ -184,7 +193,8 @@ async def run(args):
                             query=lambda h, u, b, e: list_cloud_events(client, h, u, b, e),
                             store=lambda u, items: ingest_events(args.queue_db, u, items),
                             api_error=ApiError, interval=args.interval,
-                            refresh_devices=lambda h: list_devices(client, h), on_devices=on_devices)
+                            refresh_devices=lambda h: list_devices(client, h), on_devices=on_devices,
+                            automatic_days=retention.automatic_days)
             results = []
             for i in range(args.cycles):
                 status = await intake.cycle(int(time.time()))

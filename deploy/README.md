@@ -236,8 +236,7 @@ silently accepted. Remove empty managed directories only after receipt
 commit. The backup checker refuses pending deletion intents rather than
 reporting a clean backup. No schema DDL change; existing positive cleanup
 receipts are unchanged. This addresses process interruption, not arbitrary
-filesystem damage or every power-loss scenario. Five additional tests
-Owner confirmed 41/41 targeted in 0.102 s and 274/274 full in 2.193 s at fe9a6d2.
+filesystem damage or every power-loss scenario. Five additional tests. Owner confirmed 41/41 targeted in 0.102 s and 274/274 full in 2.193 s at fe9a6d2.
 
 R2b.1 implements expiration of pending events without contradictory
 receipts and downloaded events with a verified local original and no
@@ -278,8 +277,7 @@ guarantee physical erasure of SQLite pages. Up to roughly 1000 metadata
 operations per pass, startup/hourly after media cleanup. Preview is
 read-only and shows currently eligible database changes, not simulated
 file removal. Backup checker recognizes sent_history and rejects
-contradictory related receipts. Six metadata tests plus one backup test
-Owner confirmed 47/47 targeted in 0.099 s and 285/285 full in 2.221 s at b6936e8.
+contradictory related receipts. Seven new tests. Owner confirmed 47/47 targeted in 0.099 s and 285/285 full in 2.221 s at b6936e8.
 
 R4 must explicitly handle expired historical events and sent_history
 known-success markers, require --resend for known previous sends and

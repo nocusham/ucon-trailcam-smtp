@@ -98,6 +98,33 @@ class QueueSMTPTests(unittest.TestCase):
         self.assertEqual(self.states(), ['sent', 'sent', 'pending'])
         self.assertEqual(self.db.execute('SELECT count(*) FROM smtp_retries').fetchone()[0], 0)
 
+    def test_failed_attempt_consumes_slot_and_throttling_is_not_uncertain(self):
+        from ucon_trailcam_smtp.smtp_pacing import Pacer, NANOSECONDS
+        from ucon_trailcam_smtp.smtp_transport import SafeSMTPFailure
+        now = 100 * NANOSECONDS
+        pacer = Pacer(self.db, clock=lambda: now)
+        send = Mock(side_effect=SafeSMTPFailure('setup failed'))
+        rows = ready_rows(self.db, 1, 400, 3)
+        self.assertEqual(process(self.db, rows, load_image=self.load,
+                                 build_message=self.build, sender='s@example.invalid',
+                                 recipient='r@example.invalid', send=send,
+                                 emit=lambda _: None, pacer=pacer), 1)
+        self.assertFalse(pacer.due())
+        self.assertEqual(self.states(), ['downloaded','downloaded','pending'])
+        self.assertEqual(self.db.execute('SELECT count(*) FROM deliveries').fetchone(), (0,))
+
+    def test_paced_grouped_one_attempt_for_multiple_images(self):
+        from ucon_trailcam_smtp.smtp_pacing import Pacer, NANOSECONDS
+        pacer = Pacer(self.db, clock=lambda: 100 * NANOSECONDS)
+        send = Mock()
+        self.assertEqual(process(self.db, ready_rows(self.db, 1, 400, 3),
+                                 load_image=self.load, build_message=self.build,
+                                 sender='s@example.invalid', recipient='r@example.invalid',
+                                 send=send, emit=lambda _: None, pacer=pacer, mode='grouped'), 0)
+        send.assert_called_once()
+        self.assertEqual(self.states(), ['sent','sent','pending'])
+        self.assertFalse(pacer.due())
+
     def test_grouped_safe_smtp_failure_restores_all(self):
         from ucon_trailcam_smtp.smtp_transport import SafeSMTPFailure
         send = Mock(side_effect=SafeSMTPFailure('setup failed'))

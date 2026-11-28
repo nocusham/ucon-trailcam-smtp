@@ -32,6 +32,8 @@ class ConfigTemplateTests(unittest.TestCase):
         self.assertFalse(parse_alerts(raw['alerts']).enabled)
         self.assertFalse(parse_retention(raw['retention']).enabled)
         self.assertEqual(parse_retry(raw['download_retry']), parse_retry(None))
+        from ucon_trailcam_smtp.smtp_pacing import parse_interval
+        self.assertEqual(parse_interval(raw['smtp_pacing']), 30)
 
     def test_global_and_per_camera_download_limits(self):
         entry = (

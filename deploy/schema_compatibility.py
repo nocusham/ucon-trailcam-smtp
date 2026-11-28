@@ -1,8 +1,9 @@
 """Conservative version-1 schema contract for the reviewed reference runtime.
 
 No runtime imports or migrations. Inspect only a verified standalone backup,
-never the active queue. The literal DDL below is taken from the audited
-runtime at cff4b87; changes require a new explicit compatibility review.
+never the active queue. Literal DDL from the audited runtime at cff4b87,
+with the additive optional D2 smtp_pacing table; no migration of existing
+tables. Changes require explicit compatibility review.
 """
 from contextlib import closing
 from pathlib import Path

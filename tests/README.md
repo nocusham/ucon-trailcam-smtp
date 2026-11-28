@@ -65,3 +65,5 @@ Retention R1: six additional tests (259 expected), covering default/configured a
 R1 result: owner confirmed 41b3361, 259/259 in 2.136 s, expected HTTP and synthetic wheel messages.
 
 D1 adds three tests (262 expected): global/inherited/per-camera download limits and independent SMTP limits, validation/CLI override resolution, 100-image bounded selection. Existing partial-transfer and sequential commit tests retained. No real camera or SMTP operations; reference verification pending.
+
+D1 result: d855099, 18/18 targeted in 0.035 s, 262/262 full in 2.154 s. D2 adds seven tests (269 expected) for persistence, exact interval boundary, rollback/override, configuration, global order/deferral, shared alarm gate, failed attempt and grouped attachment accounting; updates cycle-order and schema assertions. Synthetic only; reference verification pending.

@@ -162,7 +162,7 @@ See ../docs/PRODUCTION_READINESS.md and ../docs/LXC.md for release gates.
 
 ## SMTP throughput requirement (design review pending)
 
-The owner requires paced image delivery during backlog processing; no bulk burst of e.g. 90 individual messages. Current per-camera image batch limits and service cycle interval are not a persistent email-rate limit. Owner approved a configurable 30-second minimum interval globally across image SMTP messages, no additional daily cap, oldest eligible ready images first, and the same manual delivery rate by default with an explicit per-invocation override. Provider limits may require lower rates. The owner confirmed persistence of the last SMTP attempt across restart in SQLite, and alert priority with the same global minimum interval. Nonblocking scheduling, actual attempt accounting and manual override integration remain to be implemented. No rate limiter implemented yet.
+The owner requires paced image delivery during backlog processing; no bulk burst of e.g. 90 individual messages. Current per-camera image batch limits and service cycle interval are not a persistent email-rate limit. Owner approved a configurable 30-second minimum interval globally across image SMTP messages, no additional daily cap, oldest eligible ready images first, and the same manual delivery rate by default with an explicit per-invocation override. Provider limits may require lower rates. The owner confirmed persistence of the last SMTP attempt across restart in SQLite, and alert priority with the same global minimum interval. D2 implements the initial service-cycle-based scheduler and shared persisted attempt accounting; historical manual workflow remains pending.
 
 ## Camera download batch configuration (D1)
 
@@ -175,12 +175,33 @@ selection window, due ordering, per-original commits and timeout behavior
 remain unchanged. The cap is a maximum, not a promise to retrieve that many
 images per relay. No parallel transfers or protocol changes.
 
-D1 implements parsing, service selection and CLI range, and adds three
-synthetic tests (262 expected). Reference verification pending.
+D1 implements parsing, service selection and CLI range. Owner confirmed
+18/18 targeted tests in 0.035 s, 262/262 full in 2.154 s at d855099.
 Actual batches above 3 remain unvalidated on camera hardware; later isolated
 5/10/20/50/100 tests require owner approval and must not interrupt L3.
 The standalone diagnostic probe's existing limits are unchanged.
-SMTP pacing (D2) follows separately; approved global 30-second interval,
-oldest ready first, no daily limit, persistent attempt timestamp, explicit
-manual override and alert priority with the shared interval. No SMTP
-pacing implementation in D1.
+SMTP pacing D2: [smtp_pacing].interval_seconds defaults to 30, integer
+1–3600, one shared persisted attempt timestamp per queue SQLite database.
+Reserve before SMTP or delivery-state transition; failed attempts count,
+throttling defers without changing event/incident attempt state. Clock
+rollback postpones attempts until elapsed wall time permits. Alarm dispatch
+precedes image dispatch, using the same gate; outstanding due alarms
+take priority. Image dispatch considers all enabled cameras, oldest
+eligible capture first (grouped message ordered by its oldest image);
+respect existing camera cooldown and uncertain-delivery blocks.
+At most one image message per service cycle. No sleep for SMTP cooldown,
+no parallel workers, no daily cap. With the default 60-second cycle,
+actual throughput is normally at most 60 single-image messages/hour,
+not the theoretical 120/hour. Independent dispatch cadence is not
+implemented; long sequential downloads can delay mail.
+
+Existing explicit camera_smtp and queue_smtp diagnostics use the gate
+with --smtp-interval override (camera config default or 30 for queue
+diagnostic). These bounded invocations can defer remaining messages and
+exit; they are not the future full historical delivery command. Direct
+standalone SMTP/alert test probes without queue state are diagnostics,
+outside the service gate; do not run them concurrently with the service.
+Manual R4 workflow must reuse the same queue and gate. New optional
+smtp_pacing table is included in reviewed backup schema; no existing
+table migration. Seven new tests (269 expected), reference verification
+pending. No actual SMTP or camera operations in these tests.

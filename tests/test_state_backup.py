@@ -134,6 +134,17 @@ class StateBackupTests(unittest.TestCase):
         self.assertEqual(self.create(), {'pending':1,'sent':1})
         self.assertEqual(rehearse(self.backup,self.recovery), {'pending':1,'sent':1})
 
+    def test_pending_media_deletion_refuses_backup(self):
+        self.original.unlink()
+        with closing(sqlite3.connect(self.db)) as db, db:
+            db.executescript("""
+                CREATE TABLE media_cleanup(camera_uid TEXT,itemid TEXT,removed_utc INTEGER,size INTEGER);
+                INSERT INTO media_cleanup VALUES ('synthetic','a',0,18);
+            """)
+        with self.assertRaisesRegex(BackupError, 'Unfinished media deletion'):
+            self.create()
+        self.assertFalse((self.backup / 'manifest.json').exists())
+
     def test_inconsistent_delivery_receipt_refused(self):
         with closing(sqlite3.connect(self.db)) as db, db:
             db.execute('UPDATE deliveries SET accepted_utc=NULL')

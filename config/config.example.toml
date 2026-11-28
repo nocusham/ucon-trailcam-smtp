@@ -119,13 +119,13 @@ initial_minutes = 5
 # Maximum exponential backoff, in minutes (initial_minutes–1440).
 max_minutes = 360
 
-# Remove local originals only after confirmed SMTP acceptance.
-# No deletion without explicit --cleanup (service) or --apply (manual tool).
+# Local accepted original cleanup at service startup and hourly in --send mode.
+# Manual inspection/preview never deletes without --apply or explicit --cleanup.
 [retention]
 # Maximum capture age for automatic event queries, downloads and SMTP (1–3650 days).
 # A new queue still starts at installation time, not this far in the past.
 automatic_days = 90
-# Legacy cleanup settings remain until the new cleanup implementation is complete.
-enabled = false
-# Days since SMTP acceptance, not capture time (1–3650, default 30).
-days = 30
+# Hours since confirmed SMTP acceptance (1–87600, default 24).
+sent_image_hours = 24
+# Existing explicit legacy enabled=false / days settings are respected.
+# R2a only: expired unsent images, metadata and orphan cleanup follow separately.

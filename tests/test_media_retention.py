@@ -44,7 +44,7 @@ class RetentionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_retention(bad)
         with self.assertRaises(ValueError):
-            cleanup(self.db, self.root, Retention(), self.now, apply=True)
+            cleanup(self.db, self.root, Retention(False), self.now, apply=True)
 
     def test_automatic_age_configuration(self):
         from ucon_trailcam_smtp.media_retention import capture_cutoff
@@ -55,6 +55,52 @@ class RetentionTests(unittest.TestCase):
         for value in (True, 0, -1, 3651, '90', 1.5):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_retention({'automatic_days': value})
+
+    def test_default_24_hours_and_legacy_compatibility(self):
+        self.assertTrue(parse_retention(None).enabled)
+        self.assertEqual(parse_retention(None).image_seconds, 86400)
+        self.assertEqual(parse_retention({'sent_image_hours': 2}).image_seconds, 7200)
+        self.assertEqual(parse_retention({'enabled': False, 'days': 30}).image_seconds, 30 * 86400)
+        self.assertFalse(parse_retention({'enabled': False}).enabled)
+        for raw in ({'sent_image_hours': 0}, {'sent_image_hours': True},
+                    {'sent_image_hours': 87601}, {'sent_image_hours': 24, 'days': 1}):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                parse_retention(raw)
+
+    def test_exact_acceptance_boundary(self):
+        self.policy = parse_retention(None)
+        old = self.add('boundary', accepted=self.now - 86400)
+        new = self.add('recent', accepted=self.now - 86399)
+        size = old.stat().st_size
+        self.assertEqual(self.run_cleanup(True), (1, size, 0))
+        self.assertFalse(old.exists())
+        self.assertTrue(new.exists())
+
+    def test_interrupted_after_unlink_reconciled_without_guessing(self):
+        from unittest.mock import patch
+        path = self.add('old')
+        size = path.stat().st_size
+        with patch('ucon_trailcam_smtp.media_retention.finish_cleanup',
+                   side_effect=sqlite3.OperationalError('simulated interruption')):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.run_cleanup(True)
+        self.assertFalse(path.exists())
+        self.assertEqual(self.db.execute('SELECT removed_utc,size FROM media_cleanup').fetchone(), (0,size))
+        self.assertEqual(self.run_cleanup(True), (1,size,0))
+        self.assertEqual(self.db.execute('SELECT removed_utc,size FROM media_cleanup').fetchone(), (self.now,size))
+
+    def test_interrupted_before_unlink_retries_verified_file(self):
+        from unittest.mock import patch
+        path = self.add('old')
+        size = path.stat().st_size
+        with patch('ucon_trailcam_smtp.media_retention.os.unlink', side_effect=PermissionError):
+            self.assertEqual(self.run_cleanup(True), (0,0,1))
+        self.assertTrue(path.exists())
+        self.assertEqual(self.db.execute('SELECT removed_utc FROM media_cleanup').fetchone(), (0,))
+        # Even a longer configured interval cannot lose the committed intent.
+        self.policy = Retention(True, 365)
+        self.assertEqual(self.run_cleanup(True), (1,size,0))
+        self.assertFalse(path.exists())
 
     def test_preview_no_changes(self):
         path = self.add('old')

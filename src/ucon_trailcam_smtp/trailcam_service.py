@@ -88,7 +88,8 @@ async def run(args):
         retention = parse_retention(raw.get('retention'))
         smtp_interval = parse_interval(raw.get('smtp_pacing'))
     if args.cleanup and not retention.enabled:
-        raise ValueError('--cleanup requires retention.enabled=true')
+        raise ValueError('--cleanup conflicts with legacy retention.enabled=false')
+    cleanup_enabled = retention.enabled and (args.send or args.cleanup)
     with closing(open_queue(args.queue_db)):
         pass
     with batch_lock(args.queue_db), closing(open_queue(args.queue_db)) as db:
@@ -154,12 +155,7 @@ async def run(args):
                 cycle += 1
                 started = time.monotonic()
                 print(f'Service cycle {cycle}')
-                failed += await run_cycle(profiles, cloud=lambda: intake.cycle(int(time.time())),
-                                          devices=lambda: intake.session[1],
-                                          download=lambda p,d: download_one(db,args,p,d,policy,settings,
-                                                                          automatic_days=retention.automatic_days),
-                                          deliver=deliver, alerts=alarms, download_enabled=args.download)
-                if args.cleanup and time.monotonic() >= next_cleanup:
+                if cleanup_enabled and time.monotonic() >= next_cleanup:
                     try:
                         _, _, skipped = cleanup(db, args.output_dir, retention, int(time.time()), apply=True)
                         failed += int(bool(skipped))
@@ -167,6 +163,11 @@ async def run(args):
                         print(f'Retention stopped; stage=retention {error_fields(exc)}.')
                         failed += 1
                     next_cleanup = time.monotonic() + 3600
+                failed += await run_cycle(profiles, cloud=lambda: intake.cycle(int(time.time())),
+                                          devices=lambda: intake.session[1],
+                                          download=lambda p,d: download_one(db,args,p,d,policy,settings,
+                                                                          automatic_days=retention.automatic_days),
+                                          deliver=deliver, alerts=alarms, download_enabled=args.download)
                 if args.loop or cycle < args.cycles:
                     await asyncio.sleep(max(1, args.interval - (time.monotonic() - started)))
             print(f'Service complete: cycles={cycle}, failed={failed}')
@@ -188,7 +189,7 @@ def main():
     parser.add_argument('--send', action='store_true')
     parser.add_argument('--send-alerts', action='store_true')
     parser.add_argument('--resume-login', action='store_true')
-    parser.add_argument('--cleanup', action='store_true', help='Allow configured local image retention cleanup')
+    parser.add_argument('--cleanup', action='store_true', help='Explicit local image cleanup even without --send (legacy disable respected)')
     args = parser.parse_args()
     if not 1 <= args.cycles <= 1000 or not 10 <= args.interval <= 900 or (args.batch_limit is not None and not 1 <= args.batch_limit <= MAX_BATCH_LIMIT):
         parser.error('cycles 1–1000; interval 10–900 seconds; batch-limit 1–100')

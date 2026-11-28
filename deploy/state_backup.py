@@ -155,6 +155,9 @@ def check_state(db_path, media, original_media):
                 LEFT JOIN downloads d USING(camera_uid,itemid)
                 WHERE e.state IN ('sent','downloaded','uncertain') AND d.itemid IS NULL LIMIT 1""").fetchone():
                 raise BackupError('Missing original receipt')
+        if 'media_cleanup' in tables and db.execute(
+                'SELECT 1 FROM media_cleanup WHERE removed_utc<=0 LIMIT 1').fetchone():
+            raise BackupError('Unfinished media deletion; reconcile cleanup before backup')
         if 'downloads' in tables:
             cleaned = ('EXISTS (SELECT 1 FROM media_cleanup c WHERE c.camera_uid=d.camera_uid AND c.itemid=d.itemid)'
                        if 'media_cleanup' in tables else '0')

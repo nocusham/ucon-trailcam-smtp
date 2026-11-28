@@ -15,23 +15,31 @@ from ucon_trailcam_smtp.safe_diagnostics import error_fields
 
 @dataclass(frozen=True)
 class Retention:
-    enabled: bool = False
-    days: int = 30
+    enabled: bool = True
+    days: int = 1  # Legacy day-based configuration.
     automatic_days: int = 90
+    sent_image_hours: int | None = None
+
+    @property
+    def image_seconds(self):
+        return self.sent_image_hours * 3600 if self.sent_image_hours is not None else self.days * 86400
 
 
 def parse_retention(raw):
     if raw is None:
         return Retention()
-    if not isinstance(raw, dict) or set(raw) - {'enabled', 'days', 'automatic_days'}:
+    if not isinstance(raw, dict) or set(raw) - {'enabled', 'days', 'automatic_days', 'sent_image_hours'}:
         raise ValueError('Invalid retention configuration')
-    enabled, days = raw.get('enabled', False), raw.get('days', 30)
+    enabled, days = raw.get('enabled', True), raw.get('days', 1)
     if type(enabled) is not bool or type(days) is not int or not 1 <= days <= 3650:
         raise ValueError('Invalid retention options')
     automatic_days = raw.get('automatic_days', 90)
     if type(automatic_days) is not int or not 1 <= automatic_days <= 3650:
         raise ValueError('Invalid automatic image age limit')
-    return Retention(enabled, days, automatic_days)
+    hours = raw.get('sent_image_hours')
+    if 'sent_image_hours' in raw and ('days' in raw or type(hours) is not int or not 1 <= hours <= 87600):
+        raise ValueError('Invalid sent image hours or conflicting legacy days')
+    return Retention(enabled, days, automatic_days, hours)
 
 
 def capture_cutoff(now, automatic_days=90):
@@ -48,13 +56,37 @@ def table_exists(db, name):
 def candidates(db, cutoff):
     if not all(table_exists(db, t) for t in ('events', 'downloads', 'deliveries')):
         return []
-    skip = (' AND NOT EXISTS (SELECT 1 FROM media_cleanup c WHERE c.camera_uid=e.camera_uid AND c.itemid=e.itemid)'
-            if table_exists(db, 'media_cleanup') else '')
+    has_cleanup = table_exists(db, 'media_cleanup')
+    join = (' LEFT JOIN media_cleanup c USING(camera_uid,itemid)' if has_cleanup else '')
+    # A verified pending deletion must be reconciled even if the user
+    # has subsequently increased the retention interval.
+    age = ('((c.itemid IS NULL AND s.accepted_utc<=?) OR c.removed_utc=0)'
+           if has_cleanup else 's.accepted_utc<=?')
     return db.execute('''SELECT e.camera_uid,e.itemid,d.path,d.sha256,d.size
         FROM events e JOIN downloads d USING(camera_uid,itemid)
-        JOIN deliveries s USING(camera_uid,itemid)
-        WHERE e.state='sent' AND s.accepted_utc>0 AND s.accepted_utc<=?'''
-        + skip + ' ORDER BY s.accepted_utc,e.camera_uid,e.itemid', (cutoff,)).fetchall()
+        JOIN deliveries s USING(camera_uid,itemid)'''
+        + join + " WHERE e.state='sent' AND s.accepted_utc>0 AND " + age
+        + ' ORDER BY s.accepted_utc,e.camera_uid,e.itemid', (cutoff,)).fetchall()
+
+
+def deletion_intent(db, uid, ident, size):
+    if not table_exists(db, 'media_cleanup'):
+        return False
+    row = db.execute('SELECT removed_utc,size FROM media_cleanup WHERE camera_uid=? AND itemid=?',
+                     (uid, ident)).fetchone()
+    if row is None:
+        return False
+    if row != (0, size):
+        raise ValueError('Unexpected cleanup receipt')
+    return True
+
+
+def finish_cleanup(db, uid, ident, now, size):
+    with db:
+        cur = db.execute('UPDATE media_cleanup SET removed_utc=? WHERE camera_uid=? AND itemid=? '
+                         'AND removed_utc=0 AND size=?', (now, uid, ident, size))
+        if cur.rowcount != 1:
+            raise ValueError('Missing verified deletion intent')
 
 
 def safe_directory(fd):
@@ -75,6 +107,7 @@ def inspect_original(db, root, root_fd, row, *, apply, now):
         raise ValueError('Unexpected managed media path or size')
     if db.execute('SELECT count(*) FROM downloads WHERE path=?', (raw_path,)).fetchone()[0] != 1:
         raise ValueError('Shared original path')
+    pending = deletion_intent(db, uid, ident, size)
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     with ExitStack() as stack:
         key_fd = os.open(key, directory_flags, dir_fd=root_fd)
@@ -83,23 +116,36 @@ def inspect_original(db, root, root_fd, row, *, apply, now):
         attempt_fd = os.open(rel.parts[1], directory_flags, dir_fd=key_fd)
         stack.callback(os.close, attempt_fd)
         safe_directory(attempt_fd)
-        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=attempt_fd)
-        with os.fdopen(fd, 'rb') as source:
-            info = os.fstat(source.fileno())
-            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
-                    or info.st_nlink != 1 or info.st_size != size):
-                raise ValueError('Unexpected original file identity')
-            data = source.read(size+1)
-            if len(data) != size or hashlib.sha256(data).hexdigest() != digest:
-                raise ValueError('Original differs from receipt')
-            current = os.stat(path.name, dir_fd=attempt_fd, follow_symlinks=False)
-            if (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) != (
-                    info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns):
-                raise ValueError('Original changed during verification')
+        try:
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=attempt_fd)
+        except FileNotFoundError:
+            if not pending:
+                raise
+            # The intent was committed after verifying the original, before
+            # unlink. Only that exact missing path may be reconciled.
             if apply:
-                os.unlink(path.name, dir_fd=attempt_fd)
-                with db:
-                    db.execute('INSERT INTO media_cleanup VALUES (?,?,?,?)', (uid, ident, now, size))
+                os.fsync(attempt_fd)
+                finish_cleanup(db, uid, ident, now, size)
+        else:
+            with os.fdopen(fd, 'rb') as source:
+                info = os.fstat(source.fileno())
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                        or info.st_nlink != 1 or info.st_size != size):
+                    raise ValueError('Unexpected original file identity')
+                data = source.read(size+1)
+                if len(data) != size or hashlib.sha256(data).hexdigest() != digest:
+                    raise ValueError('Original differs from receipt')
+                current = os.stat(path.name, dir_fd=attempt_fd, follow_symlinks=False)
+                if (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) != (
+                        info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns):
+                    raise ValueError('Original changed during verification')
+                if apply:
+                    if not pending:
+                        with db:
+                            db.execute('INSERT INTO media_cleanup VALUES (?,?,0,?)', (uid, ident, size))
+                    os.unlink(path.name, dir_fd=attempt_fd)
+                    os.fsync(attempt_fd)
+                    finish_cleanup(db, uid, ident, now, size)
         if apply:
             # Remove only empty, known attempt/key directories; never recurse.
             for name, parent in ((rel.parts[1], key_fd), (key, root_fd)):
@@ -113,7 +159,9 @@ def inspect_original(db, root, root_fd, row, *, apply, now):
 def cleanup(db, root, policy, now, *, apply=False, emit=print):
     if apply and not policy.enabled:
         raise ValueError('Enable retention explicitly before deleting files')
-    rows = candidates(db, now - policy.days*86400)
+    if type(now) is not int or now <= 0:
+        raise ValueError('Invalid cleanup timestamp')
+    rows = candidates(db, now - policy.image_seconds)
     if not rows:
         emit('Retention: eligible=0; removed=0; no file changes.')
         return 0, 0, 0

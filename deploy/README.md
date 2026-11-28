@@ -66,24 +66,32 @@ The owner confirmed these configurable defaults on 2026-11-28:
 | Data / behavior | Default |
 | --- | --- |
 | Detailed event metadata | 90 days |
-| SMTP delivery receipts / duplicate detection | 90 days |
-| Maximum image capture age for automatic SMTP | 90 days |
+| SMTP delivery receipts / duplicate detection | 90 days after confirmed SMTP acceptance |
+| Maximum capture age for automatic cloud event queries, image downloads and SMTP | 90 days |
+| Camera telemetry history | 90 days |
 | Local file logs | 30 days (also 5 MB / five rotated files) |
 | Automatic update backups retained | 3 |
-| Local image cleanup after successful SMTP acceptance | 24 hours |
+| Local image cleanup after successful SMTP acceptance | 24 hours from confirmed SMTP acceptance |
 
 No permanent image archival option in the first release; defer to a
-future release. Never delete unsent or uncertain images merely because
-SMTP acceptance has not been recorded. Manual delivery of older images
-must be possible, independently of the automatic age limit, subject to
-source availability and explicit selection. No camera SD-card deletion.
+future release. Automatic cloud event discovery, download and SMTP use
+the same configurable capture-age limit; stop automatic delivery/retries
+for expired events, without disabling the entire service or other cameras.
+Manual older-image delivery must explicitly select a camera and date
+range, subject to source availability. Exact CLI syntax, preview and
+resend safeguards remain to be reviewed; expired delivery receipts mean
+prior delivery cannot always be determined. No camera SD-card deletion.
 Journal retention remains the administrator's responsibility.
 
-Before runtime changes, discuss and obtain owner decisions on manual
-selection and explicit resends, stale pending/downloaded/uncertain events,
-age reference for metadata and receipts, and whether automatic downloads
-also observe the age limit. Do not silently discard unresolved deliveries
-or bypass duplicate checks. The existing disabled-by-default retention
+The owner confirmed a configurable 90-day telemetry history, not merely
+the latest snapshot; sampling/storage policy remains to be approved.
+The existing latest-state tracking must continue to support alarms.
+Before runtime changes, obtain owner decisions on deletion versus local
+retention of expired unsent/uncertain originals, how to handle known or
+unknown previous delivery in manual mode, and metadata age reference.
+Do not infer authorization to delete unaccepted originals from the
+instruction to stop sending. Do not silently discard unresolved
+deliveries or bypass duplicate checks. The existing disabled-by-default retention
 code has not been changed. Document decisions before implementing each
 major step; preserve the current L3 run. Update backup rotation must not
 silently delete manually created backups; implementation policy to be

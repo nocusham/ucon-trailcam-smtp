@@ -12,7 +12,7 @@ prototype-specific tests, not runtime regression coverage.
 ## Remaining gates
 
 - S1 passed: owner confirmed 56979da, 253/253 in 2.141 s and package/development bundle success.
-- Retention/manual delivery: approved configurable defaults are recorded in deploy/README.md; outstanding behavioral choices require owner approval before changing runtime. No permanent image archival in the first release.
+- Retention/manual delivery: approved configurable defaults and age rules are recorded in deploy/README.md. The automatic 90-day capture-age boundary applies to cloud event queries, downloads and SMTP; expired events stop automatic retries. Explicit manual camera/date-range delivery may bypass age. Telemetry history is 90 days, and receipt/image retention starts at confirmed SMTP acceptance. Outstanding deletion, manual resend, sampling and metadata-age decisions require owner approval. No permanent image archival in the first release.
 - S2–S4: implement and validate simple install, logging, optional systemd
   user/system units, backup, update and uninstall, with user-selected
   paths and no root requirement. Preserve private state; no automatic start.

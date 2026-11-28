@@ -1,6 +1,7 @@
 """Synthetic integration of historical acceptance and managed retention."""
 import hashlib
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -41,7 +42,8 @@ class HistoryRetentionTests(unittest.TestCase):
             if original:
                 key=hashlib.sha256(json.dumps(['a',ident]).encode()).hexdigest()
                 path=self.root/key/'attempt-test'/'original.jpg'
-                path.parent.mkdir(mode=0o700,parents=True)
+                path.parent.parent.mkdir(mode=0o700)
+                path.parent.mkdir(mode=0o700)
                 path.write_bytes(b'original')
                 self.db.execute('INSERT INTO downloads VALUES (?,?,?,?,?)',
                     ('a',ident,str(path),hashlib.sha256(b'original').hexdigest(),8))
@@ -144,3 +146,22 @@ class HistoryRetentionTests(unittest.TestCase):
         self.prune()
         self.assertFalse(protected(self.db,'a','a'))
         self.assertEqual(self.db.execute('SELECT count(*) FROM events').fetchone(),(0,))
+
+    def test_private_fixture_independent_of_group_writable_umask(self):
+        old = os.umask(0o002)
+        try:
+            path=self.add('a',100,self.now-100*DAY)
+        finally:
+            os.umask(old)
+        self.assertEqual(path.parent.parent.stat().st_mode & 0o777,0o700)
+        self.assertEqual(path.parent.stat().st_mode & 0o777,0o700)
+        self.assertEqual(self.clean(),(1,8,0))
+
+    def test_group_writable_directory_preserves_original_and_receipt(self):
+        path=self.add('a',100,self.now-100*DAY)
+        path.parent.parent.chmod(0o775)
+        self.assertEqual(self.clean(),(0,0,1))
+        self.prune()
+        self.assertTrue(path.exists())
+        self.assertTrue(protected(self.db,'a','a'))
+        self.assertTrue(self.external.exists())

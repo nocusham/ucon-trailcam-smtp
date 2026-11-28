@@ -19,6 +19,8 @@ class Retention:
     days: int = 1  # Legacy day-based configuration.
     automatic_days: int = 90
     sent_image_hours: int | None = None
+    metadata_days: int = 90
+    delivery_receipt_days: int = 90
 
     @property
     def image_seconds(self):
@@ -28,7 +30,8 @@ class Retention:
 def parse_retention(raw):
     if raw is None:
         return Retention()
-    if not isinstance(raw, dict) or set(raw) - {'enabled', 'days', 'automatic_days', 'sent_image_hours'}:
+    if not isinstance(raw, dict) or set(raw) - {'enabled', 'days', 'automatic_days', 'sent_image_hours',
+                                                     'metadata_days', 'delivery_receipt_days'}:
         raise ValueError('Invalid retention configuration')
     enabled, days = raw.get('enabled', True), raw.get('days', 1)
     if type(enabled) is not bool or type(days) is not int or not 1 <= days <= 3650:
@@ -39,7 +42,11 @@ def parse_retention(raw):
     hours = raw.get('sent_image_hours')
     if 'sent_image_hours' in raw and ('days' in raw or type(hours) is not int or not 1 <= hours <= 87600):
         raise ValueError('Invalid sent image hours or conflicting legacy days')
-    return Retention(enabled, days, automatic_days, hours)
+    metadata_days = raw.get('metadata_days', 90)
+    receipt_days = raw.get('delivery_receipt_days', 90)
+    if any(type(v) is not int or not 1 <= v <= 3650 for v in (metadata_days, receipt_days)):
+        raise ValueError('Invalid metadata or delivery receipt retention days')
+    return Retention(enabled, days, automatic_days, hours, metadata_days, receipt_days)
 
 
 def capture_cutoff(now, automatic_days=90):
@@ -262,6 +269,125 @@ def cleanup(db, root, policy, now, *, apply=False, emit=print):
     return count, total, skipped
 
 
+def prune_metadata(db, root, policy, now, *, apply=False, emit=print):
+    """Prune only terminal, reconciled events, independently of media age.
+
+    The caller holds the queue lock. A sent_history event is an explicit
+    minimal known-success marker after detailed delivery receipts expire.
+    """
+    if apply and not policy.enabled:
+        raise ValueError('Enable retention explicitly before pruning')
+    if type(now) is not int or now <= 0:
+        raise ValueError('Invalid cleanup timestamp')
+    meta_cutoff = capture_cutoff(now, policy.metadata_days)
+    auto_cutoff = capture_cutoff(now, policy.automatic_days)
+    receipt_cutoff = now - policy.delivery_receipt_days * 86400
+    root = Path(root).resolve()
+    tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    related = tuple(t for t in ('deliveries', 'delivery_routes', 'downloads',
+                                'media_cleanup', 'download_retries') if t in tables)
+
+    def one(table, columns, uid, ident):
+        if table not in tables:
+            return None
+        return db.execute(f'SELECT {columns} FROM {table} WHERE camera_uid=? AND itemid=?',
+                          (uid, ident)).fetchone()
+
+    def remove_related(uid, ident):
+        for table in related:
+            db.execute(f'DELETE FROM {table} WHERE camera_uid=? AND itemid=?', (uid, ident))
+
+    def cleaned(uid, ident):
+        original = one('downloads', 'path,size', uid, ident)
+        removal = one('media_cleanup', 'removed_utc,size', uid, ident)
+        if original is None or removal is None or removal[0] <= 0 or removal[1] != original[1]:
+            return False
+        try:
+            path = Path(original[0])
+            key = hashlib.sha256(json.dumps([uid, ident]).encode()).hexdigest()
+            rel = path.relative_to(root)
+            if (len(rel.parts) != 3 or rel.parts[0] != key or '..' in rel.parts
+                    or not re.fullmatch(r'attempt-[A-Za-z0-9_-]+', rel.parts[1])
+                    or path.suffix.lower() not in ('.jpg', '.jpeg')):
+                return False
+            # Never discard the last receipt of a file that still exists,
+            # or of a path redirected through a symlink.
+            for parent in (root / key, root / key / rel.parts[1]):
+                if parent.is_symlink():
+                    return False
+            path.lstat()
+        except FileNotFoundError:
+            return True
+        except (OSError, TypeError, ValueError):
+            return False
+        return False
+
+    compacted = retired = deleted = 0
+    with db:
+        if apply:
+            db.execute('BEGIN IMMEDIATE')
+        rows = db.execute("""SELECT camera_uid,itemid,et_utc,state,metadata_json FROM events
+            WHERE state IN ('sent','expired','sent_history')
+            ORDER BY et_utc,camera_uid,itemid""").fetchall()
+        for uid, ident, stamp, state, raw in rows:
+            if compacted + retired + deleted >= 1000:
+                break
+            old_metadata = stamp <= meta_cutoff
+            outside_auto = stamp < auto_cutoff
+            delivery = one('deliveries', 'accepted_utc', uid, ident)
+            if state == 'sent':
+                if not delivery or type(delivery[0]) is not int or delivery[0] <= 0:
+                    continue
+                if not cleaned(uid, ident):
+                    # Preserve full data until actual file cleanup completed.
+                    continue
+                old_receipt = delivery[0] <= receipt_cutoff
+                if old_receipt:
+                    if apply:
+                        remove_related(uid, ident)
+                    if old_metadata and outside_auto:
+                        if apply:
+                            db.execute('DELETE FROM events WHERE camera_uid=? AND itemid=?', (uid, ident))
+                        deleted += 1
+                        continue
+                    if apply:
+                        db.execute("UPDATE events SET state='sent_history' WHERE camera_uid=? AND itemid=?",
+                                   (uid, ident))
+                    retired += 1
+            else:
+                if delivery is not None or one('delivery_routes', 'itemid', uid, ident) is not None:
+                    continue
+                original = one('downloads', 'itemid', uid, ident)
+                removal = one('media_cleanup', 'itemid', uid, ident)
+                if state == 'sent_history' and (original is not None or removal is not None):
+                    continue
+                if original is not None:
+                    if not cleaned(uid, ident):
+                        continue
+                elif removal is not None:
+                    continue
+                if old_metadata and outside_auto:
+                    if apply:
+                        remove_related(uid, ident)
+                        db.execute('DELETE FROM events WHERE camera_uid=? AND itemid=?', (uid, ident))
+                    deleted += 1
+                    continue
+            if old_metadata:
+                metadata = json.loads(raw)
+                if not isinstance(metadata, dict):
+                    raise ValueError('Invalid retained event metadata')
+                minimal = json.dumps({'itemid': ident, 'et_utc': stamp,
+                                      'type': metadata.get('type')}, ensure_ascii=False, allow_nan=False)
+                if raw != minimal:
+                    if apply:
+                        db.execute('UPDATE events SET metadata_json=? WHERE camera_uid=? AND itemid=?',
+                                   (minimal, uid, ident))
+                    compacted += 1
+    emit(f'Retention metadata: compacted={compacted}, retired_receipts={retired}, '
+         f'deleted_events={deleted}; apply={apply}.')
+    return compacted, retired, deleted
+
+
 def main():
     import tomllib
     from ucon_trailcam_smtp.queue_download import batch_lock
@@ -276,7 +402,9 @@ def main():
             policy = parse_retention(tomllib.load(source).get('retention'))
         with batch_lock(args.queue_db), closing(sqlite3.connect(
                 args.queue_db.resolve().as_uri() + ('?mode=rw' if args.apply else '?mode=ro'), uri=True)) as db:
-            _, _, skipped = cleanup(db, args.output_dir, policy, int(time.time()), apply=args.apply)
+            now = int(time.time())
+            _, _, skipped = cleanup(db, args.output_dir, policy, now, apply=args.apply)
+            prune_metadata(db, args.output_dir, policy, now, apply=args.apply)
         return int(bool(skipped))
     except (Exception, KeyboardInterrupt) as exc:
         print(f'Retention stopped; {error_fields(exc)}.')

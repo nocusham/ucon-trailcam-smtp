@@ -129,4 +129,8 @@ automatic_days = 90
 sent_image_hours = 24
 # Existing explicit legacy enabled=false / days settings are respected.
 # Expired definitely unsent events use automatic_days; uncertain events are retained.
-# Metadata/receipt pruning and incomplete attempt cleanup follow separately.
+# Detailed metadata from capture, and detailed delivery receipts from SMTP acceptance.
+metadata_days = 90
+delivery_receipt_days = 90
+# Minimal known-delivery marker survives while automatic eligibility or metadata requires it.
+# Incomplete attempt cleanup follows separately.

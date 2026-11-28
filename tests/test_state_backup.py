@@ -157,6 +157,17 @@ class StateBackupTests(unittest.TestCase):
         self.assertEqual(self.create(), {'expired':1,'pending':1})
         self.assertEqual(verify_backup(self.backup)['event_counts'], {'expired':1,'pending':1})
 
+    def test_retired_delivery_marker_backup(self):
+        self.original.unlink()
+        with closing(sqlite3.connect(self.db)) as db, db:
+            db.executescript("""
+                UPDATE events SET state='sent_history' WHERE itemid='a';
+                DELETE FROM deliveries;
+                DELETE FROM downloads;
+            """)
+        self.assertEqual(self.create(), {'pending':1,'sent_history':1})
+        self.assertEqual(verify_backup(self.backup)['event_counts'], {'pending':1,'sent_history':1})
+
     def test_inconsistent_delivery_receipt_refused(self):
         with closing(sqlite3.connect(self.db)) as db, db:
             db.execute('UPDATE deliveries SET accepted_utc=NULL')

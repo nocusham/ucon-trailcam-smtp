@@ -16,7 +16,7 @@ from ucon_trailcam_smtp.health_alerts import load_alerts, dispatch_due, due_noti
 from ucon_trailcam_smtp.service_cycle import run_cycle
 from ucon_trailcam_smtp.safe_diagnostics import allowed, error_fields
 from ucon_trailcam_smtp.service_download import plan_download, effective_batch_limit, MAX_BATCH_LIMIT
-from ucon_trailcam_smtp.media_retention import parse_retention, cleanup, capture_cutoff
+from ucon_trailcam_smtp.media_retention import parse_retention, cleanup, capture_cutoff, prune_metadata
 from ucon_trailcam_smtp.smtp_pacing import Pacer, parse_interval
 
 
@@ -157,8 +157,10 @@ async def run(args):
                 print(f'Service cycle {cycle}')
                 if cleanup_enabled and time.monotonic() >= next_cleanup:
                     try:
-                        _, _, skipped = cleanup(db, args.output_dir, retention, int(time.time()), apply=True)
+                        now = int(time.time())
+                        _, _, skipped = cleanup(db, args.output_dir, retention, now, apply=True)
                         failed += int(bool(skipped))
+                        prune_metadata(db, args.output_dir, retention, now, apply=True)
                     except (OSError, ValueError) as exc:
                         print(f'Retention stopped; stage=retention {error_fields(exc)}.')
                         failed += 1

@@ -134,7 +134,7 @@ def check_state(db_path, media, original_media):
         tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not {'events', 'cloud_runtime', 'cloud_cursors'} <= tables:
             raise BackupError('Missing required intake tables')
-        if db.execute("SELECT 1 FROM events WHERE state IS NULL OR state NOT IN ('pending','downloaded','sent','uncertain','expired') LIMIT 1").fetchone():
+        if db.execute("SELECT 1 FROM events WHERE state IS NULL OR state NOT IN ('pending','downloaded','sent','uncertain','expired','sent_history') LIMIT 1").fetchone():
             raise BackupError('Unknown event state')
         counts = dict(db.execute('SELECT state,count(*) FROM events GROUP BY state'))
         if counts.get('sent', 0) or counts.get('uncertain', 0):
@@ -144,7 +144,7 @@ def check_state(db_path, media, original_media):
             if db.execute("""SELECT 1 FROM events e LEFT JOIN deliveries d USING(camera_uid,itemid)
                 WHERE (e.state='sent' AND (d.accepted_utc IS NULL OR d.accepted_utc<=0))
                    OR (e.state='uncertain' AND (d.itemid IS NULL OR d.accepted_utc IS NOT NULL))
-                   OR (e.state IN ('pending','downloaded','expired') AND d.itemid IS NOT NULL)
+                   OR (e.state IN ('pending','downloaded','expired','sent_history') AND d.itemid IS NOT NULL)
                 LIMIT 1""").fetchone():
                 raise BackupError('Event and delivery receipt disagree')
             if db.execute("""SELECT 1 FROM deliveries d LEFT JOIN events e USING(camera_uid,itemid)
@@ -158,6 +158,10 @@ def check_state(db_path, media, original_media):
         if 'media_cleanup' in tables and db.execute(
                 'SELECT 1 FROM media_cleanup WHERE removed_utc<=0 LIMIT 1').fetchone():
             raise BackupError('Unfinished media deletion; reconcile cleanup before backup')
+        for table in ('downloads', 'delivery_routes', 'media_cleanup', 'download_retries'):
+            if table in tables and db.execute(f"SELECT 1 FROM {table} r JOIN events e USING(camera_uid,itemid) "
+                                              "WHERE e.state='sent_history' LIMIT 1").fetchone():
+                raise BackupError('Retired delivery marker still has related receipts')
         if 'downloads' in tables:
             cleaned = ('EXISTS (SELECT 1 FROM media_cleanup c WHERE c.camera_uid=d.camera_uid AND c.itemid=d.itemid)'
                        if 'media_cleanup' in tables else '0')

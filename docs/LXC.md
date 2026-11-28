@@ -50,3 +50,5 @@ Phase 5 final checkpoint: 214/214 tests passed at 46799db. Phase 6 deployment pr
 Phase 6 final development checkpoint: owner reported 253/253 tests in 2.078 s and successful local package, ZIP and versioned staging checks. The draft unit and offline backup/rehearsal helpers are not a production installer. See [production-readiness gates](PRODUCTION_READINESS.md) for the remaining ownership, transaction, dependency, licensing and live-validation work. No production LXC creation authorized yet; the historical commands above remain non-current.
 
 Phase 7a: 257/257 tests passed at 6e468a4, and all reported structural findings were reviewed. Phase 7b.1 adds a development-only named-path metadata contract; actual production ownership handoff and target service access remain untested. No LXC changes authorized.
+
+Phase 7b.1 passed 266/266 tests at fdc23fe. Phase 7b.2 adds candidate build and fresh-inode handoff primitives; actual privileged installer and service-user acceptance remain pending. Do not execute root code from the reference worktree or create a production LXC yet.

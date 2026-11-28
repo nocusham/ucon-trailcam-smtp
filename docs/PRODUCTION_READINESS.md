@@ -1,6 +1,6 @@
 # Production-readiness gates (phase 7)
 
-Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification pending. Not a production release or deployment authorization.
+Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification pending. Not a production release or deployment authorization.
 
 ## Evidence and limitations
 
@@ -91,13 +91,50 @@ A new-state check only checks the named DB/lock absence; media emptiness
 and WAL/SHM artifacts need a separate state check. Nine synthetic tests
 exercise distinct administrator/service metadata, first install,
 initialized state, invalid ownership/modes, unsafe links, marker and
-current pointer rejection. Expected full suite: 266.
+current pointer rejection. Owner-reported result at fdc23fe: 9/9 in 0.009 s; full 266/266 in 2.094 s. Expected HTTP and synthetic wheel messages.
 
 Subsequent 7b.2 must implement trusted staging/ownership handoff without
 moving a populated venv or running untrusted build hooks as root; 7b.3
 must implement stop/backup/update/rollback transaction; 7b.4 must verify
 state compatibility and controlled activation. Actual target permission
 and systemd lifecycle verification remains mandatory in phase 8.
+
+### 7b.2: candidate build and ownership handoff
+
+A dedicated non-root builder (distinct from the service identity) builds
+in an empty administrator-assigned final release directory, with local
+trusted wheels and the expected project digest. Use venv --copies, not
+interpreter symlinks. No readiness marker is created. The builder must
+be fully quiescent before an administrator takes over. Establish this
+with an isolated account/process boundary in future orchestration;
+the handoff library does not enforce process isolation itself.
+
+The administrator, using trusted administrator-controlled code and a
+trusted release parent, copies the candidate into fresh inodes in a
+private sibling quarantine directory. Do not execute any candidate code
+as root. Normalize directories to 0755, regular files to 0644 or 0755
+according to source owner execute permission. Reject unexpected owners,
+filesystem crossings, writable/special modes, hardlinks, special files,
+extended attributes (including ACLs/capabilities), and symlinks other
+than the expected venv/lib64 -> lib. Source must contain only venv and
+copied executable entrypoints. Retain the old tree in quarantine and
+rename the copied tree into the original absolute path; attempt to
+restore the old location if the final rename fails. Never select current
+or publish .ready. New inodes avoid retained write descriptors to the
+original being able to modify the accepted copy. This is not a hostile
+filesystem sandbox: trusted ancestors and complete builder quiescence,
+no concurrent writers, no unapproved mounts and trusted artifact inputs
+are mandatory preconditions. No power-loss guarantee or provenance
+authentication. A failure may leave private quarantine output for manual
+inspection. Do not blindly delete it as root.
+
+The privileged library has no root CLI, and real privilege orchestration
+and service-user smoke checks are not yet implemented. Eleven synthetic
+tests plus a real non-root same-owner build/copy rehearsal in
+check-package.sh validate the path and content handoff without changing
+users or host state. Expected suite: 277. Actual ownership transfer,
+trusted input provisioning, isolation, ACL/mount review and acceptance
+under the real service identity remain mandatory before activation.
 
 ## 7c: licensing and artifact trust
 

@@ -16,7 +16,9 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
-- Phase 7b.1: define and check selected production filesystem metadata for separated root/service ownership, private state/credentials and absent activation marker, using a trusted synthetic root. Nine new tests (266 expected). No privilege changes, service operations or live validation; the contract is not a complete installer or security boundary.
+- Phase 7b.2: add non-root candidate building at the final version path using venv --copies and local wheels, plus an administrator-only library for copying to fresh inodes under a trusted release parent, normalizing modes and retaining the original in quarantine. Reject unsafe types/modes, unexpected links, ownership, filesystem and extended attributes. Preserve the final path, no ready marker or current change. Extend local package check with actual same-owner candidate build/copy/CLI smoke; eleven synthetic tests (277 expected). Privileged orchestration, independent builder quiescence and service-identity validation remain pending; no root CLI.
+
+- Phase 7b.1: define and check selected production filesystem metadata for separated root/service ownership, private state/credentials and absent activation marker, using a trusted synthetic root. Nine targeted tests passed in 0.009 s; full 266/266 passed in 2.094 s at fdc23fe. No privilege changes, service operations or live validation; the contract is not a complete installer or security boundary.
 
 - Phase 7a: document production-readiness gates and introduce a read-only Git-object AST comparison of the original and relocated runtime/diagnostic modules. Normalize only documented import relocations, inventory changed/missing/new definitions and module statements plus top-level import differences. Four synthetic normalization tests included in 257/257 passing tests at 6e468a4 (2.091 s). Audit: 33/39 modules, 147 unchanged normalized definitions, four findings and nine import differences reviewed as intended relocations or credential lookup change. No runtime changes, merge, deployment or live operations.
 

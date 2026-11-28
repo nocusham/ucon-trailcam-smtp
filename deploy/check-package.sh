@@ -112,9 +112,37 @@ digest=$(sha256sum "${wheels[0]}" | cut -d' ' -f1)
 echo "Versioned release staged without activation."
 PY="$WORK/install-root/releases/dev-check/venv/bin/python"
 
+echo "=== Candidate build and same-owner handoff rehearsal ==="
+mkdir -m 700 "$WORK/install-root/releases/handoff-check"
+(
+    cd "$SOURCE"
+    "$PY" -m deploy.release_handoff \
+        --directory "$WORK/install-root/releases/handoff-check" \
+        --wheel "${wheels[0]}" --sha256 "$digest" --wheelhouse "$WORK/wheelhouse"
+    "$PY" - "$WORK/install-root" <<'PYTHON'
+import os
+from pathlib import Path
+import sys
+from deploy.release_handoff import _handoff
+
+root = Path(sys.argv[1])
+identity = (os.geteuid(), os.getegid())
+original = _handoff(root, 'handoff-check', identity, identity)
+candidate = root / 'releases/handoff-check'
+assert original.is_dir()
+assert not (candidate / '.ready').exists()
+assert not (root / 'current').exists() and not (root / 'current').is_symlink()
+print('Same-owner handoff rehearsal passed; no readiness or activation.')
+PYTHON
+)
+"$WORK/install-root/releases/handoff-check/venv/bin/ucon-trailcam-smtp" --help > "$WORK/handoff-help.txt"
+grep -q -- '--queue-db' "$WORK/handoff-help.txt"
+"$WORK/install-root/releases/handoff-check/venv/bin/python" -I -c 'import ucon_trailcam_smtp.trailcam_service'
+echo "Copied candidate works at its original absolute path."
+
 echo "=== Full source regression using freshly installed dependencies ==="
 (
     cd "$SOURCE"
     "$PY" -m unittest discover -s tests -t . -v
 )
-echo "Package, development bundle and versioned staging checks passed."
+echo "Package, development bundle, staging and handoff rehearsal checks passed."

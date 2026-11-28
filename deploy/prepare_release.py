@@ -65,7 +65,7 @@ def _pins(path):
     return values
 
 
-def _install_and_check(directory, wheel, wheelhouse):
+def _install_and_check(directory, wheel, wheelhouse, *, copy_interpreter=False):
     # Keep the execution environment free of inherited camera/SMTP credentials
     # and pip configuration. All installs use explicitly selected local wheels.
     env = {'PATH': os.defpath, 'HOME': str(directory),
@@ -76,7 +76,8 @@ def _install_and_check(directory, wheel, wheelhouse):
     def run(*args):
         subprocess.run(args, cwd=directory, env=env, check=True)
 
-    run(sys.executable, '-m', 'venv', str(directory / 'venv'))
+    options = ('--copies',) if copy_interpreter else ()
+    run(sys.executable, '-m', 'venv', *options, str(directory / 'venv'))
     python = str(directory / 'venv/bin/python')
     pip = (python, '-m', 'pip', 'install', '--no-index', '--no-deps',
            '--only-binary=:all:', '--find-links', str(wheelhouse))

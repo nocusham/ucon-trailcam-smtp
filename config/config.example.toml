@@ -128,4 +128,5 @@ automatic_days = 90
 # Hours since confirmed SMTP acceptance (1–87600, default 24).
 sent_image_hours = 24
 # Existing explicit legacy enabled=false / days settings are respected.
-# R2a only: expired unsent images, metadata and orphan cleanup follow separately.
+# Expired definitely unsent events use automatic_days; uncertain events are retained.
+# Metadata/receipt pruning and incomplete attempt cleanup follow separately.

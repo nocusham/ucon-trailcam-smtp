@@ -237,12 +237,30 @@ commit. The backup checker refuses pending deletion intents rather than
 reporting a clean backup. No schema DDL change; existing positive cleanup
 receipts are unchanged. This addresses process interruption, not arbitrary
 filesystem damage or every power-loss scenario. Five additional tests
-(274 expected), reference verification pending.
+Owner confirmed 41/41 targeted in 0.102 s and 274/274 full in 2.193 s at fe9a6d2.
 
-Remaining R2b: expired definitely unsent images, metadata and delivery
-receipt pruning, retry/health consistency and minimal deduplication
-evidence across independently configured periods; ensure interrupted
-unsent deletion cannot permit a resend or invalid backup. R2c: identify
+R2b.1 implements expiration of pending events without contradictory
+receipts and downloaded events with a verified local original and no
+SMTP/route receipt, strictly older than automatic_days. Mark expired
+in the same SQLite transaction as deletion intent before unlink for
+originals, then finish the existing cleanup receipt. The expired state
+is neither sent nor eligible for automatic retries, including after a
+later increase of automatic_days. Retain metadata and completed cleanup
+receipts for R2b.2. Existing uncertain events remain unchanged. Remove
+expired event download retry rows; retire a camera download incident
+when its final failed pending event expires, without a false recovery
+notice. Pending-only expiration works without a media directory.
+Limit pending expiration to 100 per pass, in addition to the existing
+100 successful original removals per pass. No DDL change, but the event
+state vocabulary now includes expired; older backup checkers reject
+that state. Backups accept expired originals only with completed cleanup
+receipt and absent file; incomplete intent still blocks verification.
+Four new synthetic tests (278 expected), reference verification pending.
+
+Remaining R2b.2: independent metadata and delivery receipt pruning,
+minimal deduplication evidence, and compatibility with manual resend.
+R4 must explicitly handle expired historical events; current automatic
+selection and legacy send commands never select expired rows. R2c: identify
 incomplete download attempts and remove only verified application-owned
 uncommitted files after 7 days; unknown files untouched. Historical
 telemetry and manual resend remain R3/R4. No automatic VACUUM, no live

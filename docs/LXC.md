@@ -46,3 +46,5 @@ Before creating the production LXC, separate runtime modules, tests, diagnostic 
 Current restructuring status (2026-11-27): source layout and configuration templates are in place on the separate development branch; 214 automated tests passed at cda3649. The older setup sketch above is not the final release installation procedure. Production deployment files, installed-package validation, dependency locking, licensing and live regression are still pending. Keep the current L3 checkout untouched.
 
 Phase 5 final checkpoint: 214/214 tests passed at 46799db. Phase 6 deployment preparation is tracked in [deploy/README.md](../deploy/README.md); the LXC is still deferred.
+
+Phase 6 final development checkpoint: owner reported 253/253 tests in 2.078 s and successful local package, ZIP and versioned staging checks. The draft unit and offline backup/rehearsal helpers are not a production installer. See [production-readiness gates](PRODUCTION_READINESS.md) for the remaining ownership, transaction, dependency, licensing and live-validation work. No production LXC creation authorized yet; the historical commands above remain non-current.

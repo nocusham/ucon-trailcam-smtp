@@ -15,7 +15,7 @@ from ucon_trailcam_smtp.download_retry import init_retry, parse_retry, reserve, 
 from ucon_trailcam_smtp.health_alerts import load_alerts, dispatch_due, due_notices, smtp_sender
 from ucon_trailcam_smtp.service_cycle import run_cycle
 from ucon_trailcam_smtp.safe_diagnostics import allowed, error_fields
-from ucon_trailcam_smtp.service_download import plan_download
+from ucon_trailcam_smtp.service_download import plan_download, effective_batch_limit, MAX_BATCH_LIMIT
 from ucon_trailcam_smtp.media_retention import parse_retention, cleanup, capture_cutoff
 
 
@@ -30,7 +30,8 @@ def download_one(db, args, profile, devices, policy, settings, *, automatic_days
     uid = profile.uid
     threshold = settings.threshold('camera')
     sync_download_health(db, uid, now, threshold)
-    plan = plan_download(db, uid, now, args.batch_limit, automatic_days=automatic_days)
+    limit = effective_batch_limit(profile, args.batch_limit)
+    plan = plan_download(db, uid, now, limit, automatic_days=automatic_days)
     if plan is None:
         print(f'Camera {profile.name}: no due originals; no relay.')
         return 0
@@ -51,7 +52,7 @@ def download_one(db, args, profile, devices, policy, settings, *, automatic_days
             events = list_events_staged(session, begin - 6, end + 6, flow='app')
             listing = False
             missing = download_batch(session, args.queue_db, uid, rows, begin, end,
-                                     events, args.output_dir, args.batch_limit,
+                                     events, args.output_dir, limit,
                                      partial(download_photo, require_native_filename=True),
                                      validate_image, retry_ids=ids, on_failure=failed)
         return int(bool(missing))
@@ -167,15 +168,16 @@ def main():
     mode.add_argument('--cycles', type=int, default=1)
     mode.add_argument('--loop', action='store_true')
     parser.add_argument('--interval', type=int, default=60)
-    parser.add_argument('--batch-limit', type=int, default=3)
+    parser.add_argument('--batch-limit', type=int, default=None,
+                        help='Override configured download batch for all cameras (1–100; default config or 3)')
     parser.add_argument('--download', action='store_true')
     parser.add_argument('--send', action='store_true')
     parser.add_argument('--send-alerts', action='store_true')
     parser.add_argument('--resume-login', action='store_true')
     parser.add_argument('--cleanup', action='store_true', help='Allow configured local image retention cleanup')
     args = parser.parse_args()
-    if not 1 <= args.cycles <= 1000 or not 10 <= args.interval <= 900 or not 1 <= args.batch_limit <= 10:
-        parser.error('cycles 1–1000; interval 10–900 seconds; batch-limit 1–10')
+    if not 1 <= args.cycles <= 1000 or not 10 <= args.interval <= 900 or (args.batch_limit is not None and not 1 <= args.batch_limit <= MAX_BATCH_LIMIT):
+        parser.error('cycles 1–1000; interval 10–900 seconds; batch-limit 1–100')
     logging.disable(logging.CRITICAL)
     try:
         return asyncio.run(run(args))

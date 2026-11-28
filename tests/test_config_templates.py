@@ -26,11 +26,35 @@ class ConfigTemplateTests(unittest.TestCase):
         self.assertEqual(profile.host, 'smtp.example.invalid')
         self.assertEqual(profile.security, 'starttls')
         self.assertEqual(profile.mode, 'single')
+        self.assertEqual(profile.download_batch_limit, 3)
         with path.open('rb') as source:
             raw = tomllib.load(source)
         self.assertFalse(parse_alerts(raw['alerts']).enabled)
         self.assertFalse(parse_retention(raw['retention']).enabled)
         self.assertEqual(parse_retry(raw['download_retry']), parse_retry(None))
+
+    def test_global_and_per_camera_download_limits(self):
+        entry = (
+            '[[cameras]]\nname = "one"\nuid = "fixture1"\n'
+            '[cameras.smtp]\nhost = "smtp.example.invalid"\n'
+            'from = "sender@example.invalid"\nto = "recipient@example.invalid"\n'
+        )
+        second = entry.replace('"one"', '"two"').replace('"fixture1"', '"fixture2"')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'config.toml'
+            path.write_text(entry + second)
+            self.assertEqual([p.download_batch_limit for p in load_profiles(path)], [3, 3])
+            path.write_text('[download]\nbatch_limit = 12\n' + entry + second +
+                            '[cameras.download]\nbatch_limit = 100\n')
+            profiles = load_profiles(path)
+            self.assertEqual([p.download_batch_limit for p in profiles], [12, 100])
+            self.assertEqual([p.limit for p in profiles], [3, 3])
+            for suffix in ('[cameras.download]\nbatch_limit = 101\n',
+                           '[cameras.download]\nbatch_limit = true\n',
+                           '[cameras.download]\nunknown = 2\n'):
+                path.write_text(entry + suffix)
+                with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                    load_profiles(path)
 
     def test_public_credentials_are_empty_and_parse_as_literals(self):
         with tempfile.TemporaryDirectory() as tmp:

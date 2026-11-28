@@ -162,3 +162,5 @@ See [development history](docs/DEVELOPMENT_HISTORY.md) for detailed earlier expe
 - Record R1 validation (259/259, 2.136 s, 41b3361) and new owner requirement for bounded SMTP backlog throughput. Rate policy and implementation pending approval; no runtime changes.
 
 - Record approved global 30-second image SMTP pacing, no daily limit, oldest eligible first and explicit manual interval override. Record configurable camera connection download-batch requirement; distinguish sequential batches from unverified parallel transfers. Documentation only; restart persistence, configuration scope and controlled batch tests pending review.
+
+- D1: global/per-camera sequential download batch limit (default 3, integer 1–100 experimental); explicit service CLI override; same chosen limit for selection and transfer. Preserve bounded SD window, per-original commits and retry behavior; SMTP image limits unchanged. Three synthetic tests (262 expected), not yet reference-validated. Owner approved SQLite SMTP pacing persistence and alert priority; D2 implementation pending.

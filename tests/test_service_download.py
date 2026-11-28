@@ -2,7 +2,8 @@ import json
 import sqlite3
 import unittest
 from ucon_trailcam_smtp.download_retry import init_retry, reserve, RetryPolicy
-from ucon_trailcam_smtp.service_download import plan_download
+from ucon_trailcam_smtp.service_download import plan_download, parse_batch_limit, effective_batch_limit
+from types import SimpleNamespace
 
 
 class PlanTests(unittest.TestCase):
@@ -43,6 +44,29 @@ class PlanTests(unittest.TestCase):
         now = 100 * 86400
         self.insert('old', now - 2 * 86400)
         self.assertIsNone(plan_download(self.db, 'a', now, 3, automatic_days=1))
+
+    def test_experimental_cap_and_bounded_window(self):
+        for i in range(101):
+            self.insert(f'photo-{i:03}', 100 + i * 10)
+        begin, end, selected = plan_download(self.db, 'a', 5000, 100)
+        self.assertEqual((begin, end), (100, 3700))
+        self.assertEqual(selected, [f'photo-{i:03}' for i in range(100)])
+        self.assertEqual(len(plan_download(self.db, 'a', 5000, 3)[2]), 3)
+        for bad in (0, 101, True, 2.5):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                plan_download(self.db, 'a', 5000, bad)
+
+    def test_batch_config_and_explicit_override(self):
+        self.assertEqual(parse_batch_limit(None), 3)
+        self.assertEqual(parse_batch_limit({}, 10), 10)
+        self.assertEqual(parse_batch_limit({'batch_limit': 100}, 3), 100)
+        profile = SimpleNamespace(download_batch_limit=5)
+        self.assertEqual(effective_batch_limit(profile), 5)
+        self.assertEqual(effective_batch_limit(profile, 20), 20)
+        for raw in ({'batch_limit': True}, {'batch_limit': 0}, {'batch_limit': 101},
+                    {'batch_limit': '3'}, {'unknown': 3}, [], 3):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                parse_batch_limit(raw)
 
     def test_bound_and_cooldown(self):
         self.insert('old', 100)

@@ -63,3 +63,5 @@ Phase 7b.4a result: 4cfbabe, 15/15 in 0.055 s, full 328/328 in 2.271 s; expected
 Retention R1: six additional tests (259 expected), covering default/configured automatic age, inclusive selection boundary, bounded cloud catch-up after expired backlog and failure cursor retention, download exclusion and mocked SMTP exclusion. No live operations or deletion; previous 253-test package verification remains the baseline. Reference validation pending.
 
 R1 result: owner confirmed 41b3361, 259/259 in 2.136 s, expected HTTP and synthetic wheel messages.
+
+D1 adds three tests (262 expected): global/inherited/per-camera download limits and independent SMTP limits, validation/CLI override resolution, 100-image bounded selection. Existing partial-transfer and sequential commit tests retained. No real camera or SMTP operations; reference verification pending.

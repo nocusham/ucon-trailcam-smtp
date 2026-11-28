@@ -162,8 +162,25 @@ See ../docs/PRODUCTION_READINESS.md and ../docs/LXC.md for release gates.
 
 ## SMTP throughput requirement (design review pending)
 
-The owner requires paced image delivery during backlog processing; no bulk burst of e.g. 90 individual messages. Current per-camera image batch limits and service cycle interval are not a persistent email-rate limit. Owner approved a configurable 30-second minimum interval globally across image SMTP messages, no additional daily cap, oldest eligible ready images first, and the same manual delivery rate by default with an explicit per-invocation override. Provider limits may require lower rates. Persisting the attempt timestamp across restarts is recommended but not explicitly confirmed; review alert handling and nonblocking scheduling before implementation. No rate limiter implemented yet.
+The owner requires paced image delivery during backlog processing; no bulk burst of e.g. 90 individual messages. Current per-camera image batch limits and service cycle interval are not a persistent email-rate limit. Owner approved a configurable 30-second minimum interval globally across image SMTP messages, no additional daily cap, oldest eligible ready images first, and the same manual delivery rate by default with an explicit per-invocation override. Provider limits may require lower rates. The owner confirmed persistence of the last SMTP attempt across restart in SQLite, and alert priority with the same global minimum interval. Nonblocking scheduling, actual attempt accounting and manual override integration remain to be implemented. No rate limiter implemented yet.
 
-## Camera download batch requirement (design review pending)
+## Camera download batch configuration (D1)
 
-The owner requires configurable downloads per camera connection; the camera's actual limit is unknown. Current service --batch-limit defaults to 3 (allowed 1–10), shared across cameras; queue_download.download_batch transfers selected originals sequentially in one relay, not concurrently. Preserve the validated sequential protocol until parallel transfer support is established. Proposed global default with optional per-camera override and explicit manual diagnostic override, initially retain the tested conservative batch and bounded SD listing window. Review scope, limits and a controlled batch-size experiment before implementation. No assumption that 10 is a camera hardware limit, and no live change to L3.
+Owner approved a global default of 3, optional per-camera override, integer
+range 1–100 (experimental software cap), sequential originals in one relay.
+The selected service limit is CLI --batch-limit when explicitly supplied,
+otherwise [cameras.download].batch_limit, otherwise [download].batch_limit,
+otherwise 3. Existing SMTP limit is independent. The bounded one-hour SD
+selection window, due ordering, per-original commits and timeout behavior
+remain unchanged. The cap is a maximum, not a promise to retrieve that many
+images per relay. No parallel transfers or protocol changes.
+
+D1 implements parsing, service selection and CLI range, and adds three
+synthetic tests (262 expected). Reference verification pending.
+Actual batches above 3 remain unvalidated on camera hardware; later isolated
+5/10/20/50/100 tests require owner approval and must not interrupt L3.
+The standalone diagnostic probe's existing limits are unchanged.
+SMTP pacing (D2) follows separately; approved global 30-second interval,
+oldest ready first, no daily limit, persistent attempt timestamp, explicit
+manual override and alert priority with the shared interval. No SMTP
+pacing implementation in D1.

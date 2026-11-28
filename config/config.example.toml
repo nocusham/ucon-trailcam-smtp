@@ -5,6 +5,11 @@
 # Store private passwords in .env, not in this file.
 # Create a separate [[cameras]] section for each camera.
 
+[download]
+# Sequential originals per relay; 1–100 (experimental software cap).
+# Start with the validated conservative default; large batches are unverified.
+batch_limit = 3
+
 [[cameras]]
 # Unique local alias: 1–64 ASCII letters, digits, hyphens or underscores.
 name = "testkamera"
@@ -22,6 +27,10 @@ enabled = true
 inactivity_warning = false
 # Threshold in days (1–365, default 7); no extra P4P connection.
 inactivity_days = 7
+
+# Optional per-camera override; omit this table to inherit [download].
+# [cameras.download]
+# batch_limit = 5
 
 [cameras.smtp]
 # SMTP hostname or IP address, without a URL scheme.

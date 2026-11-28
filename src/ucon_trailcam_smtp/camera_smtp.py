@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from ucon_trailcam_smtp.queue_smtp import DeliveryError, ready_rows, process, validate_destination
 from ucon_trailcam_smtp.local_credentials import read_secret_values
 from ucon_trailcam_smtp.safe_diagnostics import error_fields
+from ucon_trailcam_smtp.service_download import DEFAULT_BATCH_LIMIT, parse_batch_limit
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class Camera:
     password: str = field(default="", repr=False)
     inactivity_warning: bool = False
     inactivity_days: int = 7
+    download_batch_limit: int = DEFAULT_BATCH_LIMIT
 
     def route(self):
         return {key: getattr(self, key) for key in
@@ -56,7 +58,7 @@ def mailbox(value):
 def load_profiles(path):
     with Path(path).open('rb') as source:
         data = tomllib.load(source)
-    if set(data) - {'cameras', 'alerts', 'download_retry', 'retention'} or not isinstance(data.get('cameras'), list) or not data['cameras']:
+    if set(data) - {'cameras', 'alerts', 'download_retry', 'retention', 'download'} or not isinstance(data.get('cameras'), list) or not data['cameras']:
         raise DeliveryError('Expected a nonempty [[cameras]] list')
     from ucon_trailcam_smtp.health_alerts import parse_alerts
     parse_alerts(data.get('alerts'))
@@ -64,11 +66,13 @@ def load_profiles(path):
     parse_retry(data.get('download_retry'))
     from ucon_trailcam_smtp.media_retention import parse_retention
     parse_retention(data.get('retention'))
+    default_download = parse_batch_limit(data.get('download'))
     profiles = []
     names, uids, rw = set(), set(), set()
     for entry in data['cameras']:
-        if not isinstance(entry, dict) or set(entry) - {'name', 'uid', 'enabled', 'smtp', 'inactivity_warning', 'inactivity_days'}:
+        if not isinstance(entry, dict) or set(entry) - {'name', 'uid', 'enabled', 'smtp', 'inactivity_warning', 'inactivity_days', 'download'}:
             raise DeliveryError('Unknown camera option')
+        download_limit = parse_batch_limit(entry.get('download'), default_download)
         name, uid = string(entry, 'name'), string(entry, 'uid')
         enabled = entry.get('enabled', True)
         inactivity_warning = entry.get('inactivity_warning', False)
@@ -111,7 +115,8 @@ def load_profiles(path):
                 raise DeliveryError('Duplicate Revierwelt recipient')
             rw.add(recipient.lower())
         profiles.append(Camera(name, uid, enabled, host, port, security, sender, recipient,
-                               username, password_env, mode, limit, password, inactivity_warning, inactivity_days))
+                               username, password_env, mode, limit, password, inactivity_warning, inactivity_days,
+                               download_limit))
     return profiles
 
 

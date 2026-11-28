@@ -243,3 +243,5 @@ Retention R1 (development): [retention].automatic_days defaults to 90 (1–3650 
 R1 validation: 259/259 passed in 2.136 s at 41b3361. Owner also requires SMTP message pacing for backlogs; design approval pending, runtime unchanged.
 
 SMTP pacing requirements approved: global 30-second minimum interval, no daily cap, oldest eligible images first, explicit manual interval override. Configurable downloads per camera connection also required; actual camera limit unknown. Current downloads are sequential within one relay (service --batch-limit default 3, allowed 1–10). Design review pending; no runtime change.
+
+Download configuration D1: [download].batch_limit defaults to 3, [cameras.download].batch_limit overrides per camera, explicit service --batch-limit overrides both; range 1–100 (experimental), sequential transfer, unchanged bounded one-hour SD window. SMTP image batch limits remain separate. Three additional tests (262 expected), reference validation pending. Larger camera batches not live-validated. SMTP pacing with persistent shared attempt interval and alert priority follows separately.

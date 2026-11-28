@@ -1,152 +1,98 @@
-# Deployment preparation
+# Deployment architecture
 
-**Development only.** Phases 1–5 passed automated reference-server regression (214/214 at 46799db). The active L3 checkout and virtual environment must remain unchanged. Do not deploy or publish a production release yet.
+**Current design, not production-ready instructions.** The owner approved
+the simplified Linux deployment architecture after phase 7b.4a
+(328/328 tests at 4cfbabe). The elaborate fixed-path privileged deployment
+prototype through c895064 is superseded; its final 340-test suite was not
+run. See Git history for that prototype. Do not alter the active L3
+checkout or venv, create the production LXC or publish a release yet.
 
-## Staged plan
+## Installation contract
 
-| Phase | Scope |
+Linux; Debian 13 is the reference target, not a container requirement.
+Python >=3.12, with Debian's Python 3.13 still to be tested; Python 3.14.4
+on the Ubuntu reference server is the validated baseline.
+
+One user-selected installation directory, default ~/ucon-trailcam-smtp
+for the chosen runtime account:
+
+```text
+ucon-trailcam-smtp/
+  .venv/
+  config/
+    config.toml
+    .env
+  data/
+    events.sqlite3
+    events.sqlite3.lock
+  media/
+  logs/                 # manual/file logging only
+  backups/
+  install-info.json
+```
+
+Use the existing account without root. A dedicated service account is
+optional, provisioned separately by an administrator. If installing as
+root for another account, expand the default relative to that account's
+home and perform application installation/maintenance as that account.
+Do not require a root-owned venv or install into /root for another user.
+Root is needed only for OS packages, optional account creation and
+system-wide unit installation. Do not run the camera worker as root.
+The account must have access to the chosen installation path. Ordinary
+permissions (private config/state/backups, .env owner and mode 0400/0600)
+suffice. Never source .env or use systemd EnvironmentFile; pass the explicit
+UCON_SECRETS_FILE path. No hidden application data under /opt, /etc or /var.
+Only external systemd unit files and journal are exceptions.
+
+## Operating modes
+
+- Manual: foreground operation, file logs under logs/service.log;
+  INFO by default, optional debug, timestamps, rotation at 5 MB with
+  five retained rotated files. Keep existing sanitized messages; never
+  log credentials.
+- systemd user: unit under ~/.config/systemd/user; journal only.
+  Availability and lingering depend on the host.
+- systemd system: administrator-installed unit under /etc/systemd/system,
+  explicitly selected non-root runtime account; journal only.
+
+All modes share one queue and one worker. Never run them concurrently.
+The same runtime and explicit absolute config/queue/media paths apply.
+No service is started or enabled automatically by installation.
+
+## Simplification implementation checkpoints
+
+| Checkpoint | Scope |
 | --- | --- |
-| 6a | Read-only inventory of the verified reference Python environment |
-| 6b | Exact runtime dependency constraints, build tooling selection, local wheel build and isolated installation checks |
-| 6c | Native systemd service and dedicated unprivileged service account, permissions and explicit paths |
-| 6d | Installation/update tooling, private state backup and rollback procedures |
-| 6e | Versioned release layout and artifact validation |
+| S1 | Remove superseded privileged deployment prototype and fixed units; retain application wheel, dependency pins, local development ZIP, structural audit, configuration/schema and offline backup checks. |
+| S2 | Simple install.sh and manual instructions; user-selected directory, conventional venv/pip, project artifact verification, pip check, private templates, install-info. No user management or root Python. |
+| S3 | Manual logging with rotation and user/system systemd templates using selected absolute paths; no automatic start. |
+| S4 | Backup and update.sh, optional media, code rollback retaining latest state, uninstall.sh preserving data by default. |
+| S5 | Local disposable install/update/uninstall and target acceptance, documentation and release gates. |
 
-Production installation and live validation remain later gates. The SDK license is unresolved: do not bundle its code or publish production artifacts until redistribution requirements are clarified. No SDK replacement is planned in this phase.
+For updates stop all writers, verify backup, install reviewed application
+artifact, run pip check and offline config/schema checks, restart only
+on explicit request. Preserve config, queue, receipts and media; never
+rewind a database to roll back code. Optional media omission must be
+clearly recorded and must not be represented as a complete recovery
+backup. Restore procedures must account for absolute media paths and
+irreversible SMTP acceptance. The retained state_backup.py is still the
+existing same-owner full-media offline backup/rehearsal; its interface
+will be adapted in S4. No automatic migration or general-purpose
+transaction/security framework.
 
-## Intended filesystem layout
-
-These are proposed deployment locations, not installed paths:
-
-| Location | Purpose |
-| --- | --- |
-| /opt/ucon-trailcam-smtp/releases/ | Versioned application installations, not writable by the service user |
-| /opt/ucon-trailcam-smtp/current | Selected installed version |
-| /etc/ucon-trailcam-smtp/ | Private operator configuration and explicit protected credential file |
-| /var/lib/ucon-trailcam-smtp/ | Persistent SQLite queue, receipts and original media |
-| systemd journal | Sanitized service logs |
-
-Use a dedicated unprivileged service account. Credentials must satisfy the existing owner and mode 400/600 checks. No secrets in the service command line or unit text. Use new production queue and media locations; never copy the reference-test queue into production. Preserve state on updates and fail closed on incompatible upgrades. A code rollback is not automatically a database rollback; later procedures must account for irreversible SMTP acceptance and uncertain receipts.
-
-## 6a: capture the reference baseline
-
-On the reference server, use the Python executable from the already validated virtual environment, without installing or upgrading anything. The following commands query installed metadata only; they do not access cameras, SMTP, databases or configuration files.
+## Development validation
 
 ```sh
-(
-set -e
-export PYTHONDONTWRITEBYTECODE=1
-PY="$HOME/ucon-trailcam-smtp/.venv/bin/python"
-
-"$PY" -c 'import sys, platform; print("Python:", sys.version.split()[0]); print("Platform:", sys.platform, platform.machine())'
-"$PY" -m pip --disable-pip-version-check list --format=freeze
-"$PY" -m pip --disable-pip-version-check show p4p-camera-sdk httpx httpcore Pillow | grep -E '^(Name|Version|Requires):'
-"$PY" -m pip --disable-pip-version-check check
-)
+python -m unittest discover -s tests -t . -v
+bash deploy/check-package.sh /path/to/reference/python
 ```
 
-Review the output before sharing. Record only relevant package names, installed versions, dependency relationships and compatibility findings. Do not publish the full environment inventory indiscriminately, private paths, index configuration, URLs containing credentials or secret values. Do not use an unreviewed pip freeze output as a production lock.
+The package check exports committed source, builds an isolated venv,
+checks exact reference dependency versions and wheel contents, builds and
+verifies the development ZIP, installs the extracted project wheel,
+checks pip/imports/CLI outside the checkout and runs the regression suite.
+No live service, root access, or actual production data. No third-party
+wheels are bundled; SDK licensing and native KCP/target dependency
+validation remain open. S1 verification pending.
 
-Before phase 6b, requirements.txt and pyproject.toml agreed on direct requirements, but Pillow was a range and transitive requirements were not fully pinned. The exact installed KCP distribution/version and other dependencies must be determined from the working environment. Build tools are separate from the runtime dependency set. Python 3.14 on Ubuntu does not establish Python 3.13 compatibility on Debian 13; validate the target separately. Exact version constraints alone do not establish hash-verified, cross-platform reproducibility.
-
-Next: choose constraints from the verified dependency closure and build a local development wheel in an isolated environment. Do not install the project into the existing reference virtual environment, enable a service or create a production LXC.
-
-## 6a result and 6b package verification
-
-Owner-reported inventory on 2026-11-27: Python 3.14.4, Linux x86_64, SDK 0.1.16, KCP 0.1.6, Pillow 12.3.0; pip check reported no broken requirements. Exact reported versions are recorded in [requirements-reference.txt](requirements-reference.txt) and [requirements-build.txt](requirements-build.txt). The reference list includes observed support packages, including packaging and typing_extensions, without asserting that each is required on all platforms. Source requirements constrain dependency resolution to these versions. Project metadata declares the direct dependencies; deployment must also use the reference constraints. No dependency upgrade is intended.
-
-From the separate test worktree at the phase-6b commit, run:
-
-```sh
-bash deploy/check-package.sh "$HOME/ucon-trailcam-smtp/.venv/bin/python"
-```
-
-The script requires package-index access (or a configured approved package source), git, tar and an interpreter supporting venv. It installs only into a temporary private virtual environment; if any step fails, it stops and removes the temporary directory. It archives tracked source from HEAD, not working-tree changes or private configuration. It builds only the project wheel locally, checks that no tools/tests/templates/private state/SDK code are inside it, installs it, checks installed imports and --help outside the checkout, and runs the 214 source tests. No service start or live network operation other than package retrieval; no production deployment or published artifact. Report the failing step and sanitized error on failure rather than changing dependency versions. Exact version matching is not hash verification, and the Debian 13/Python 3.13 target still needs its own installation test. SDK redistribution terms remain unresolved.
-
-Phase 6b result: at 063686e the reference environment passed exact version and pip checks, built KCP 0.1.6 from source and the local project wheel, verified 37 runtime Python files, imported 36 installed modules, ran the console command and passed 214 source tests in 2.049 s. A SQLite ResourceWarning was observed; a test fixture connection is explicitly closed in phase 6c. Warning-free rerun pending. The observed wheel hash is recorded in [repository layout](../docs/REPOSITORY_LAYOUT.md); no reproducible-build or target-platform claim.
-
-## 6c: guarded native systemd unit
-
-[Draft unit](systemd/ucon-trailcam-smtp.service) — not installed, enabled or started. The unit runs the installed console entrypoint, not a checkout. The proposed install contract is:
-
-| Path | Owner/group | Mode |
-| --- | --- | --- |
-| /opt/ucon-trailcam-smtp and releases | root:root | directories 0755; code not service-writable |
-| /etc/ucon-trailcam-smtp | root:ucon-trailcam-smtp | 0750 |
-| config.toml | root:ucon-trailcam-smtp | 0640 |
-| .env | ucon-trailcam-smtp:ucon-trailcam-smtp | 0400 (600 also accepted by parser) |
-| service-enabled | root:root | 0644; absent until approved activation |
-| /var/lib/ucon-trailcam-smtp | ucon-trailcam-smtp:ucon-trailcam-smtp | 0700 |
-| state files and media | service identity | 0600 files, 0700 directories |
-
-The dedicated system account has no login shell and no sudo privileges. The credential file must be service-owned to satisfy the existing parser, while ProtectSystem=strict makes /etc and /opt read-only inside the unit. StateDirectory grants write access to the private persistent state; PrivateTmp supplies isolated temporary storage. No EnvironmentFile interpretation or password in the unit. The installer must not create service-enabled, enable or start the service automatically. The root-owned marker is a further activation guard, not a substitute for operator approval. Removing it prevents subsequent starts but does not stop a running process.
-
-The intended active service polls every 60 seconds with a batch limit of three, downloads originals and sends image emails and configured alerts. It uses a new production SQLite queue and media root. No --cleanup or --resume-login by default. Alerts remain subject to configuration; retention needs a separate explicit opt-in. For staged live validation, first use a separate approved manual invocation without delivery flags. Never point this unit to the active L3 database. Once production activation is approved, the operator explicitly installs the unit, creates the marker, and enables/starts it; those steps are not authorized by this checkpoint.
-
-Restart on failure after 30 seconds, maximum three starts in five minutes. Normal stop sends SIGINT, allows up to 180 seconds, and recognizes exit 130. This is a best-effort shutdown, not a guarantee of atomic SMTP completion: interruption can leave uncertain receipts, which require review rather than blind retries. Do not restore an earlier queue after delivery merely to roll back software. Journal output is unbuffered; sanitized logs still contain local aliases, so restrict log access. The proposed sandbox directives must be validated in the actual LXC.
-
-Offline check from the separate worktree:
-
-```sh
-bash deploy/check-systemd.sh
-```
-
-This copies the unit to a temporary directory, substitutes only the not-yet-installed executable with /usr/bin/true and runs systemd-analyze verify without starting anything. Static tests check the original command and paths. It does not verify actual account, executable, permissions or runtime sandbox behavior. Do not create users, system directories or install units for this test. The full source regression with ResourceWarning enabled should pass 217 tests without an unclosed connection warning before proceeding.
-
-Phase 6c result: 217/217 source tests passed at 9d933b5 in 3.767 s with no ResourceWarnings. Offline systemd verification passed; host XFS CPUAccounting warnings were unrelated to this unit. Actual service account, sandbox and lifecycle remain pending.
-
-## 6d.1: release selection and code-only rollback
-
-The versioned release directory will hold a venv built at its final absolute path; do not move a populated venv. A release can be selected only after validation and a matching .ready marker written by the trusted operator. The marker is not a signature or a replacement for artifact verification. deploy/release_layout.py supplies a library function switch_release(root, release) for the future installer. It validates release identifiers and the current pointer, checks the readiness marker and console executable, and replaces current atomically with a relative symlink while holding a pointer lock. Returns the previous release ID (or None on first selection). Selecting an earlier compatible release is code-only rollback; it never restores old state or deletes a release. The root and ancestors must be controlled by the trusted operator; this is not a security boundary for untrusted directories. No production CLI is provided yet. The later wrapper must verify ownership, stop the service, serialize the whole deployment transaction, take a consistent backup and validate state compatibility before selecting a release. Atomic rename does not establish crash durability. Never create the service-enabled marker or start the service automatically.
-
-Test only using temporary synthetic directories: python -m unittest tests.test_release_layout -v. Eight new tests, expected full suite 225. No root privileges, network, systemd or production state needed. Phase 6d.2 implements the installer/update workflow; 6d.3 handles backup and recovery, including the rule that an older database must not be restored as a routine code rollback.
-
-Phase 6d.1 result: all 225 tests passed at c06028a in 2.059 s.
-
-## 6d.2: stage a new version without activation
-
-The development-only command `python -m deploy.prepare_release` prepares a new version in an existing operator-owned root with a releases subdirectory. It requires the local project development wheel, its expected SHA256 digest, and a trusted local wheelhouse containing exact reference dependency wheels and pinned pip. It creates the venv at its final absolute release path, uses offline pip installs, checks versions and dependency consistency, imports the installed runtime, and checks console help before marking the release ready. Existing release directories are never overwritten, and a failure leaves an incomplete directory without a ready marker for inspection. The command refuses root and does not select current, create a service account, install a unit, create service-enabled, start systemd, or read private application state. Do not use it as a production installer. The local wheelhouse is trusted input; the project digest is not a signature and dependencies are not hash-locked.
-
-Run the complete development integration check from the separate worktree with `bash deploy/check-package.sh "$HOME/ucon-trailcam-smtp/.venv/bin/python"`. It now builds a temporary local wheelhouse (including the native KCP wheel), stages an independent versioned release without activation, checks the ready marker and absence of current, and runs the full 233-test source suite using that venv. Package retrieval/build may use the network, but staging installs only from local wheels. The temporary directory is removed on exit. Do not run as root or point it at any production directory. The existing reference venv is unchanged. Production installer orchestration, ownership transfer, stop/backup/compatibility gates and activation are not implemented yet; continue in the next checkpoints.
-
-Phase 6d.2 result: owner reported 233/233 tests at df06366 in 2.046 s and the final `Package and versioned staging checks passed.` message. No production activation. Backup/recovery and production orchestration remain open.
-
-## 6d.3: offline backup and recovery rehearsal (development only)
-
-The backup tool operates on trusted operator-owned development directories containing config.toml and .env, and state/events.sqlite3, its existing .lock file and state/media. Stop all writers before taking a backup; the shared queue flock only excludes cooperating workers. The tool refuses root CLI execution, overlapping source/destination paths, existing destinations, symlinks and nonregular or multiply linked files. No changes to the live database or media are intended. SQLite backup API captures committed WAL contents into a standalone database; do not manually copy a live SQLite file. Copy media and config (including credentials) into a private directory, check SQLite integrity and event/receipt consistency, check retained original hashes and sizes, allow explicitly cleaned sent originals, and write a manifest of all file digests, counts and original media root. Failed output is not an approved backup; inspect/remove it manually before retrying with a new destination. The manifest is not signed and the backup is not encrypted. Keep it outside Git, restrict access, use encrypted storage/off-host copies as appropriate, and do not share raw files or manifest paths.
-
-Development example (only disposable, stopped fixtures; never the active reference checkout):
-
-```sh
-python -m deploy.state_backup create --config /path/to/fixture-config --state /path/to/fixture-state --destination /path/to/new-backup
-python -m deploy.state_backup verify --backup /path/to/new-backup
-python -m deploy.state_backup rehearse --backup /path/to/new-backup --destination /path/to/new-rehearsal
-```
-
-Rehearsal verifies and copies media plus events.sqlite3.inert, without copying configuration or credentials. It retains absolute original receipt paths; validation maps paths to the copied media but does not change database contents. Never use the rehearsal as a running queue. A software rollback keeps the newest production state; restoring a historical backup after newer accepted or uncertain SMTP submissions risks duplicate delivery. In actual disaster recovery keep the service disabled, preserve all newer surviving receipts and evidence, verify backup integrity, reconcile affected deliveries with independent inbox/provider evidence, assess schema and path compatibility, and explicitly approve any recovery before activation. No automated restore-to-live command exists. Production account ownership, transaction locking across stop/backup/switch, release compatibility and operational restore procedure still need separate implementation and target validation. Backup has no fsync/power-loss durability guarantee; verify after transferring to durable storage. Tests: python -m unittest tests.test_state_backup -v; full suite expected 245. Do not run these CLI examples against L3.
-
-Phase 6d.3 regression follow-up: first full run failed five existing staging tests because the fixture root was rejected by the ownership/mode guard. The previous package check explicitly set umask 077; the direct suite inherited the shell umask. Fix the synthetic directory creation modes rather than relaxing the guard. Twenty staging/backup tests should pass under umask 002, 022 and 077, then all 245 source tests under the inherited umask with ResourceWarning enabled. No production backup or installation performed.
-
-Phase 6d.3 result: 1b478fa, inherited umask 0002, 20/20 under each of 002/022/077 and 245/245 full regression in 3.910 s; no ResourceWarnings. Development backup and rehearsal validation complete.
-
-## 6e: local development release ZIP
-
-The release builder uses a fixed file allowlist and the project wheel validated against the trusted committed source export. See deploy/RELEASE_README.md for the bundle-specific guide. The ZIP contains only the project wheel, guide, license, changelog, public templates, deployment modules, pinned reference/build requirements, draft unit and manifest. No dependency wheels, SDK code bundled as a dependency, tests, tools, private state or live configuration. The manifest records the claimed source commit and per-file SHA256/size. The verifier requires exactly the allowed paths, no duplicates, regular file attributes and matching digests. It does not authenticate a maliciously regenerated manifest; compare the expected commit and use a trusted artifact source. ZIP bytes are stable for identical inputs with the same compression implementation, not a claim of reproducible project/dependency wheels. The build refuses to overwrite existing output.
-
-Run bash deploy/check-package.sh with the reference interpreter as before. It now archives one explicit commit, builds the project wheel and a temporary development ZIP, verifies the archive against that commit, extracts it and stages from the extracted bundle with a separate local wheelhouse. Then all 253 source tests run. The whole temporary tree is removed at exit; no public artifacts or production install. Production orchestration, license and Debian 13 gates remain open. Verify the complete run before proceeding to phase 7.
-
-Phase 6e result: owner reported 253/253 tests in 2.078 s and the final package/development bundle/versioned staging success message after the 248e49d test instruction. No published artifact or host changes. Phase 7a begins with the read-only committed-source comparison in deploy/audit_runtime.py (development only, excluded from the bundle). See [production readiness](../docs/PRODUCTION_READINESS.md) for outstanding production ownership and orchestration work.
-
-Phase 7a result: 257/257 at 6e468a4 in 2.091 s; structural audit findings reviewed in docs/PRODUCTION_READINESS.md. Phase 7b.1: production_layout.py checks selected prepared, disabled layout metadata with distinct administrator/service IDs and the activation marker absent. It is a read-only library, not a root installer or proof of effective permissions, full tree integrity, stopped writers or state compatibility. Nine synthetic tests (266 expected); actual verification pending. The next checkpoints handle trusted ownership handoff, coordinated backup/update and controlled activation. Do not run against L3.
-
-Phase 7b.1: 9/9 metadata tests (0.009 s), full 266/266 (2.094 s) at fdc23fe. Phase 7b.2: deploy/release_handoff.py builds a candidate as a non-root builder at its final path with venv --copies, then provides an administrator-only library to copy fresh inodes into a trusted release parent and retain the original privately in quarantine. No ready marker, current selection or privileged CLI. Caller must establish exclusive stopped builder and trusted input/root ownership; this is not an adversarial traversal API. See production readiness for the full contract. The extended check-package.sh exercises a real same-owner local candidate build and copy plus CLI/import checks at the unchanged absolute path, then 277 source tests. No root rights, no real service account or host changes. Actual root orchestration and service-user acceptance remain pending.
-
-Phase 7b.2 result: owner confirmed 2f262a8, 11/11 targeted tests in 0.009 s, 277/277 full in 2.103 s and final package/bundle/staging/handoff rehearsal success on Python 3.14.4 x86_64. Phase 7b.3a adds update_transaction.py: trusted same-owner offline rehearsal only, no CLI or systemd calls. Keep deployment lock across stop/quiescence, fresh verified backup, read-only compatibility approval and expected-current atomic selection; retain queue lock through selection. Never restore state or restart automatically. Thirteen new tests (290 expected). Actual mixed-owner backups, service adapter, first install and compatibility/activation remain open; no L3 operations.
-
-Phase 7b.3a result: 5282e63, 13/13 in 0.078 s, 290/290 in 4.431 s, no ResourceWarnings; expected HTTP and synthetic wheel messages. Phase 7b.3b split into fixed-unit service control (7b.3b.1) and mixed-owner backup/transaction integration (7b.3b.2). deploy/service_control.py provides a root-only factory, trusted expected unit digest, named metadata and loaded-property guards, safe marker removal, synchronous stop and reported inactive-state checks. Twelve synthetic tests (302 expected). No real systemctl in tests; target property semantics, cgroup emptiness, manual writer exclusion, distinct identities and integrated transaction still open. No L3 changes.
-
-Phase 7b.3b.1 result: 206418f, 12/12 in 0.007 s, 302/302 in 2.186 s; expected HTTP and synthetic wheel messages. Phase 7b.3b.2 adds production_backup.py and production_update.py, fixed production paths and protected administrator backup parent /var/backups/ucon-trailcam-smtp (0700), mixed-owner metadata, stopped DB/WAL scratch copy then SQLite snapshot, shared manifest verification, deployment/queue lock retention and service adapter composition. Eleven tests (313 expected) with same-owner real files and simulated distinct-owner metadata/mocked service control. No real systemd, root CLI, first install, activation or DB restore. Real distinct-identity and target lifecycle checks, compatibility gate and artifact trust remain open. No L3 changes.
-
-Phase 7b.3b.2 result: cff4b87, 11/11 in 0.054 s, full 313/313 in 4.648 s, no ResourceWarnings; expected HTTP and synthetic wheel messages. Phase 7b.4a adds schema_compatibility.py (six required/five optional tables, exact SQLite catalog and verified backup) and config_compatibility.py (existing parsers, explicit private credentials, no environment fallback or network). Fifteen tests (328 expected), including actual startup schema, literal DDL drift and synthetic backup/config. Standalone checks only; release-specific binding, service-identity acceptance, first selection and activation remain for 7b.4b. No automatic migration, real systemd, root CLI, L3 changes or production authorization.
-
-Phase 7b.4a result: 4cfbabe, 15/15 in 0.055 s, full 328/328 in 2.271 s; expected HTTP and synthetic wheel messages. Phase 7b.4b split into release acceptance/update gate (7b.4b.1) and first selection/activation (7b.4b.2). release_acceptance.py binds independently approved release IDs and whole-venv digests to schema contract 1, candidate readiness and mandatory public production_update gate with verified backup/current config and final revalidation. Trusted checker runs as service UID/GID with no inherited groups or output, not as root. Twelve tests (340 expected), actual distinct-identity and target checks pending. No activation, first selection, migration, or L3 changes.
+See ../docs/PRODUCTION_READINESS.md and ../docs/LXC.md for release gates.

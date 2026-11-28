@@ -15,7 +15,7 @@ import tempfile
 import zipfile
 
 from deploy.check_wheel import check as check_wheel
-from deploy.prepare_release import PROJECT_WHEEL
+PROJECT_WHEEL = 'ucon_trailcam_smtp-0.0.0.dev0-py3-none-any.whl'
 
 
 FILES = (
@@ -24,12 +24,11 @@ FILES = (
     'config/.env.example',
     'config/config.example.toml',
     'deploy/__init__.py',
-    'deploy/prepare_release.py',
-    'deploy/release_layout.py',
+    'deploy/config_compatibility.py',
+    'deploy/schema_compatibility.py',
     'deploy/state_backup.py',
     'deploy/requirements-reference.txt',
     'deploy/requirements-build.txt',
-    'deploy/systemd/ucon-trailcam-smtp.service',
 )
 README = 'deploy/RELEASE_README.md'
 WHEEL = 'dist/' + PROJECT_WHEEL

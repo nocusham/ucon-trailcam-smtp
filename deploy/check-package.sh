@@ -64,7 +64,7 @@ mkdir "$WORK/bundle"
 "$PY" -m zipfile -e "$BUNDLE" "$WORK/bundle"
 echo "Development bundle extracted to temporary directory."
 echo "=== Install only the project wheel ==="
-"$PY" -m pip install --no-deps "${wheels[0]}"
+"$PY" -m pip install --no-deps "$WORK/bundle/dist/$(basename "${wheels[0]}")"
 "$PY" -m pip check
 
 echo "=== Installed package smoke test outside checkout ==="
@@ -96,53 +96,9 @@ PYTHON
     echo "Installed console command OK"
 )
 
-echo "=== Prepare independent versioned release from local wheels ==="
-mkdir "$WORK/wheelhouse" "$WORK/install-root" "$WORK/install-root/releases"
-"$PY" -m pip wheel --no-deps --wheel-dir "$WORK/wheelhouse" \
-    -r "$SOURCE/deploy/requirements-reference.txt" -r "$SOURCE/deploy/requirements-build.txt"
-digest=$(sha256sum "${wheels[0]}" | cut -d' ' -f1)
-(
-    cd "$WORK/bundle"
-    "$PY" -m deploy.prepare_release --root "$WORK/install-root" \
-        --release dev-check --wheel "$WORK/bundle/dist/$(basename "${wheels[0]}")" --sha256 "$digest" \
-        --wheelhouse "$WORK/wheelhouse"
-)
-[[ -f "$WORK/install-root/releases/dev-check/.ready" ]]
-[[ ! -e "$WORK/install-root/current" && ! -L "$WORK/install-root/current" ]]
-echo "Versioned release staged without activation."
-PY="$WORK/install-root/releases/dev-check/venv/bin/python"
-
-echo "=== Candidate build and same-owner handoff rehearsal ==="
-mkdir -m 700 "$WORK/install-root/releases/handoff-check"
-(
-    cd "$SOURCE"
-    "$PY" -m deploy.release_handoff \
-        --directory "$WORK/install-root/releases/handoff-check" \
-        --wheel "${wheels[0]}" --sha256 "$digest" --wheelhouse "$WORK/wheelhouse"
-    "$PY" - "$WORK/install-root" <<'PYTHON'
-import os
-from pathlib import Path
-import sys
-from deploy.release_handoff import _handoff
-
-root = Path(sys.argv[1])
-identity = (os.geteuid(), os.getegid())
-original = _handoff(root, 'handoff-check', identity, identity)
-candidate = root / 'releases/handoff-check'
-assert original.is_dir()
-assert not (candidate / '.ready').exists()
-assert not (root / 'current').exists() and not (root / 'current').is_symlink()
-print('Same-owner handoff rehearsal passed; no readiness or activation.')
-PYTHON
-)
-"$WORK/install-root/releases/handoff-check/venv/bin/ucon-trailcam-smtp" --help > "$WORK/handoff-help.txt"
-grep -q -- '--queue-db' "$WORK/handoff-help.txt"
-"$WORK/install-root/releases/handoff-check/venv/bin/python" -I -c 'import ucon_trailcam_smtp.trailcam_service'
-echo "Copied candidate works at its original absolute path."
-
 echo "=== Full source regression using freshly installed dependencies ==="
 (
     cd "$SOURCE"
     "$PY" -m unittest discover -s tests -t . -v
 )
-echo "Package, development bundle, staging and handoff rehearsal checks passed."
+echo "Package and development bundle checks passed."

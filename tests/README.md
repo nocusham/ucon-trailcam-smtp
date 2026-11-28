@@ -1,5 +1,7 @@
 # Development tests
 
+Current: simplification S1 removes 87 obsolete deployment-prototype tests; expected 253 tests. The last verified 328-test run was at 4cfbabe; c895064's 340 expected tests were not run. The historical phase notes below refer to their original commits; removed tests and modules are not current instructions. Runtime tests remain unchanged.
+
 Run from the repository root in the configured virtual environment:
 
 ```sh

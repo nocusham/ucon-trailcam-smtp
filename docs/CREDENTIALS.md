@@ -1,5 +1,7 @@
 # Local credentials and restart behavior
 
+For the planned installed application, both files belong in the user-selected installation directory under config/ (config.toml and .env). The historical source-checkout examples below continue to use config.local.toml and .env. Set UCON_SECRETS_FILE explicitly for installed operation. See deploy/README.md for the current installation design.
+
 The installation uses two local, untracked files: config.local.toml (camera and SMTP settings) and .env (confidential credentials). Both persist on disk. In a Git checkout, the default .env remains in the repository root after the phase 4b move to src/. An installed package has no implicit .env search path; set UCON_SECRETS_FILE to the absolute path of the protected file or use process environment variables. No shell sourcing, additional dependency or interactive password manager is required.
 
 ```sh

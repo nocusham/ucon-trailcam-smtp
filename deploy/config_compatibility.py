@@ -9,12 +9,11 @@ import os
 from pathlib import Path
 import sys
 
-from ucon_trailcam_smtp.camera_smtp import load_profiles
-from ucon_trailcam_smtp.health_alerts import load_alerts
-from ucon_trailcam_smtp.local_credentials import read_secret_values
-
-
 def check_config(config, secrets):
+    from ucon_trailcam_smtp.camera_smtp import load_profiles
+    from ucon_trailcam_smtp.health_alerts import load_alerts
+    from ucon_trailcam_smtp.local_credentials import read_secret_values
+
     profiles = [profile for profile in load_profiles(config) if profile.enabled]
     if not profiles:
         raise ValueError('No enabled cameras')

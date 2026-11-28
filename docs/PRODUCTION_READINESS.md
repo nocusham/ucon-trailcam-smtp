@@ -1,13 +1,13 @@
 # Production-readiness gates (phase 7)
 
-Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal passed; phase 7b.3b.1 service adapter verification passed; phase 7b.3b.2 backup/update verification pending. Not a production release or deployment authorization.
+Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal passed; phase 7b.3b.1 service adapter verification passed; phase 7b.3b.2 backup/update verification passed; phase 7b.4a compatibility verification pending. Not a production release or deployment authorization.
 
 ## Evidence and limitations
 
 | Gate | Status | Evidence / remaining work |
 | --- | --- | --- |
 | Source separation, CLI and English policy | Development pass | Phases 1–5; phase 7a structural comparison reviewed. Preserve German user-facing mail. |
-| Automated regression | Development pass | Owner reported 302/302 in 2.186 s at 206418f; prior 290-test warning-enabled regression and ZIP/staging/handoff passed. |
+| Automated regression | Development pass | Owner reported 313/313 in 4.648 s at cff4b87, no ResourceWarnings; prior local ZIP/staging/handoff passed. |
 | Reference dependencies and packaging | Development pass | Python 3.14.4 Linux x86_64, pinned SDK/KCP, local wheel and ZIP, staging from extracted ZIP. Not target Python 3.13 or hash-locked builds. |
 | Unit syntax | Offline pass | Placeholder executable check only. Actual service identity, access and LXC sandbox untested. |
 | Backup and rollback | Fixture pass | 245/245 warning-enabled regression and 20/20 under each tested umask. No production backup/restore. |
@@ -246,15 +246,58 @@ comparison. No marker recreation, restart, enable, database rewind or
 first-install initialization. On failure retain the backup/incomplete
 output for review; a removed marker remains absent. No privileged CLI.
 
-Eleven tests (313 expected) use disposable same-owner files and real
-SQLite/WAL, mocked service control and separate simulated distinct-owner
-metadata. The integrated test mocks the production metadata contract
+Eleven tests use disposable same-owner files and real SQLite/WAL, mocked service control and separate simulated distinct-owner metadata. Owner reported 11/11 in 0.054 s, full 313/313 in 4.648 s at cff4b87, no ResourceWarnings. The integrated test mocks the production metadata contract
 because it was independently tested in 7b.1. Actual root/service access,
 trusted administrator provisioning, service cgroup/manual-writer exclusion,
 mount/ACL behavior and effective systemd semantics remain mandatory
 target tests. Compatibility callbacks remain review hooks; phase 7b.4
 must implement the actual schema/config gate, readiness acceptance and
 controlled first selection/activation. No production use or L3 changes.
+
+### 7b.4a: offline compatibility primitives
+
+The version-1 schema contract in deploy/schema_compatibility.py embeds
+the reviewed literal CREATE TABLE definitions from cff4b87. Six tables
+are mandatory after startup (events, cloud_runtime, cloud_cursors,
+health_incidents, camera_telemetry, download_retries); five are optional
+until used (downloads, deliveries, delivery_routes, smtp_retries,
+media_cleanup). Require an exact SQLite catalog match including
+autoindexes and table SQL, with application_id and user_version both
+zero (the current runtime does not set them). Reject unknown tables,
+indexes, views, triggers and modified columns/constraints. This is
+intentionally conservative: even benign unreviewed schema text differences
+are not accepted. No automatic migration. Only trusted embedded DDL is
+executed in memory; no SQL from the candidate or backup is executed as
+a migration. check_backup_schema verifies the private backup using
+the existing digest/receipt/media checks, then opens the standalone
+snapshot read-only. The library does not open or change the active
+queue. Tests compare the embedded DDL against all literal runtime
+CREATE TABLE statements, actual startup schema, optional catalog
+entries, and a real verified synthetic backup. They are not a general
+semantic compatibility proof or verification of all database row values.
+
+deploy/config_compatibility.py uses the selected trusted runtime's existing
+load_profiles and load_alerts (including retry and retention validation)
+and literal credential reader. Require at least one enabled camera,
+UCON_ACCOUNT/UCON_PASSWORD, referenced SMTP credentials for enabled
+cameras and enabled alert delivery. No environment fallback or implicit
+.env, no value output, no login/network or service startup. The CLI
+refuses root and reports only aggregate enabled-camera count and alert
+status on success, exception type on failure. Run only as the owning
+unprivileged user with synthetic config/credentials at this checkpoint.
+This verifies parser acceptance and presence of credentials, not
+credential validity, actual recipient receipt, or safe changes to
+camera routing/configuration.
+
+Fifteen additional tests (328 expected), verification pending.
+These are standalone compatibility primitives, not yet the production
+approval gate. Subsequent 7b.4b must bind acceptance to the specific
+approved releases, verified backup and unchanged configuration, arrange
+trusted service-user checks without root execution of candidate code,
+handle empty-state first selection, and implement controlled activation.
+The current production_update callback remains a review hook until
+that binding is implemented and target-tested. No production use,
+schema changes, or live L3 access.
 
 ## 7c: licensing and artifact trust
 

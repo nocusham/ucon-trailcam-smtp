@@ -12,6 +12,18 @@ def retry_due(db, uid, now):
     return row is None or now >= row[0]
 
 
+def _record_failure(db, uid, now):
+    """Record cooldown inside the caller's existing transaction."""
+    db.execute('''CREATE TABLE IF NOT EXISTS smtp_retries (
+            camera_uid TEXT PRIMARY KEY, failures INTEGER NOT NULL,
+            last_failure INTEGER NOT NULL, next_due INTEGER NOT NULL)''')
+    previous = db.execute('SELECT failures FROM smtp_retries WHERE camera_uid=?', (uid,)).fetchone()
+    failures = (previous[0] if previous else 0) + 1
+    delay = min(3600, 300 * 2 ** min(failures - 1, 10))
+    db.execute('INSERT OR REPLACE INTO smtp_retries VALUES (?,?,?,?)', (uid, failures, now, now + delay))
+    return delay
+
+
 def rollback_unsent(db, rows, message_id, now):
     """Caller proved no submission. Never use this for an ambiguous send result."""
     uid = rows[0][0]
@@ -19,12 +31,6 @@ def rollback_unsent(db, rows, message_id, now):
         raise ValueError('Mixed SMTP retry batch')
     with db:
         db.execute('BEGIN IMMEDIATE')
-        db.execute('''CREATE TABLE IF NOT EXISTS smtp_retries (
-            camera_uid TEXT PRIMARY KEY, failures INTEGER NOT NULL,
-            last_failure INTEGER NOT NULL, next_due INTEGER NOT NULL)''')
-        previous = db.execute('SELECT failures FROM smtp_retries WHERE camera_uid=?', (uid,)).fetchone()
-        failures = (previous[0] if previous else 0) + 1
-        delay = min(3600, 300 * 2 ** min(failures - 1, 10))
         for row in rows:
             camera, ident, stamp = row[:3]
             receipt = db.execute('DELETE FROM deliveries WHERE camera_uid=? AND itemid=? '
@@ -35,22 +41,14 @@ def rollback_unsent(db, rows, message_id, now):
                 raise ValueError('Cannot safely restore unsent delivery')
             if table_exists(db, 'delivery_routes'):
                 db.execute('DELETE FROM delivery_routes WHERE camera_uid=? AND itemid=?', (camera, ident))
-        db.execute('INSERT OR REPLACE INTO smtp_retries VALUES (?,?,?,?)', (uid, failures, now, now + delay))
-    return delay
+        return _record_failure(db, uid, now)
 
 
 def record_setup_failure(db, uid, now):
     """Shared camera cooldown for a proven pre-submission historical failure."""
     with db:
         db.execute('BEGIN IMMEDIATE')
-        db.execute('''CREATE TABLE IF NOT EXISTS smtp_retries (
-            camera_uid TEXT PRIMARY KEY, failures INTEGER NOT NULL,
-            last_failure INTEGER NOT NULL, next_due INTEGER NOT NULL)''')
-        prior = db.execute('SELECT failures FROM smtp_retries WHERE camera_uid=?',(uid,)).fetchone()
-        failures = (prior[0] if prior else 0)+1
-        delay = min(3600,300*2**min(failures-1,10))
-        db.execute('INSERT OR REPLACE INTO smtp_retries VALUES (?,?,?,?)',(uid,failures,now,now+delay))
-    return delay
+        return _record_failure(db, uid, now)
 
 
 def clear_retry(db, uid):

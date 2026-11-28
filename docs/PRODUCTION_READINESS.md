@@ -61,3 +61,5 @@ R4a verified 58af4b0, 31/31 targeted in 1.208 s, 304/304 full in 2.288 s. R4b pr
 R4b verified 0dbc83b, 25/25 targeted in 0.047 s, 310/310 full in 2.283 s. R4c.1 evidence and automatic-selection guards implemented, seven tests (317 expected), reference pending. No actual historical SMTP CLI; R4c.2 retention, backup and send integration pending.
 
 R4c.1 owner verified 4345aea, 87/87 targeted in 0.199 s, 317/317 full in 2.322 s. R4c.2a SMTP CLI implemented; seven tests (324 expected), reference pending. Do not deploy yet: retention reconciliation and explicit historical resolution, live acceptance, S2–S5 remain pending. External exports operator-managed; backup refuses unresolved historical sends.
+
+R4c.2a owner test at 43fb559: 70/70 targeted in 0.168 s; full regression 323/324 passed in 2.344 s, one failure in literal runtime DDL uniqueness (duplicate smtp_retries definition). Corrected by sharing one cooldown helper between automatic rollback and historical setup failure; exact existing DDL and strict schema test unchanged. Added cross-path cooldown regression (325 total expected). Reference retest pending; R4c.2b not started, no live changes.

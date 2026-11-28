@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ucon_trailcam_smtp.smtp_retry import rollback_unsent, retry_due, clear_retry
+from ucon_trailcam_smtp.smtp_retry import rollback_unsent, retry_due, clear_retry, record_setup_failure
 from ucon_trailcam_smtp.smtp_transport import transmit, SafeSMTPFailure
 
 
@@ -81,3 +81,15 @@ class RetryTests(unittest.TestCase):
         self.assertFalse(retry_due(self.db, 'a', 4599))
         clear_retry(self.db, 'a')
         self.assertTrue(retry_due(self.db, 'a', 1001))
+
+    def test_shared_cooldown_across_historical_and_automatic_failures(self):
+        self.assertEqual(record_setup_failure(self.db, 'a', 1000), 300)
+        self.assertEqual(rollback_unsent(self.db, self.rows, 'msg', 1300), 600)
+        self.assertEqual(record_setup_failure(self.db, 'a', 1900), 1200)
+        self.assertEqual(self.db.execute('SELECT * FROM smtp_retries').fetchall(),
+                         [('a', 3, 1900, 3100)])
+        self.assertFalse(retry_due(self.db, 'a', 3099))
+        self.assertTrue(retry_due(self.db, 'a', 3100))
+        self.assertTrue(retry_due(self.db, 'b', 1000))
+        clear_retry(self.db, 'a')
+        self.assertTrue(retry_due(self.db, 'a', 1900))

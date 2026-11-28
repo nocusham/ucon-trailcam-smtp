@@ -1,4 +1,5 @@
 """Local synthetic release acceptance; no real root or systemd operations."""
+from contextlib import closing
 import os
 from pathlib import Path
 import subprocess
@@ -13,6 +14,11 @@ from deploy.release_acceptance import (
 )
 from deploy.production_update import production_update
 from deploy.release_layout import ReleaseError
+from deploy.state_backup import create_backup
+from ucon_trailcam_smtp.event_queue import open_queue
+from ucon_trailcam_smtp.cloud_intake import init_intake
+from ucon_trailcam_smtp.camera_telemetry import init_telemetry
+from ucon_trailcam_smtp.download_retry import init_retry
 
 
 class ReleaseAcceptanceTests(unittest.TestCase):
@@ -120,6 +126,21 @@ class ReleaseAcceptanceTests(unittest.TestCase):
             self.file(self.config/'.env',b'FIXTURE=changed',0o600)
             with self.assertRaisesRegex(ReleaseError,'Configuration differs'):
                 gate.verify_final('v1','v2',self.root/'backup')
+
+    def test_gate_with_verified_real_runtime_schema_backup(self):
+        gate = self.gate()
+        state = self.root / 'state'
+        state.mkdir(mode=0o700)
+        (state / 'media').mkdir(mode=0o700)
+        with closing(open_queue(state / 'events.sqlite3')) as db:
+            init_intake(db, ['fixture'], 100)
+            init_telemetry(db)
+            init_retry(db)
+        (state / 'events.sqlite3.lock').touch(mode=0o600)
+        backup = self.root / 'backup'
+        create_backup(self.config, state, backup)
+        self.assertTrue(gate.approve('v1','v2',backup))
+        self.assertTrue(gate.verify_final('v1','v2',backup))
 
     def test_gate_refuses_schema_or_operator_failure(self):
         gate = self.gate(Mock(return_value=False))

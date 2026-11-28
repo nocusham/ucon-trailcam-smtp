@@ -1,13 +1,13 @@
 # Production-readiness gates (phase 7)
 
-Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal passed; phase 7b.3b.1 service adapter verification passed; phase 7b.3b.2 backup/update verification passed; phase 7b.4a compatibility verification pending. Not a production release or deployment authorization.
+Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal passed; phase 7b.3b.1 service adapter verification passed; phase 7b.3b.2 backup/update verification passed; phase 7b.4a compatibility verification passed; phase 7b.4b.1 release acceptance verification pending. Not a production release or deployment authorization.
 
 ## Evidence and limitations
 
 | Gate | Status | Evidence / remaining work |
 | --- | --- | --- |
 | Source separation, CLI and English policy | Development pass | Phases 1–5; phase 7a structural comparison reviewed. Preserve German user-facing mail. |
-| Automated regression | Development pass | Owner reported 313/313 in 4.648 s at cff4b87, no ResourceWarnings; prior local ZIP/staging/handoff passed. |
+| Automated regression | Development pass | Owner reported 328/328 in 2.271 s at 4cfbabe; prior warning-enabled 313/313 and local ZIP/staging/handoff passed. |
 | Reference dependencies and packaging | Development pass | Python 3.14.4 Linux x86_64, pinned SDK/KCP, local wheel and ZIP, staging from extracted ZIP. Not target Python 3.13 or hash-locked builds. |
 | Unit syntax | Offline pass | Placeholder executable check only. Actual service identity, access and LXC sandbox untested. |
 | Backup and rollback | Fixture pass | 245/245 warning-enabled regression and 20/20 under each tested umask. No production backup/restore. |
@@ -289,7 +289,7 @@ This verifies parser acceptance and presence of credentials, not
 credential validity, actual recipient receipt, or safe changes to
 camera routing/configuration.
 
-Fifteen additional tests (328 expected), verification pending.
+Owner reported 15/15 in 0.055 s and full 328/328 in 2.271 s at 4cfbabe; expected HTTP and synthetic wheel messages.
 These are standalone compatibility primitives, not yet the production
 approval gate. Subsequent 7b.4b must bind acceptance to the specific
 approved releases, verified backup and unchanged configuration, arrange
@@ -298,6 +298,57 @@ handle empty-state first selection, and implement controlled activation.
 The current production_update callback remains a review hook until
 that binding is implemented and target-tested. No production use,
 schema changes, or live L3 access.
+
+### 7b.4b.1: release acceptance and mandatory update gate
+
+The administrator must independently review and approve the exact copied
+venv tree, its release ID and schema contract 1. ReleaseApproval binds
+these in an immutable record supplied by the caller; the digest helper
+is not a provenance or artifact-signature verification mechanism. The
+recursive tree inventory includes relative entry paths, normalized modes,
+file sizes and SHA256 values, and the one allowed lib64 -> lib symlink.
+Require administrator-owned normalized directories/files, no unexpected
+links, extended attributes, special files or filesystem crossings.
+Readiness is checked separately, not included in the digest. This is
+a trusted frozen tree review, not a hostile traversal or mount sandbox.
+
+accept_production_candidate is a fixed-path root-only library, not a CLI.
+With the deployment lock, confirmed stopped writers and absent marker
+via the fixed-unit service check, verify the independent approval, run
+the trusted configuration checker source with the approved candidate
+interpreter using the service UID/GID, no supplementary groups, minimal
+environment, isolated Python and no bytecode writes. Discard subprocess
+output and enforce timeout. The checker's known runtime parser path
+does not perform network calls; this is not a kernel network sandbox
+and cannot protect against malicious approved code. Recheck stopped
+writers, private config/credential hashes and the entire tree before
+publishing the .ready marker atomically without replacement. Do not
+select current or recreate the service-enabled activation marker.
+Readiness is code acceptance, not durable approval of a particular
+configuration or permission to start.
+
+The public production_update library now requires matching independently
+approved previous and target release records. Its UpdateGate checks both
+trees, the verified backup's exact schema contract, the current config and
+.env content hashes against the backup manifest, and configuration parser
+acceptance under both approved interpreters as the service user. Explicit
+operator review is still required (e.g. routing changes and semantic
+compatibility); recheck all bound inputs after that review and immediately
+before atomic pointer selection, while both locks are held. The private
+same-owner transaction rehearsal retains its injected test callbacks.
+No approval transfer to another backup path, changed tree or changed
+config. Never print private hashes or credentials. No automatic migration,
+restart or state restore. First selection and controlled activation are
+separate 7b.4b.2 work.
+
+Twelve additional tests (340 expected) exercise same-owner tree/readiness
+checks, changed inputs, schema/config and explicit review rejection,
+actual verified synthetic runtime-schema backup, mocked service-user
+subprocess parameters, public approval requirements and final-gate
+failure. Actual distinct-identity execution and actual service behavior,
+trusted artifact provenance, durable storage and comprehensive host
+isolation remain mandatory target gates. No privileged CLI or live
+operation.
 
 ## 7c: licensing and artifact trust
 

@@ -207,6 +207,19 @@ class ProductionBackupTests(unittest.TestCase):
         self.assertEqual(self.selected(),'releases/v1')
         self.assertEqual(verify_backup(self.destination)['event_counts'],{'sent':1})
 
+    def test_final_gate_failure_preserves_current_and_backup(self):
+        control = Mock()
+        control.inhibit_start.return_value = True
+        control.quiesce.return_value = True
+        control.is_quiescent.return_value = True
+        with patch('deploy.production_update.check_layout'):
+            with self.assertRaisesRegex(ReleaseError,'Final compatibility'):
+                _coordinate(self.root,'v2','v1','backup1',self.identity,
+                            self.identity,control,lambda:True,lambda *args:True,
+                            verify_final=lambda *args:False)
+        self.assertEqual(self.selected(),'releases/v1')
+        self.assertEqual(verify_backup(self.destination)['event_counts'],{'sent':1})
+
     def test_root_guards(self):
         with patch('deploy.production_backup.os.geteuid',return_value=1234):
             with self.assertRaisesRegex(BackupError,'Administrator identity'):

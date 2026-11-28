@@ -255,12 +255,38 @@ Limit pending expiration to 100 per pass, in addition to the existing
 state vocabulary now includes expired; older backup checkers reject
 that state. Backups accept expired originals only with completed cleanup
 receipt and absent file; incomplete intent still blocks verification.
-Four new synthetic tests (278 expected), reference verification pending.
+Four new synthetic tests; owner verified 47/47 targeted in 0.089 s and
+278/278 full regression in 2.205 s at 124d2fb.
 
-Remaining R2b.2: independent metadata and delivery receipt pruning,
-minimal deduplication evidence, and compatibility with manual resend.
-R4 must explicitly handle expired historical events; current automatic
-selection and legacy send commands never select expired rows. R2c: identify
+R2b.2 implements independent configurable metadata_days and
+delivery_receipt_days (both 90 default, integer 1–3650). Metadata age is
+measured from capture, delivery receipt age from confirmed acceptance.
+Only terminal events are considered. Sent/expired original receipts
+must have completed matching cleanup and the original must be absent
+under its expected managed path; missing/failed/unfinished cleanup and
+uncertain or unfinished deliveries preserve their data. Compact expired
+detailed metadata to itemid, et_utc, type; retain type for event
+classification. Retire expired detailed delivery/download/route/cleanup
+and event retry receipts together in one SQLite transaction, preserving
+a sent_history marker if metadata is still within retention or capture
+is still automatically eligible. This is known previous delivery, not
+a new sendable state. Delete marker/expired event only after metadata
+expiry and strictly outside automatic eligibility. Existing full receipts
+can outlive their configured period if safe media cleanup is not yet
+complete. No new DDL or automatic VACUUM; logical row deletion does not
+guarantee physical erasure of SQLite pages. Up to roughly 1000 metadata
+operations per pass, startup/hourly after media cleanup. Preview is
+read-only and shows currently eligible database changes, not simulated
+file removal. Backup checker recognizes sent_history and rejects
+contradictory related receipts. Six metadata tests plus one backup test
+(285 expected), reference verification pending.
+
+R4 must explicitly handle expired historical events and sent_history
+known-success markers, require --resend for known previous sends and
+warn of possible duplicates when the marker was already removed.
+Increasing automatic_days after final pruning cannot reconstruct
+discarded history. Current automatic and legacy delivery selection
+never selects expired or sent_history rows. R2c: identify
 incomplete download attempts and remove only verified application-owned
 uncommitted files after 7 days; unknown files untouched. Historical
 telemetry and manual resend remain R3/R4. No automatic VACUUM, no live

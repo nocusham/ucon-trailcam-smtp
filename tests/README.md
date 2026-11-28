@@ -73,3 +73,5 @@ D2 result: 8db4b0d, 55/55 targeted in 0.150 s and 269/269 full in 2.261 s, expec
 R2a adds five tests (274 expected): default/config/legacy compatibility, exact 24-hour acceptance boundary, interruption before and after unlink, backup rejection of unfinished deletion. Existing missing/changed/shared file, symlink and uncertainty guards retained. Synthetic only, reference verification pending.
 
 R2a result: fe9a6d2, 41/41 targeted (0.102 s), 274/274 full (2.193 s). R2b.1 adds four tests (278 expected): pending/downloaded expiry and boundary/uncertainty/contradictory receipt protection, interruption plus retention config change, retired retry/incident without false recovery, and backup of a completed expired original. Synthetic only; reference verification pending.
+
+R2b.1 result: 124d2fb, 47/47 targeted (0.089 s), 278/278 full (2.205 s). R2b.2 adds seven tests (285 expected): metadata/receipt config, read-only preview and compaction, shorter receipt period and replay deduplication, longer metadata period, unresolved/reappeared media protection, age boundaries, and sent_history backup. Synthetic only; reference verification pending.

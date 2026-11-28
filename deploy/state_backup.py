@@ -202,6 +202,27 @@ def verify_backup(root):
     return manifest
 
 
+def finalize_backup(destination, media):
+    """Verify a private completed payload and publish its integrity manifest."""
+    counts = check_state(destination / 'state/events.sqlite3',
+                         destination / 'state/media', media)
+    manifest = {'format': 1, 'original_media': str(media),
+                'event_counts': counts, 'files': inventory(destination)}
+    marker = destination / 'manifest.json'
+    temporary = destination / '.manifest.pending'
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(manifest, stream, sort_keys=True, indent=2)
+            stream.write('\n')
+        os.replace(temporary, marker)
+        verify_backup(destination)
+    except BaseException:
+        marker.unlink(missing_ok=True)
+        raise
+    return counts
+
+
 @contextmanager
 def locked_backup(config, state, destination):
     """Create a verified backup and retain the queue lock through the caller's checks.
@@ -224,22 +245,7 @@ def locked_backup(config, state, destination):
             copy_file(config / name, destination / 'config' / name)
         snapshot(db, destination / 'state/events.sqlite3')
         copy_tree(media, destination / 'state/media')
-        counts = check_state(destination / 'state/events.sqlite3',
-                             destination / 'state/media', media)
-        manifest = {'format': 1, 'original_media': str(media),
-                    'event_counts': counts, 'files': inventory(destination)}
-        marker = destination / 'manifest.json'
-        temporary = destination / '.manifest.pending'
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-                json.dump(manifest, stream, sort_keys=True, indent=2)
-                stream.write('\n')
-            os.replace(temporary, marker)
-            verify_backup(destination)
-        except BaseException:
-            marker.unlink(missing_ok=True)
-            raise
+        counts = finalize_backup(destination, media)
         yield counts
 
 

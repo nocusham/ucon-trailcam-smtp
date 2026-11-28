@@ -144,3 +144,23 @@ For future deployment use umask 077 and private service-owned data directories. 
 ## Deferred image footer
 
 After completion of the existing milestones, an optional per-camera post-download/pre-SMTP transformation will append a dedicated metadata strip below the entire image. It will not overwrite any part of the photograph or change the stored original. With the option disabled, the current exact-original attachment contract remains unchanged. See [IMAGE_FOOTER.md](IMAGE_FOOTER.md). The feature remains deferred; no runtime or configuration changes were made for it during L1/L2.
+
+## L3 interim results (2026-11-28)
+
+Owner-provided read-only database queries and cumulative log counts at 08:26:03 UTC (09:26:03 CET). The existing reference checkout remains at 163f46b, with a single running continuous service, nominal 60-second polling, download and SMTP delivery enabled, cleanup off. The DEATTI DL04 is outdoors on battery power without its supplied solar panel. Approximate elapsed time is 16 h 14 min from the L3 log filename timestamp (2026-11-27 16:11:34 UTC), not an independently measured process start time. This is an interim result, not completion of L3.
+
+| Observation | Result |
+| --- | --- |
+| Latest logged cycle | 975 |
+| Relay openings / SMTP acceptance log entries | 12 / 15 |
+| Queue | 25 sent; no pending, downloaded or uncertain rows |
+| Increase over final L2 queue | 15 sent events (10 before L3) |
+| Cloud failures, recovery and retry-not-due entries | 0 / 0 / 0 |
+| Original retry, SMTP setup failure, uncertain outcome, service-stopped entries | 0 each |
+| Cloud retry state | failures=0, next_due=0 |
+| Cloud cursor | last_end 2026-11-28 08:25:19 UTC, 44 seconds before query |
+| Latest telemetry | observed 08:12:18 UTC; last reported activity 06:53:31 UTC; battery=100, signal=3, online_state=2, charging=0, low_power=0 |
+| Cumulative storage | data 896 KiB; media 7.6 MiB (reported du -sh values) |
+| External temperature samples within approximate L3 interval | 16 samples, minimum -3.07 C, maximum -1.41 C, arithmetic mean -2.25 C |
+
+The temperature observations are from a separate ambient sensor, not a camera or battery temperature measurement. The full supplied temperature export extends before L3; only samples within the estimated test interval are summarized above. The last sample was at approximately 08:16 UTC. The battery value is cloud-reported, not a direct capacity measurement; no endurance or data savings claim is supported. Signal and online-state code semantics remain unverified. A separate local telemetry CSV is present, but its contents have not been inspected; request a sanitized summary or export to assess battery trend. The current SQLite telemetry table stores only a current snapshot. The 15 SMTP acceptance entries reconcile with the queue increase; actual inbox receipt for L3, independent photo completeness and absence of duplicates are not yet verified. Twelve relay openings for 15 accepted images are consistent with batch retrieval, not proof of a measured energy saving. No full-log audit or induced fault test. Continue L3 unchanged, retain private evidence locally, and record subsequent checkpoints. No live operation from the restructuring branch.

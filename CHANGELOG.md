@@ -12,6 +12,8 @@ This records development milestones, not a published production release.
 
 - At 08:26 UTC on the unchanged 163f46b runtime: 975 logged cycles, 12 relay openings, 15 SMTP acceptance entries, queue sent=25 (10 pre-L3), no pending/downloaded/uncertain rows, zero counted cloud/original-retry/SMTP setup/uncertain/service-stop entries. Cloud retry cleared; battery reported 100%, charging=0. External sensor samples during estimated L3 interval ranged from -3.07 to -1.41 C. Interim evidence only; actual inbox receipt, battery endurance and event completeness remain open. See docs/SERVICE.md.
 
+- Subsequent complete supplied-log review confirms L1 recovery episodes and L3 through cycle 977 (15 new events, verified originals and SMTP acceptances, 12 completed relays). Telemetry: 194 local samples, 65 distinct cloud snapshots, all battery=100; charging=0 after first update. Aggregate evidence only; see docs/SERVICE.md. No runtime changes.
+
 ### Repository restructuring (development branch)
 
 - Phase 6d.2: prepare new versioned development installations at their final paths using a trusted local wheelhouse, exact dependency versions and a project SHA256 check. Refuse root CLI execution, existing release replacement and untrusted writable installation directories; serialize staging and publish readiness only after installed checks. Never activate or touch private state. Extend package check with real isolated staging and add eight synthetic tests. Owner-reported full package and versioned staging checks passed at df06366, 233/233 tests in 2.046 s. Production install/activation and backup guards still pending.

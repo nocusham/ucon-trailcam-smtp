@@ -164,3 +164,25 @@ Owner-provided read-only database queries and cumulative log counts at 08:26:03 
 | External temperature samples within approximate L3 interval | 16 samples, minimum -3.07 C, maximum -1.41 C, arithmetic mean -2.25 C |
 
 The temperature observations are from a separate ambient sensor, not a camera or battery temperature measurement. The full supplied temperature export extends before L3; only samples within the estimated test interval are summarized above. The last sample was at approximately 08:16 UTC. The battery value is cloud-reported, not a direct capacity measurement; no endurance or data savings claim is supported. Signal and online-state code semantics remain unverified. A separate local telemetry CSV is present, but its contents have not been inspected; request a sanitized summary or export to assess battery trend. The current SQLite telemetry table stores only a current snapshot. The 15 SMTP acceptance entries reconcile with the queue increase; actual inbox receipt for L3, independent photo completeness and absence of duplicates are not yet verified. Twelve relay openings for 15 accepted images are consistent with batch retrieval, not proof of a measured energy saving. No full-log audit or induced fault test. Continue L3 unchanged, retain private evidence locally, and record subsequent checkpoints. No live operation from the restructuring branch.
+
+### Full supplied log and telemetry review (2026-11-28)
+
+Subsequent offline review of the owner-supplied complete L1 log, current L3 log snapshot, telemetry CSV and external temperature export confirms the earlier interim counters. The L3 log header explicitly records 2026-11-27 16:11:34 UTC and commit 163f46b. The uploaded log extends to cycle 977 (two more idle cycles than the earlier database checkpoint). Both logs contain consecutive cycle numbers and one zero-accepted/zero-failed alarm summary per cycle.
+
+| Metric | L1 USB | L3 battery, interim |
+| --- | ---: | ---: |
+| Logged cycles | 1529 | 977 |
+| Successful cloud intake cycles | 1523 | 977 |
+| Cloud failures / deferred retry cycles | 3 / 3 | 0 / 0 |
+| Newly discovered events / verified originals / SMTP accepted images | 6 / 6 / 6 | 15 / 15 / 15 |
+| Relay openings / completions | 6 / 6 | 12 / 12 |
+| Total logged relay duration (s) | 54.3 | 102.8 |
+| Mean relay duration (s) | 9.05 | 8.57 |
+| L3 relay duration range (s) | — | 7.6–12.3 |
+| Verified original bytes | 1542708 | 5025217 |
+
+L1 recovery cycles 101, 190 and 221 each resumed with a 480-second query window, confirming the three previously documented failure/backoff/recovery episodes. In L3, three cycles each retrieved two originals in a single relay; nine cycles retrieved one each. The remaining 965 cycles logged no due originals and no relay. All verified originals were 5120 x 2880; logged capture timestamps are distinct. All 15 new events, 15 verified originals and 15 single-image SMTP acceptances reconcile with the earlier queue increase. This is not independent proof of camera event completeness or inbox receipt. Relay duration is the reported client-side session time, not a camera power-on measurement or network byte count.
+
+The telemetry CSV contains 194 local read-only samples at approximately five-minute intervals (2026-11-27 16:19:38 to 2026-11-28 08:24:39 UTC), representing 65 distinct observed_utc snapshots from 16:11:34 to 08:12:18 UTC. Successive distinct observation timestamps differ by 900 or 901 seconds. All snapshots report battery=100 and online_state=2. Charging=1 in the first snapshot (two local samples), then charging=0 from 16:26:35 UTC onwards (64 distinct snapshots, 192 local samples). The initial status may have been cached from the previous USB supply; not proven. Signal=2 in 11 snapshots and signal=3 in 54, with the change at 18:56:41 UTC. No subsequent decrease in the supplied interval. No interpretation of these codes as dBm or verified connectivity is made. Battery remains cloud-reported and unchanged; actual charge consumed and endurance cannot yet be determined.
+
+There are 11 distinct reported last-activity values, including the initial value predating L3. Two later values are 46 min 15 s and 26 min 3 s after the preceding logged photo capture, with no intervening newly discovered image in the supplied log. This supports the distinction between reported activity and photo-event time, but does not establish a heartbeat mechanism. The 16 ambient temperature samples within the L3 interval independently recompute to -3.07 C minimum, -1.41 C maximum and -2.246875 C arithmetic mean. The ambient sensor is separate from the camera; no sample at approximately 02:16 UTC in this interval. No camera internal temperature or SIM usage data. Continue L3 unchanged. Only aggregate results are retained here; raw logs, telemetry, location-related identifiers and images remain private.

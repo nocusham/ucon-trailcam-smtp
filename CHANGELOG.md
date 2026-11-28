@@ -16,7 +16,7 @@ This records development milestones, not a published production release.
 
 ### Repository restructuring (development branch)
 
-- Retention R1: shared configurable [retention].automatic_days (90 default, integer 1–3650) for bounded automatic cloud event queries, service original selection and service SMTP selection. Skip expired backlog, keep cursor commit-after-store and fresh installation baseline; no deletion/schema change. Six tests (259 expected). Owner approved expired definitely unsent image deletion, preserving uncertain originals/status until manual resolution, explicit --resend for known successes, metadata age from capture and history per fresh telemetry observation. Those later R2–R4 features remain pending; legacy media cleanup remains unchanged.
+- Retention R1: shared configurable [retention].automatic_days (90 default, integer 1–3650) for bounded automatic cloud event queries, service original selection and service SMTP selection. Skip expired backlog, keep cursor commit-after-store and fresh installation baseline; no deletion/schema change. Six new tests; owner confirmed 259/259 in 2.136 s at 41b3361. Owner approved expired definitely unsent image deletion, preserving uncertain originals/status until manual resolution, explicit --resend for known successes, metadata age from capture and history per fresh telemetry observation. Those later R2–R4 features remain pending; legacy media cleanup remains unchanged.
 
 - Record further owner decisions: 90-day capture-age boundary on automatic cloud discovery/download/SMTP; stop automatic retries for expired events; explicit manual camera/date-range older-image delivery; configurable 90-day telemetry history; receipt and image retention measured from confirmed SMTP acceptance. Requirements only. Expired unsent/uncertain deletion, manual resend safeguards, telemetry sampling and metadata age reference require review before runtime implementation.
 
@@ -158,3 +158,5 @@ This records development milestones, not a published production release.
 - Upstream SDK contributions after validation.
 
 See [development history](docs/DEVELOPMENT_HISTORY.md) for detailed earlier experiments and superseded findings.
+
+- Record R1 validation (259/259, 2.136 s, 41b3361) and new owner requirement for bounded SMTP backlog throughput. Rate policy and implementation pending approval; no runtime changes.

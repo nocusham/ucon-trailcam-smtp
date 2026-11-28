@@ -12,7 +12,7 @@ prototype-specific tests, not runtime regression coverage.
 ## Remaining gates
 
 - S1 passed: owner confirmed 56979da, 253/253 in 2.141 s and package/development bundle success.
-- Retention/manual delivery: owner approved deleting expired definitely unsent originals, retaining uncertain originals/status until manual resolution, explicit --resend for known successful deliveries, metadata age from capture, telemetry history per fresh observation. R1 implements shared configurable automatic capture-age boundary across cloud event queries, download and SMTP; six additional tests (259 expected) pending. No deletions/schema changes yet. R2–R4 cleanup, telemetry and historical manual delivery pending; review next major step before implementation. No permanent image archival in first release.
+- Retention/manual delivery: owner approved deleting expired definitely unsent originals, retaining uncertain originals/status until manual resolution, explicit --resend for known successful deliveries, metadata age from capture, telemetry history per fresh observation. R1 implements shared configurable automatic capture-age boundary across cloud event queries, download and SMTP; owner confirmed 259/259 in 2.136 s at 41b3361. No deletions/schema changes yet. R2–R4 cleanup, telemetry and historical manual delivery pending; review next major step before implementation. No permanent image archival in first release.
 - S2–S4: implement and validate simple install, logging, optional systemd
   user/system units, backup, update and uninstall, with user-selected
   paths and no root requirement. Preserve private state; no automatic start.
@@ -31,3 +31,5 @@ prototype-specific tests, not runtime regression coverage.
 Keep main and active L3 at 163f46b; do not modify the running reference
 venv, activate new cameras, create production LXC, merge or publish based
 on offline tests alone.
+
+SMTP pacing for automated and manual backlog delivery is an additional owner requirement. Review concrete rate and scope before implementation; current per-cycle batch limits alone are insufficient. R1 verification passed at 41b3361, 259/259 in 2.136 s.

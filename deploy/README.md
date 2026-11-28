@@ -105,7 +105,7 @@ Implementation checkpoints:
   schema change; older downloaded/uncertain state remains for now.
   Explicit existing diagnostic date-range commands retain their old
   behavior; the new manual historical delivery/resend workflow is pending.
-  Six additional tests (259 expected), reference verification pending.
+  Six additional tests; owner confirmed 259/259 in 2.136 s at 41b3361.
 - R2: safe media cleanup after 24 hours from SMTP acceptance, expired
   definitely unsent originals, metadata and receipt pruning with
   unresolved-state protection, retry/health consistency and backup
@@ -159,3 +159,7 @@ wheels are bundled; SDK licensing and native KCP/target dependency
 validation remain open. S1 passed: owner confirmed commit 56979da, 253 tests in 2.141 s and final package/development bundle success. Complete R1–R4 before final installer configuration; review the next major step with the owner before implementing.
 
 See ../docs/PRODUCTION_READINESS.md and ../docs/LXC.md for release gates.
+
+## SMTP throughput requirement (design review pending)
+
+The owner requires paced image delivery during backlog processing; no bulk burst of e.g. 90 individual messages. Current per-camera image batch limits and service cycle interval are not a persistent email-rate limit. Define and approve the message pacing interval, shared scope, manual delivery behavior and alert handling before implementation; provider-specific limits may require lower rates. No rate-limiter implementation or policy defaults approved yet.

@@ -1,13 +1,13 @@
 # Production-readiness gates (phase 7)
 
-Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal pending. Not a production release or deployment authorization.
+Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal passed; phase 7b.3b.1 service adapter verification pending. Not a production release or deployment authorization.
 
 ## Evidence and limitations
 
 | Gate | Status | Evidence / remaining work |
 | --- | --- | --- |
 | Source separation, CLI and English policy | Development pass | Phases 1–5; phase 7a structural comparison reviewed. Preserve German user-facing mail. |
-| Automated regression | Development pass | Owner reported 277/277 in 2.103 s at 2f262a8; local ZIP/staging/handoff rehearsal passed. |
+| Automated regression | Development pass | Owner reported 290/290 in 4.431 s at 5282e63; no ResourceWarnings; prior local ZIP/staging/handoff rehearsal passed. |
 | Reference dependencies and packaging | Development pass | Python 3.14.4 Linux x86_64, pinned SDK/KCP, local wheel and ZIP, staging from extracted ZIP. Not target Python 3.13 or hash-locked builds. |
 | Unit syntax | Offline pass | Placeholder executable check only. Actual service identity, access and LXC sandbox untested. |
 | Backup and rollback | Fixture pass | 245/245 warning-enabled regression and 20/20 under each tested umask. No production backup/restore. |
@@ -163,15 +163,47 @@ Failure may leave an incomplete backup or a valid private backup; keep
 it for operator review and leave the service disabled. No attempt to
 undo a third party's independent pointer modification. The pointer
 comparison guards against a stale expected release, not all possible
-bypasses of deployment serialization. Thirteen synthetic tests (290
-expected), including real SQLite snapshots, latest receipt preservation,
-both locks, stop/backup/approval failure and stale pointer rejection.
+bypasses of deployment serialization. Thirteen synthetic tests, including real SQLite snapshots, latest receipt preservation, both locks, stop/backup/approval failure and stale pointer rejection, passed in 0.078 s; full 290/290 passed in 4.431 s at 5282e63 with no ResourceWarnings (owner output).
 
 Next 7b.3b must address real service-stop/start inhibition and mixed-owner
 backup with distinct root/service identities, without granting the service
 write access to administrator configuration or backup storage. 7b.4 must
 implement actual schema/config compatibility and controlled first
 selection/activation; all require target validation. No production use yet.
+
+### 7b.3b.1: fixed-unit service control
+
+The root-only production_service_control factory uses the fixed
+/etc/ucon-trailcam-smtp configuration directory and
+/etc/systemd/system/ucon-trailcam-smtp.service fragment. No privileged
+CLI or arbitrary unit selection. The trusted administrator supplies the
+independently approved SHA256 of the intended unit, not the hash of an
+untrusted file. Check named ancestor/fragment/marker metadata, reject
+extended attributes on checked directories/files, require the loaded
+fragment path, loaded state, no drop-ins, no pending daemon reload,
+KillMode=control-group and SendSIGKILL=yes. Fail closed on missing,
+duplicate or unexpected show properties. Inhibit starts by removing only
+the regular administrator-owned mode-0644 activation marker. Its absence
+makes the existing ConditionPathExists guard fail for new starts under
+the expected unit; removing it does not stop an existing process.
+No mask, enable/disable, daemon reload or marker recreation. Then stop
+synchronously using fixed /usr/bin/systemctl with a minimal environment,
+a 210-second subprocess timeout and no shell. Check the marker and
+reported inactive/dead state, MainPID=ControlPID=0, and Job empty or 0.
+On failure leave the marker absent if it has already been removed,
+and do not proceed with the update. No automatic restart.
+
+This is a partial adapter, not a complete maintenance lock or proof of
+all writers stopped. The caller must hold the deployment lock across
+marker removal, stop, backup and selection; integration with the
+same-owner rehearsal and mixed-owner backup follows in 7b.3b.2. The
+adapter does not prove cgroup emptiness, prevent arbitrary manual
+workers or concurrent administrator changes, authenticate the artifact,
+or validate all effective unit properties. Actual Debian 13 systemd
+show property format (including Job), condition behavior, stop timeout,
+cgroup/process checks and service isolation remain target gates. The
+twelve tests use synthetic directories and mocked systemctl calls only;
+expected full suite 302. No actual service control or production use.
 
 ## 7c: licensing and artifact trust
 

@@ -119,7 +119,14 @@ class ProductionBackupTests(unittest.TestCase):
                 self.fail('Unexpected backup')
         self.assertFalse(self.destination.exists())
 
-    def test_source_symlink_and_bad_secret_mode_refused(self):
+    def test_bad_secret_mode_refused(self):
+        (self.config / '.env').chmod(0o644)
+        with self.assertRaises(BackupError):
+            with self.backup():
+                self.fail('Unexpected backup')
+        self.assertFalse((self.destination / 'manifest.json').exists())
+
+    def test_source_symlink_refused(self):
         self.image.unlink()
         self.image.symlink_to(self.config / '.env')
         with self.assertRaises(BackupError):

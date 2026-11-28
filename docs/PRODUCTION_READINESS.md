@@ -1,13 +1,13 @@
 # Production-readiness gates (phase 7)
 
-Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal passed; phase 7b.3b.1 service adapter verification pending. Not a production release or deployment authorization.
+Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal passed; phase 7b.3b.1 service adapter verification passed; phase 7b.3b.2 backup/update verification pending. Not a production release or deployment authorization.
 
 ## Evidence and limitations
 
 | Gate | Status | Evidence / remaining work |
 | --- | --- | --- |
 | Source separation, CLI and English policy | Development pass | Phases 1–5; phase 7a structural comparison reviewed. Preserve German user-facing mail. |
-| Automated regression | Development pass | Owner reported 290/290 in 4.431 s at 5282e63; no ResourceWarnings; prior local ZIP/staging/handoff rehearsal passed. |
+| Automated regression | Development pass | Owner reported 302/302 in 2.186 s at 206418f; prior 290-test warning-enabled regression and ZIP/staging/handoff passed. |
 | Reference dependencies and packaging | Development pass | Python 3.14.4 Linux x86_64, pinned SDK/KCP, local wheel and ZIP, staging from extracted ZIP. Not target Python 3.13 or hash-locked builds. |
 | Unit syntax | Offline pass | Placeholder executable check only. Actual service identity, access and LXC sandbox untested. |
 | Backup and rollback | Fixture pass | 245/245 warning-enabled regression and 20/20 under each tested umask. No production backup/restore. |
@@ -202,8 +202,59 @@ workers or concurrent administrator changes, authenticate the artifact,
 or validate all effective unit properties. Actual Debian 13 systemd
 show property format (including Job), condition behavior, stop timeout,
 cgroup/process checks and service isolation remain target gates. The
-twelve tests use synthetic directories and mocked systemctl calls only;
-expected full suite 302. No actual service control or production use.
+twelve tests use synthetic directories and mocked systemctl calls only; owner reported 12/12 in 0.007 s, full 302/302 in 2.186 s at 206418f. No actual service control or production use.
+
+### 7b.3b.2: mixed-owner backup and coordinated maintenance
+
+The administrator-only libraries production_backup.py and
+production_update.py use the fixed production paths. The administrator
+must provision /var/backups/ucon-trailcam-smtp root:root 0700, with
+root:root 0755 named ancestors, outside application code and state.
+The backup destination is a fresh ID under that parent. No backup
+storage is owned or writable by the service. The source config directory
+is root:service 0750, config.toml root:service 0640, .env service:service
+0400 or 0600. The state and media directories are service:service 0700,
+files 0600. Require real directories and single-link regular source files
+with exact modes, no extended attributes, and one device within state.
+Reject rollback journals for manual recovery review. The caller must
+exclude all writers and unapproved mounts, including same-device bind
+mounts; this is not an adversarial traversal sandbox.
+
+Keep the existing queue flock throughout backup and pointer selection.
+Copy the stopped database and any WAL into administrator-private scratch,
+without copying SHM. SQLite builds its WAL index in scratch and the
+existing backup API creates a standalone DB. Do not open the live DB
+with SQLite as root or change its ownership. This is valid only with
+fully stopped writers and stable source files; it is not a live raw-file
+backup procedure. Copy config/credentials/media into the private
+destination and reuse the existing manifest, integrity, receipt and
+media validation. New backup files mode 0600, directories 0700. No
+automatic restore. No encryption, fsync or power-loss durability
+guarantee. A separate local SQLite experiment confirmed copied committed
+WAL data can be read in scratch and emitted as a standalone DELETE-mode
+snapshot; full reference test is still pending.
+
+The production_update library resolves the fixed service account/group,
+requires root, validates administrator paths, holds the deployment lock,
+checks the target readiness and expected current pointer, inhibits
+starts and stops the service using the fixed-unit adapter. Require an
+explicit external-writer exclusion confirmation and named production
+layout check. Back up latest state, verify the manifest, obtain read-only
+compatibility approval for the specific releases/snapshot, verify again,
+recheck stopped writers/layout and switch atomically with expected-current
+comparison. No marker recreation, restart, enable, database rewind or
+first-install initialization. On failure retain the backup/incomplete
+output for review; a removed marker remains absent. No privileged CLI.
+
+Eleven tests (313 expected) use disposable same-owner files and real
+SQLite/WAL, mocked service control and separate simulated distinct-owner
+metadata. The integrated test mocks the production metadata contract
+because it was independently tested in 7b.1. Actual root/service access,
+trusted administrator provisioning, service cgroup/manual-writer exclusion,
+mount/ACL behavior and effective systemd semantics remain mandatory
+target tests. Compatibility callbacks remain review hooks; phase 7b.4
+must implement the actual schema/config gate, readiness acceptance and
+controlled first selection/activation. No production use or L3 changes.
 
 ## 7c: licensing and artifact trust
 

@@ -145,6 +145,18 @@ class StateBackupTests(unittest.TestCase):
             self.create()
         self.assertFalse((self.backup / 'manifest.json').exists())
 
+    def test_expired_unsent_cleaned_original_backup(self):
+        self.original.unlink()
+        with closing(sqlite3.connect(self.db)) as db, db:
+            db.executescript("""
+                UPDATE events SET state='expired' WHERE itemid='a';
+                DELETE FROM deliveries;
+                CREATE TABLE media_cleanup(camera_uid TEXT,itemid TEXT,removed_utc INTEGER,size INTEGER);
+                INSERT INTO media_cleanup VALUES ('synthetic','a',200,18);
+            """)
+        self.assertEqual(self.create(), {'expired':1,'pending':1})
+        self.assertEqual(verify_backup(self.backup)['event_counts'], {'expired':1,'pending':1})
+
     def test_inconsistent_delivery_receipt_refused(self):
         with closing(sqlite3.connect(self.db)) as db, db:
             db.execute('UPDATE deliveries SET accepted_utc=NULL')

@@ -1,4 +1,4 @@
-"""Remove only receipt-verified, SMTP-accepted local originals under a managed root."""
+"""Remove verified accepted and expired definitely unsent local originals."""
 import argparse
 import hashlib
 import json
@@ -69,6 +69,63 @@ def candidates(db, cutoff):
         + ' ORDER BY s.accepted_utc,e.camera_uid,e.itemid', (cutoff,)).fetchall()
 
 
+def no_receipt(db, table, alias='e'):
+    if not table_exists(db, table):
+        return ''
+    return (f' AND NOT EXISTS (SELECT 1 FROM {table} x WHERE '
+            f'x.camera_uid={alias}.camera_uid AND x.itemid={alias}.itemid)')
+
+
+def expired_candidates(db, cutoff):
+    if not table_exists(db, 'downloads'):
+        return []
+    has_cleanup = table_exists(db, 'media_cleanup')
+    join = ' LEFT JOIN media_cleanup c USING(camera_uid,itemid)' if has_cleanup else ''
+    selection = ("((e.state='downloaded' AND e.et_utc<? AND c.itemid IS NULL) "
+                 "OR (e.state='expired' AND c.removed_utc=0))" if has_cleanup
+                 else "e.state='downloaded' AND e.et_utc<?")
+    return db.execute('SELECT e.camera_uid,e.itemid,d.path,d.sha256,d.size '
+                      'FROM events e JOIN downloads d USING(camera_uid,itemid)' + join
+                      + ' WHERE ' + selection + no_receipt(db, 'deliveries')
+                      + no_receipt(db, 'delivery_routes')
+                      + ' ORDER BY e.et_utc,e.camera_uid,e.itemid', (cutoff,)).fetchall()
+
+
+def expire_pending(db, cutoff, *, apply):
+    # Retain metadata for later independent pruning. A pending event must
+    # have no original or delivery receipt, including contradictory state.
+    selection = ("e.state='pending' AND e.et_utc<?" + no_receipt(db, 'downloads')
+                 + no_receipt(db, 'deliveries') + no_receipt(db, 'delivery_routes')
+                 + no_receipt(db, 'media_cleanup'))
+    rows = db.execute('SELECT e.camera_uid,e.itemid FROM events e WHERE ' + selection
+                      + ' ORDER BY e.et_utc,e.camera_uid,e.itemid LIMIT 100', (cutoff,)).fetchall()
+    if not apply:
+        return len(rows)
+    with db:
+        db.execute('BEGIN IMMEDIATE')
+        for uid, ident in rows:
+            cur = db.execute("UPDATE events AS e SET state='expired' WHERE e.camera_uid=? "
+                             "AND e.itemid=? AND " + selection, (uid, ident, cutoff))
+            if cur.rowcount != 1:
+                raise ValueError('Expired pending selection changed')
+            discard_expired_retry(db, uid, ident)
+    return len(rows)
+
+
+def discard_expired_retry(db, uid, ident):
+    if not table_exists(db, 'download_retries'):
+        return
+    failed = db.execute('SELECT failures FROM download_retries WHERE camera_uid=? AND itemid=?',
+                        (uid, ident)).fetchone()
+    db.execute('DELETE FROM download_retries WHERE camera_uid=? AND itemid=?', (uid, ident))
+    if failed and failed[0] > 0 and table_exists(db, 'health_incidents'):
+        # Expiration is not evidence that the camera recovered.
+        remaining = db.execute("""SELECT 1 FROM download_retries r JOIN events e USING(camera_uid,itemid)
+            WHERE e.camera_uid=? AND e.state='pending' AND r.failures>0 LIMIT 1""", (uid,)).fetchone()
+        if remaining is None:
+            db.execute("DELETE FROM health_incidents WHERE category='camera' AND scope=?", (uid,))
+
+
 def deletion_intent(db, uid, ident, size):
     if not table_exists(db, 'media_cleanup'):
         return False
@@ -95,7 +152,7 @@ def safe_directory(fd):
         raise ValueError('Managed media directory not private to service owner')
 
 
-def inspect_original(db, root, root_fd, row, *, apply, now):
+def inspect_original(db, root, root_fd, row, *, apply, now, expire=False):
     uid, ident, raw_path, digest, size = row
     key = hashlib.sha256(json.dumps([uid, ident]).encode()).hexdigest()
     path = Path(raw_path)
@@ -142,6 +199,15 @@ def inspect_original(db, root, root_fd, row, *, apply, now):
                 if apply:
                     if not pending:
                         with db:
+                            db.execute('BEGIN IMMEDIATE')
+                            if expire:
+                                cur = db.execute("UPDATE events AS e SET state='expired' "
+                                                 "WHERE e.camera_uid=? AND e.itemid=? AND e.state='downloaded'"
+                                                 + no_receipt(db, 'deliveries') + no_receipt(db, 'delivery_routes'),
+                                                 (uid, ident))
+                                if cur.rowcount != 1:
+                                    raise ValueError('Expired original selection changed')
+                                discard_expired_retry(db, uid, ident)
                             db.execute('INSERT INTO media_cleanup VALUES (?,?,0,?)', (uid, ident, size))
                     os.unlink(path.name, dir_fd=attempt_fd)
                     os.fsync(attempt_fd)
@@ -161,7 +227,12 @@ def cleanup(db, root, policy, now, *, apply=False, emit=print):
         raise ValueError('Enable retention explicitly before deleting files')
     if type(now) is not int or now <= 0:
         raise ValueError('Invalid cleanup timestamp')
-    rows = candidates(db, now - policy.image_seconds)
+    cutoff = capture_cutoff(now, policy.automatic_days)
+    pending_count = expire_pending(db, cutoff, apply=apply)
+    emit(f'Retention: expired_pending={pending_count}; apply={apply}.')
+    rows = [(row, False) for row in candidates(db, now - policy.image_seconds)]
+    # Finish interrupted expired deletions and process expired unsent originals.
+    rows += [(row, True) for row in expired_candidates(db, cutoff)]
     if not rows:
         emit('Retention: eligible=0; removed=0; no file changes.')
         return 0, 0, 0
@@ -176,11 +247,11 @@ def cleanup(db, root, policy, now, *, apply=False, emit=print):
         root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         stack.callback(os.close, root_fd)
         safe_directory(root_fd)
-        for row in rows:
+        for row, expire in rows:
             if count >= 100:
                 break
             try:
-                size = inspect_original(db, root, root_fd, row, apply=apply, now=now)
+                size = inspect_original(db, root, root_fd, row, apply=apply, now=now, expire=expire)
             except (OSError, ValueError, TypeError) as exc:
                 emit(f'Retention candidate skipped; {error_fields(exc)}.')
                 skipped += 1

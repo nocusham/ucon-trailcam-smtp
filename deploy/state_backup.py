@@ -134,7 +134,7 @@ def check_state(db_path, media, original_media):
         tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not {'events', 'cloud_runtime', 'cloud_cursors'} <= tables:
             raise BackupError('Missing required intake tables')
-        if db.execute("SELECT 1 FROM events WHERE state IS NULL OR state NOT IN ('pending','downloaded','sent','uncertain') LIMIT 1").fetchone():
+        if db.execute("SELECT 1 FROM events WHERE state IS NULL OR state NOT IN ('pending','downloaded','sent','uncertain','expired') LIMIT 1").fetchone():
             raise BackupError('Unknown event state')
         counts = dict(db.execute('SELECT state,count(*) FROM events GROUP BY state'))
         if counts.get('sent', 0) or counts.get('uncertain', 0):
@@ -144,7 +144,7 @@ def check_state(db_path, media, original_media):
             if db.execute("""SELECT 1 FROM events e LEFT JOIN deliveries d USING(camera_uid,itemid)
                 WHERE (e.state='sent' AND (d.accepted_utc IS NULL OR d.accepted_utc<=0))
                    OR (e.state='uncertain' AND (d.itemid IS NULL OR d.accepted_utc IS NOT NULL))
-                   OR (e.state IN ('pending','downloaded') AND d.itemid IS NOT NULL)
+                   OR (e.state IN ('pending','downloaded','expired') AND d.itemid IS NOT NULL)
                 LIMIT 1""").fetchone():
                 raise BackupError('Event and delivery receipt disagree')
             if db.execute("""SELECT 1 FROM deliveries d LEFT JOIN events e USING(camera_uid,itemid)
@@ -169,14 +169,14 @@ def check_state(db_path, media, original_media):
                 if not path.is_absolute() or '..' in path.parts or not path.is_relative_to(original_media):
                     raise BackupError('Original receipt outside source media directory')
                 relative = path.relative_to(original_media)
-                if not relative.parts or relative in seen or state not in ('sent','downloaded','uncertain'):
+                if not relative.parts or relative in seen or state not in ('sent','downloaded','uncertain','expired'):
                     raise BackupError('Invalid original receipt')
                 seen.add(relative)
                 local = media / relative
                 if removed:
-                    if state != 'sent' or local.exists() or local.is_symlink():
+                    if state not in ('sent','expired') or local.exists() or local.is_symlink():
                         raise BackupError('Cleanup receipt disagrees with media')
-                elif fingerprint(local) != {'sha256': digest, 'size': size}:
+                elif state == 'expired' or fingerprint(local) != {'sha256': digest, 'size': size}:
                     raise BackupError('Original differs from receipt')
     return counts
 

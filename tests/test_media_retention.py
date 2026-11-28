@@ -16,13 +16,13 @@ class RetentionTests(unittest.TestCase):
         self.root.mkdir(mode=0o700)
         self.db = sqlite3.connect(':memory:')
         self.addCleanup(self.db.close)
-        self.db.executescript('''CREATE TABLE events(camera_uid,itemid,state);
+        self.db.executescript('''CREATE TABLE events(camera_uid,itemid,state,et_utc);
             CREATE TABLE downloads(camera_uid,itemid,path,sha256,size);
             CREATE TABLE deliveries(camera_uid,itemid,accepted_utc);''')
         self.now = 40*86400
         self.policy = Retention(True, 30)
 
-    def add(self, ident, state='sent', accepted=100, *, uid='a'):
+    def add(self, ident, state='sent', accepted=100, *, uid='a', stamp=100):
         key = hashlib.sha256(json.dumps([uid, ident]).encode()).hexdigest()
         path = self.root / key / 'attempt-test' / 'original.jpg'
         path.parent.parent.mkdir(mode=0o700)
@@ -30,7 +30,7 @@ class RetentionTests(unittest.TestCase):
         payload = b'original test bytes'
         path.write_bytes(payload)
         with self.db:
-            self.db.execute('INSERT INTO events VALUES (?,?,?)', (uid, ident, state))
+            self.db.execute('INSERT INTO events VALUES (?,?,?,?)', (uid, ident, state, stamp))
             self.db.execute('INSERT INTO downloads VALUES (?,?,?,?,?)', (uid, ident, str(path), hashlib.sha256(payload).hexdigest(), len(payload)))
             self.db.execute('INSERT INTO deliveries VALUES (?,?,?)', (uid, ident, accepted))
         return path
@@ -101,6 +101,66 @@ class RetentionTests(unittest.TestCase):
         self.policy = Retention(True, 365)
         self.assertEqual(self.run_cleanup(True), (1,size,0))
         self.assertFalse(path.exists())
+
+    def test_expire_pending_and_downloaded_but_not_boundary_or_uncertain(self):
+        self.now = 100 * 86400
+        cutoff = self.now - 90 * 86400
+        expired = self.add('old', 'downloaded', stamp=cutoff-1)
+        boundary = self.add('boundary', 'downloaded', stamp=cutoff)
+        uncertain = self.add('uncertain', 'uncertain', None, stamp=100)
+        conflict = self.add('conflict', 'downloaded', stamp=100)
+        with self.db:
+            self.db.execute("DELETE FROM deliveries WHERE itemid IN ('old','boundary')")
+            self.db.execute("INSERT INTO events VALUES ('a','pending-old','pending',100)")
+            self.db.execute("INSERT INTO events VALUES ('a','pending-new','pending',?)", (cutoff,))
+        size = expired.stat().st_size
+        self.assertEqual(self.run_cleanup(), (1,size,0))
+        self.assertTrue(expired.exists())
+        self.assertEqual(self.db.execute("SELECT state FROM events WHERE itemid='pending-old'").fetchone(), ('pending',))
+        self.assertEqual(self.run_cleanup(True), (1,size,0))
+        self.assertFalse(expired.exists())
+        self.assertTrue(all(p.exists() for p in (boundary,uncertain,conflict)))
+        self.assertEqual(dict(self.db.execute('SELECT itemid,state FROM events')), {
+            'old':'expired','boundary':'downloaded','uncertain':'uncertain',
+            'conflict':'downloaded','pending-old':'expired','pending-new':'pending'})
+        self.assertEqual(self.run_cleanup(True), (0,0,0))
+
+    def test_expired_intent_survives_config_change_and_interruption(self):
+        from unittest.mock import patch
+        self.now = 100 * 86400
+        path = self.add('old', 'downloaded', stamp=100)
+        with self.db:
+            self.db.execute('DELETE FROM deliveries')
+        size = path.stat().st_size
+        with patch('ucon_trailcam_smtp.media_retention.finish_cleanup',
+                   side_effect=sqlite3.OperationalError('interruption')):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.run_cleanup(True)
+        self.assertFalse(path.exists())
+        self.assertEqual(self.db.execute('SELECT state FROM events').fetchone(), ('expired',))
+        self.assertEqual(self.db.execute('SELECT removed_utc FROM media_cleanup').fetchone(), (0,))
+        self.policy = Retention(True, 30, 365)
+        self.assertEqual(self.run_cleanup(True), (1,size,0))
+        self.assertEqual(self.db.execute('SELECT removed_utc FROM media_cleanup').fetchone(), (self.now,))
+
+    def test_expired_pending_retires_download_alarm_without_recovery(self):
+        from ucon_trailcam_smtp.download_retry import init_retry, reserve, record_failure, RetryPolicy
+        from ucon_trailcam_smtp.health_alerts import observe
+        self.now = 100 * 86400
+        # Retry helper requires actual event metadata.
+        self.db.execute("ALTER TABLE events ADD COLUMN metadata_json TEXT DEFAULT '{\"type\":1}'")
+        init_retry(self.db)
+        with self.db:
+            self.db.execute("INSERT INTO events(camera_uid,itemid,state,et_utc) VALUES ('a','old','pending',100)")
+        reserve(self.db, 'a', ['old'], 200, RetryPolicy())
+        record_failure(self.db, 'a', 'old', 201, 'missing', RetryPolicy())
+        observe(self.db, 'camera', 'a', healthy=False, now=201)
+        with self.db:
+            self.db.execute("UPDATE health_incidents SET last_notice=201")
+        self.run_cleanup(True)
+        self.assertEqual(self.db.execute('SELECT state FROM events').fetchone(), ('expired',))
+        self.assertEqual(self.db.execute('SELECT count(*) FROM download_retries').fetchone(), (0,))
+        self.assertEqual(self.db.execute('SELECT count(*) FROM health_incidents').fetchone(), (0,))
 
     def test_preview_no_changes(self):
         path = self.add('old')

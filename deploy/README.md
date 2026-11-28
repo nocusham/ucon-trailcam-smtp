@@ -279,15 +279,30 @@ operations per pass, startup/hourly after media cleanup. Preview is
 read-only and shows currently eligible database changes, not simulated
 file removal. Backup checker recognizes sent_history and rejects
 contradictory related receipts. Six metadata tests plus one backup test
-(285 expected), reference verification pending.
+Owner confirmed 47/47 targeted in 0.099 s and 285/285 full in 2.221 s at b6936e8.
 
 R4 must explicitly handle expired historical events and sent_history
 known-success markers, require --resend for known previous sends and
 warn of possible duplicates when the marker was already removed.
 Increasing automatic_days after final pruning cannot reconstruct
 discarded history. Current automatic and legacy delivery selection
-never selects expired or sent_history rows. R2c: identify
-incomplete download attempts and remove only verified application-owned
-uncommitted files after 7 days; unknown files untouched. Historical
+never selects expired or sent_history rows.
+
+R2c registers each new attempt directory in an optional download_attempts
+SQLite table before transfer. Successful original receipt and removal of
+its attempt registration commit atomically. Abandoned registered attempts
+are eligible after incomplete_days (default 7, integer 1–3650) from
+creation and last file/directory modification. Startup/hourly cleanup and
+manual preview/apply share the existing queue lock. Only the expected
+private managed directory, empty or containing a single safe JPEG basename,
+is eligible. Protect committed originals, uncertain events/receipts,
+unknown contents, symlinks, hardlinks and recent activity. Remove at most
+100 eligible attempts per pass; missing registered directories may be
+reconciled. No recursive deletion, no network access. Preexisting
+unregistered attempts and directories created before registration during
+a crash are not automatically removed; filenames alone are not proof of
+ownership. No migration of existing tables; schema checker accepts the
+new optional table, older schema checkers do not. Six new synthetic tests
+(291 expected), reference verification pending. Historical
 telemetry and manual resend remain R3/R4. No automatic VACUUM, no live
 changes. Keep L3 running at its original commit.

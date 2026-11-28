@@ -112,11 +112,15 @@ def inventory(root):
     result = {}
     def walk(folder):
         directory(folder)
+        if folder.stat().st_mode & 0o077:
+            raise BackupError('Backup directory is not private')
         for path in sorted(folder.iterdir()):
             rel = path.relative_to(root).as_posix()
             if path.is_dir() and not path.is_symlink():
                 walk(path)
             elif rel != 'manifest.json':
+                if regular(path).st_mode & 0o077:
+                    raise BackupError('Backup file is not private')
                 result[rel] = fingerprint(path)
     walk(root)
     return result
@@ -177,7 +181,8 @@ def check_state(db_path, media, original_media):
 def verify_backup(root):
     root = directory(root)
     marker = root / 'manifest.json'
-    regular(marker)
+    if regular(marker).st_mode & 0o077:
+        raise BackupError('Backup manifest is not private')
     manifest = json.loads(marker.read_text(encoding='utf-8'))
     if not isinstance(manifest, dict) or manifest.get('format') != 1:
         raise BackupError('Unsupported backup manifest')
@@ -218,11 +223,13 @@ def create_backup(config, state, destination):
         manifest = {'format': 1, 'original_media': str(media),
                     'event_counts': counts, 'files': inventory(destination)}
         marker = destination / 'manifest.json'
-        fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        temporary = destination / '.manifest.pending'
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as stream:
                 json.dump(manifest, stream, sort_keys=True, indent=2)
                 stream.write('\n')
+            os.replace(temporary, marker)
             verify_backup(destination)
         except BaseException:
             marker.unlink(missing_ok=True)
@@ -240,6 +247,12 @@ def rehearse(backup, destination):
     destination.mkdir(mode=0o700)
     copy_file(backup / 'state/events.sqlite3', destination / 'events.sqlite3.inert')
     copy_tree(backup / 'state/media', destination / 'media')
+    expected = {'events.sqlite3.inert': manifest['files']['state/events.sqlite3']}
+    expected.update({name.removeprefix('state/'): digest
+                     for name, digest in manifest['files'].items()
+                     if name.startswith('state/media/')})
+    if inventory(destination) != expected:
+        raise BackupError('Rehearsal copy differs from backup')
     counts = check_state(destination / 'events.sqlite3.inert',
                          destination / 'media', Path(manifest['original_media']))
     if counts != manifest['event_counts']:

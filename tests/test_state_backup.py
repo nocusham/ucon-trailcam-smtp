@@ -18,9 +18,11 @@ class StateBackupTests(unittest.TestCase):
         self.config = self.root / 'config'
         self.state = self.root / 'state'
         self.media = self.state / 'media'
-        self.config.mkdir()
-        self.media.mkdir(parents=True)
+        self.config.mkdir(mode=0o700)
+        self.state.mkdir(mode=0o700)
+        self.media.mkdir(mode=0o700)
         (self.config / 'config.toml').write_text('# synthetic config\n')
+        (self.config / 'config.toml').chmod(0o600)
         secret = self.config / '.env'
         secret.write_text('SYNTHETIC=fixture\n')
         secret.chmod(0o600)
@@ -29,6 +31,8 @@ class StateBackupTests(unittest.TestCase):
         self.lock.touch(mode=0o600)
         self.original = self.media / 'image.jpg'
         self.original.write_bytes(b'synthetic original')
+        self.original.chmod(0o600)
+        self.db.touch(mode=0o600)
         with closing(sqlite3.connect(self.db)) as db, db:
             db.executescript("""
                 CREATE TABLE events(camera_uid TEXT,itemid TEXT,state TEXT);
@@ -104,6 +108,7 @@ class StateBackupTests(unittest.TestCase):
         with self.assertRaises(BackupError):
             self.create()
         (self.backup / 'extra').write_bytes(b'not in manifest')
+        (self.backup / 'extra').chmod(0o600)
         with self.assertRaises(BackupError):
             verify_backup(self.backup)
 

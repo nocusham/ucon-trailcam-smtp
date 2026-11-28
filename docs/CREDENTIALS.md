@@ -1,32 +1,34 @@
-# Lokale Zugangsdaten und Neustart
+# Local credentials and restart behavior
 
-Die Installation verwendet zwei lokale, nicht versionierte Dateien: config.local.toml (Kamera- und SMTP-Einstellungen) und .env (vertrauliche Zugangsdaten). Beide bleiben auf dem Datenträger erhalten. Standardpfad der .env ist neben den Python-Skripten; optional setzt der Betreiber UCON_SECRETS_FILE auf einen anderen absoluten Dateipfad. Kein Shell-Sourcing, keine neue Abhängigkeit und kein interaktiver Passwortmanager nötig.
+For the planned installed application, both files belong in the user-selected installation directory under config/ (config.toml and .env). The historical source-checkout examples below continue to use config.local.toml and .env. Set UCON_SECRETS_FILE explicitly for installed operation. See deploy/README.md for the current installation design.
+
+The installation uses two local, untracked files: config.local.toml (camera and SMTP settings) and .env (confidential credentials). Both persist on disk. In a Git checkout, the default .env remains in the repository root after the phase 4b move to src/. An installed package has no implicit .env search path; set UCON_SECRETS_FILE to the absolute path of the protected file or use process environment variables. No shell sourcing, additional dependency or interactive password manager is required.
 
 ```sh
 umask 077
-test -e .env || cp .env.example .env
-test -e config.local.toml || cp config.example.toml config.local.toml
+test -e .env || cp config/.env.example .env
+test -e config.local.toml || cp config/config.example.toml config.local.toml
 chmod 600 .env config.local.toml
 nano .env
 ```
 
-Die Datei muss dem ausführenden Benutzer gehören und Modus 600 oder 400 haben. Symbolische Links, nicht reguläre Dateien, doppelte Schlüssel und fehlerhafte Einträge werden abgelehnt. UTF-8; NAME=Wert, eine Zeile je Schlüssel; kein export und keine Anführungszeichen als Syntax. Der gesamte Inhalt hinter dem ersten Gleichheitszeichen wird als Literal gelesen, auch Sonderzeichen und Leerzeichen. Kommentare nur auf eigenen Zeilen. Nicht mit source ausführen. Dateiwerte haben Vorrang vor schon exportierten Variablen, fehlende Schlüssel greifen auf die Prozessumgebung zurück. Wenn die Standarddatei fehlt, bleibt das bisherige Verhalten erhalten. Explizit gesetzter, fehlender UCON_SECRETS_FILE ist ein Fehler. Keine Dateiinhalte oder Kennwörter in Logs.
+The credential file must be owned by the process user and have mode 600 or 400. Symlinks, nonregular files, duplicate keys and malformed entries are rejected. Use UTF-8, NAME=value, one key per line; no export or quote syntax. Everything after the first equals sign is literal, including special characters and spaces. Comments occupy separate lines. Do not execute the file with source. File values take precedence over exported variables; missing keys fall back to the process environment. A missing implicit default file is allowed; a missing explicitly selected UCON_SECRETS_FILE is an error. Never log file contents or passwords.
 
 ```dotenv
-UCON_ACCOUNT=mein-konto@example.invalid
-UCON_PASSWORD=MEIN_UCON_PASSWORT
-SMTP_PASSWORD=MEIN_SMTP_PASSWORT
-SMTP_PASSWORD_KAMERA2=WEITERES_SMTP_PASSWORT
+UCON_ACCOUNT=account@example.invalid
+UCON_PASSWORD=YOUR_UCON_PASSWORD
+SMTP_PASSWORD=YOUR_SMTP_PASSWORD
+SMTP_PASSWORD_KAMERA2=ANOTHER_SMTP_PASSWORD
 ```
 
-In config.local.toml verweist password_env auf den Schlüsselnamen, nicht auf das Passwort. Alternativ ist ausschließlich das öffentlich dokumentierte Revierwelt-Passwort password = "mail" zugelassen, wenn host smtp.revierwelt.de und Empfänger @revierwelt.de sind. Dann password_env weglassen. username ohne Passwortquelle bzw. beide Quellen gleichzeitig werden abgelehnt. Bei SMTP ohne Anmeldung username und beide Passwortfelder weglassen. Kein Revierwelt-Livetest bis Projektabschluss.
+In config.local.toml, password_env references a key, not a password. The only permitted literal password is the public Revierwelt credential, password = "mail", restricted to smtp.revierwelt.de and an @revierwelt.de recipient. Omit password_env in that case. A username without a password source, or two simultaneous sources, is rejected. For SMTP without authentication, omit username and both password fields. Revierwelt live testing remains deferred until project completion.
 
-Die manuellen Ucon-Probes nutzen read_credentials(); bei fehlenden Werten dürfen sie interaktiv nachfragen. Der spätere unbeaufsichtigte Dienst muss read_credentials(interactive=False) nutzen und bei fehlenden Angaben mit einem verständlichen, geheimnisfreien Fehler beenden. camera_smtp.py lädt Zugangsdaten nur beim tatsächlichen Versand. Die alten SMTP-Probes lesen ihre globalen SMTP_* Einstellungen ebenfalls über den lokalen Loader; diese globalen Einstellungen sind nicht die Mehrkamera-Konfiguration.
+Manual Ucon probes use read_credentials() and may prompt for missing values. The unattended service uses read_credentials(interactive=False) and must stop with a clear, secret-free error if credentials are missing. camera_smtp.py loads credentials only for actual delivery. The legacy SMTP probes also read their global SMTP_* settings through the local loader; these are separate from the multi-camera configuration.
 
-Beim späteren systemd-Dienst wird der dedizierte, unprivilegierte Benutzer die private Datei direkt lesen, optional UCON_SECRETS_FILE=/absoluter/pfad/.env in der Unit (nur Pfad, keine Geheimnisse). Ein Neustart benötigt keine manuelle Anmeldung oder export-Befehle, sofern der Dienst aktiviert und die Datei vorhanden und lesbar ist. Die systemd-Unit und tatsächlicher Neustarttest stehen noch aus. Nicht als systemd EnvironmentFile interpretieren, da dieses eine andere Quoting-Syntax hat.
+For the future systemd service, the dedicated unprivileged account will read the protected file directly. Set UCON_SECRETS_FILE=/absolute/path/.env in the unit if needed (path only, no secrets). A restart should need neither an interactive login nor export commands if the service is enabled and the file exists and is readable. The unit and actual system reboot test remain pending. Do not use the file as a systemd EnvironmentFile: its quoting semantics differ.
 
-Dateirechte sind kein Schutz vor root, kompromittiertem Dienst, Datenträgerdiebstahl oder ungeschützten Backups. Backups von Konfiguration, Datenbank und Zugangsdaten vertraulich behandeln. Eine private Passwortdatei ist nicht verschlüsselt. SMTP ohne TLS überträgt auch private Inhalte unverschlüsselt; das öffentliche Passwort ändert daran nichts.
+File permissions do not protect against root, a compromised service, disk theft or unprotected backups. Treat backups of configuration, databases and credentials as confidential. A private password file is not encrypted. SMTP without TLS also transmits private content unencrypted; the public password does not change that.
 
-## Bestätigter Teststand (26.11.2026)
+## Confirmed test results (2026-11-26)
 
-Die Anmeldung aus der lokalen .env nach Entfernen der exportierten Variablen war erfolgreich. Beide lokalen Dateien hatten Modus 600. Die Tests zur Ucon-Anmeldung sind seit Commit 49f6de4 vom tatsächlichen Installationsverzeichnis isoliert; Vergleichsfehler geben keine Zugangsdaten aus. Die vollständige Suite mit 108 Tests war anschließend auf dem konfigurierten Testserver erfolgreich. Bei absichtlich falschem Passwort meldete die Login-API Code 20005. Das geplante Anhalten automatischer Login-Wiederholungen für diesen Fall ist noch nicht implementiert. Bei versehentlich offengelegten Zugangsdaten das Passwort ändern und .env aktualisieren; keine Geheimnisse in Fehlerberichte übernehmen.
+Login from the local .env succeeded after the exported variables were removed. Both local files had mode 600. Since commit 49f6de4, the Ucon login tests have been isolated from actual installation credentials; assertion failures do not print credentials. The full 108-test suite subsequently passed on the configured test server. Deliberately incorrect credentials produced login API code 20005. Automatic retry suspension for this code was still pending at that checkpoint; the later persistent intake and service implement the login block and explicit resume procedure described in [SERVICE.md](SERVICE.md) and [ALERTS.md](ALERTS.md). Rotate accidentally exposed passwords and update .env; do not include secrets in reports.

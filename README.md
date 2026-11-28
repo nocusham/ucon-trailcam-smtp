@@ -6,12 +6,12 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 
 **Development status (2026-11-27):** the DEATTI DL04 reference camera's cloud discovery, SD original download and SMTP delivery are live-tested. The reference-server soak run reached 1,529 cycles; six new SMTP acceptances and six relay openings were reported in the latest cumulative counters, all six messages were confirmed received by the owner, and three transient cloud failures recovered automatically. The process restart completed 3/3 cycles without error, relay or resend; the queue remained at ten sent events. Sustained outages, actual SMTP/SD failure recovery and production deployment remain pending. Do not treat this version as an unattended production release.
 
-## Current status / Aktueller Stand
+## Current status
 
 | Component | Status |
 | --- | --- |
 | Python / SDK | Python 3.14.4 on Ubuntu test server; SDK 0.1.16 pinned |
-| Unit tests | 175 passed on the configured test server |
+| Unit tests | 253/253 passed at 56979da (2.141 s), package/development bundle check passed; live regression pending |
 | Ucon cloud event query | Live confirmed, no client-initiated P4P session |
 | Cloud watch | 6/6 successful polls with one login; new event and duplicate detection confirmed |
 | Camera selection | Exact UID from enabled local camera profile; live cloud query and relay credential discovery confirmed |
@@ -23,7 +23,7 @@ Experimental self-hosted SMTP bridge for Ucon 4G trail cameras, using original S
 | SMTP grouped | MIME preview confirmed; real grouped delivery not tested |
 | Camera-specific SMTP | Live single-camera preview; distinct two-camera routes tested synthetically |
 | Credentials | Private .env loaded successfully without exported credentials; mode 600 confirmed |
-| Continuous service / retry | Pending |
+| Continuous service / retry | Integrated; normal reference-server soak and restart validated; sustained failure recovery pending |
 | Proxmox LXC / systemd | Deferred until application validated |
 | Revierwelt | Single-image guard implemented; live delivery deferred |
 
@@ -31,28 +31,33 @@ The DEATTI DL04 works with a personal SIM in the reference tests. Cloud event ty
 
 ## Installation and local configuration
 
+The owner-approved deployment design uses a single freely chosen installation directory (default `~/ucon-trailcam-smtp`), optional service account, manual or systemd user/system operation and no root requirement for application installation. See [current deployment architecture](deploy/README.md). The simplified install/update/uninstall scripts are not implemented yet; the following are development-checkout instructions only.
+
+These source-checkout instructions describe the restructuring branch, not a production release. Select the branch explicitly in a new development checkout; never switch the active L3 checkout. The default main branch still uses its historical root templates.
+
 Linux, Python 3.12+ as required by the pinned SDK; use a private checkout and an unprivileged user. For current development stay on the existing Ubuntu test server. Do not create the production LXC yet.
 
 ```sh
 git clone https://github.com/nocusham/ucon-trailcam-smtp.git
 cd ucon-trailcam-smtp
+git switch refactor/repository-layout
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m unittest -v
+python -m unittest discover -s tests -t . -v
 umask 077
-test -e .env || cp .env.example .env
-test -e config.local.toml || cp config.example.toml config.local.toml
+test -e .env || cp config/.env.example .env
+test -e config.local.toml || cp config/config.example.toml config.local.toml
 chmod 600 .env config.local.toml
 nano .env
 nano config.local.toml
 ```
 
-On updates use `git pull` and rerun tests. Do not overwrite existing local configuration. The fully commented German template [config.example.toml](config.example.toml) explains every field. See [credential setup](docs/CREDENTIALS.md) for literal KEY=value syntax, password sources, file ownership and restart behavior. File values override existing environment variables; never source the .env as shell code. Use a separate password entry for each private SMTP credential as needed. Only the public Revierwelt password "mail" is permitted directly in the profile, restricted to the known server and recipient domain. The test suite must never read the real credential file. Earlier credential assertions were fixed in commit 49f6de4; any exposed password should be rotated.
+For an inactive development checkout, review changes before updating and rerun tests. Never update the active L3 checkout. Do not overwrite existing local configuration. The annotated English template [config.example.toml](config/config.example.toml) explains every field. See [credential setup](docs/CREDENTIALS.md) for literal KEY=value syntax, password sources, file ownership and restart behavior. File values override existing environment variables; never source the .env as shell code. Use a separate password entry for each private SMTP credential as needed. Only the public Revierwelt password "mail" is permitted directly in the profile, restricted to the known server and recipient domain. The test suite must never read the real credential file. Earlier credential assertions were fixed in commit 49f6de4; any exposed password should be rotated.
 
 Each camera profile has an independent UID, enabled flag and SMTP host, port, security, sender, recipient, username, password reference, mode and limit. Names are local aliases, not account device indices. Configured-camera image subjects use `UCON testkamera - 15.01.2026 14:52:05 MEZ` (capture date/time in Europe/Berlin with MEZ/MESZ, not server or delivery time). Grouped subjects also include the number of originals and their capture-time range. Original attachment names and bytes are unchanged. Legacy unconfigured SMTP probes retain their original subjects. No fallback to a global destination. Revierwelt requires a distinct recipient for each camera and one attachment per message. Private destinations may use grouped mode, but never mix images from different cameras. One recipient per camera is currently supported. Use STARTTLS or implicit TLS with certificate verification for private mail. Revierwelt's TLS support is not confirmed.
 
-## Current test workflow (manual, not a daemon)
+## Manual diagnostic workflow (historical reference tests)
 
 Examples use the configured alias `testkamera`, replace it locally. All commands below assume an activated virtual environment. Never publish real UIDs, account names, passwords, signed URLs, packet captures, private images or database contents.
 
@@ -170,7 +175,9 @@ The first sequential service is implemented in trailcam_service.py; see [SERVICE
 
 Code 20005 is observed for a wrong password, not a proven exhaustive vendor error mapping. The login-specific retry suspension is implemented in the bounded persistent intake test, not yet in the full service.
 
-## Roadmap / Weitere Entwicklung
+## Roadmap
+
+Completed development milestones and remaining validation gates are distinguished below. See the restructuring section and [service evidence](docs/SERVICE.md) for the latest test results.
 
 - [x] DEATTI DL04 original transfer, cloud event intake, matching, persistent file receipt and SMTP test.
 - [x] Per-camera SMTP profiles, protected credentials, UID-based cloud and device discovery.
@@ -178,11 +185,11 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Integrate UID-based real SD transfer and multi-camera processing on the current server.
 - [x] Implement optional independent alarm SMTP configuration and persistent incident notification core (11 local tests).
 - [x] Validate manual alert SMTP live (test mail received).
-- [ ] Wire observation/dispatch into the service for outstanding original download failures, no extra active camera health checks; validate passive telemetry and wire the optional disabled-by-default inactivity state into automatic dispatch.
+- [x] Integrate observation/dispatch and optional inactivity state into the service, without extra active camera checks; live automatic alert delivery remains pending.
 - [x] Persistent download retry core with explicit retry-aware SD batch test (core tested locally; live integration pending).
 - [x] Persistent intake cursor, startup cutoff, bounded catch-up and login-specific retry block in bounded test (nine core tests).
-- [ ] Validate bounded intake live, complete service integration, freshness/pagination validation and automatic alert dispatch.
-- [ ] Continuous service with independent cloud, camera and delivery failure handling; configuration for intervals and retention.
+- [x] Validate normal bounded intake and integrate service processing; freshness/pagination and automatic alert delivery still require live validation.
+- [x] Integrate continuous service, retry handling and optional retention; sustained outage, multi-camera isolation and actual deletion tests remain pending.
 - [ ] Device discovery helper; do not auto-enable newly discovered cameras.
 - [ ] Test wake after extended idle, event reliability, mobile data use, pagination and service entitlement.
 - [x] Nominal 24-hour soak run (1,529 cycles), recipient confirmation and three-cycle process restart test on the existing Ubuntu reference server; longer field validation remains open.
@@ -194,13 +201,13 @@ Code 20005 is observed for a wrong password, not a proven exhaustive vendor erro
 - [ ] Afterwards investigate Xega XG-23 (UBox), with separate account authentication, provider-scoped failure handling and a validated SD-original transfer. See [UBox research and camera compatibility test plan](docs/UBOX_RESEARCH.md); compatibility is unconfirmed.
 - [ ] Discuss small upstream SDK fixes with the maintainer after application validation; clarify licensing before redistribution.
 
-## Documentation / Dokumentation
+## Documentation
 
-- [German annotated camera configuration](config.example.toml)
-- [Credential setup (Deutsch)](docs/CREDENTIALS.md)
-- [Optional health alerts (Deutsch)](docs/ALERTS.md)
+- [Annotated camera configuration](config/config.example.toml)
+- [Credential setup](docs/CREDENTIALS.md)
+- [Optional health alerts](docs/ALERTS.md)
 - [Deferred native Proxmox LXC plan](docs/LXC.md)
-- [Planned optional image footer (Deutsch)](docs/IMAGE_FOOTER.md)
+- [Planned optional image footer](docs/IMAGE_FOOTER.md)
 - [UBox protocol research and additional-camera test plan](docs/UBOX_RESEARCH.md)
 - [Full historical development and protocol analysis](docs/DEVELOPMENT_HISTORY.md)
 - [Development changelog](CHANGELOG.md)
@@ -217,4 +224,52 @@ Optional [retention] enabled=false, days=30 (1–3650). Age is measured from con
 
 Repository packaging and production/test separation are planned for the LXC transition; see [repository layout](docs/REPOSITORY_LAYOUT.md).
 
-The reference-server soak and process restart runs are complete with the existing test database, private SMTP and cleanup disabled. See [final results](docs/SERVICE.md#l1-and-l2-final-results-2026-11-27). All six new L1 messages were confirmed received. The camera is USB-powered; battery life and SIM data consumption require a separate field test. Next: validate the new [sanitized diagnostics](docs/SERVICE.md#sanitized-service-diagnostics-post-l1l2) on the development server, then restructure the repository, followed by versioned packaging and LXC validation. Resolve SDK licensing before public production distribution.
+The reference-server soak and process restart runs are complete with the existing test database, private SMTP and cleanup disabled. See [final results](docs/SERVICE.md#l1-and-l2-final-results-2026-11-27). All six new L1 messages were confirmed received. L1/L2 used USB power. L3 continues on the separate reference checkout without the supplied solar panel; battery endurance and SIM data consumption are not yet established. Sanitized diagnostics and the restructuring branch have passed automated regression; versioned packaging, live regression and LXC validation remain pending. Resolve SDK licensing before public production distribution.
+
+## Repository restructuring (development branch)
+
+Phases 1 and 2 separate synthetic tests from runtime modules and extract shared mail and cloud REST functions (`mail_message.py`, `cloud_api.py`). Phase 3a extracts the shared relay adapter into `sdk_relay.py`, so the service no longer imports the diagnostic probe. The existing SDK and relay behavior are retained. All three new adapter regression tests passed on the reference server (0.041 s); the full 197-test suite passed on the reference server (0.273 s) at 3c8693b with SDK 0.1.16, covering phases 1, 2 and 3a. Live regression remains pending. Phase 3b isolates credential and SD-card SDK imports in `sdk_credentials.py` and `sdk_sdcard.py`; `sdk_relay.py` and `h4_crypto.py` remain the relay and crypto boundaries. All 200 tests passed on the reference server at c93cbf2 (0.297 s). Phase 3c extracts the shared legacy SMTP settings reader into `smtp_settings.py`, removes the final direct import of a pure diagnostic probe from runtime-capable root modules, and adds four tests (204 expected). The full 204-test suite passed at 7540fd4 (0.324 s), and all nine legacy CLI help checks passed. Phase 4a moves the three pure diagnostic implementations to tools/ and keeps root compatibility launchers; see [manual tools](tools/README.md). All 205 tests passed at 5aadfbf (0.325 s), as did all nine legacy CLI help checks. The initial new-tool help comparison stopped at the first tool because argparse displays the module invocation name and wraps usage differently. A new offline test compares normalized usage and the unchanged help body for all three tools; the corrected test passed at 9f9f8cf in 0.584 s, covering all three tools. Phase 4a is complete with 205 previous passing tests and one additional passing test; the combined 206-test suite has not yet been run in a single invocation. Phase 4b moves the runtime into `src/ucon_trailcam_smtp/` and introduces development-only packaging metadata (`0.0.0.dev0`). Six runtime CLI launchers at the root preserve existing commands; tools and tests import the namespaced package. From a source checkout, the implicit `.env` remains at the repository root. An installed package does not search for an implicit `.env`; use an explicit protected `UCON_SECRETS_FILE` or environment values. The full 211-test suite passed at 9bc9a70 in 2.038 s, along with all nine legacy CLI help checks. Phase 5a moves the two public example templates into config/ and translates their comments without changing active values; see [configuration templates](config/README.md). The three new template tests are included in the successful 214/214 reference-server run at cda3649 (2.033 s). Phase 5b translates the remaining German guides, normalizes headings and clarifies current versus historical status. Phase 5c reviews all 89 Python files for German-language candidates, including runtime, launchers, tests and tools. The detected German text belongs to intentional localized mail, existing aliases or synthetic metadata fixtures; no runtime translation was required. See the [language review](docs/REPOSITORY_LAYOUT.md#phase-5c-source-language-review). Final phase-5 reference-server regression: 214/214 passed at 46799db in 2.041 s. Historical deployment development (superseded by the simplified design described above): Phase 6a completed the reference dependency inventory (Python 3.14.4, Linux x86_64, pip check clean). Phase 6b pins the observed runtime and build-tool versions and adds an isolated local wheel verification procedure; local wheel build, content validation, installed imports/console smoke checks and all 214 source tests passed at 063686e (2.049 s). Phase 6c adds a draft guarded systemd unit, private state and permission contract, and offline syntax checks; 217/217 tests passed at 9d933b5 in 3.767 s, with no ResourceWarnings and successful offline unit syntax verification. Phase 6d.1 introduces tested-in-fixtures release-pointer primitives for atomic code selection and code-only rollback; 225/225 tests passed at c06028a in 2.059 s. Phase 6d.2 adds an unprivileged development staging command, offline installation from a trusted local wheelhouse, a project digest check and eight synthetic staging tests. The package verification script also exercised real versioned installation without activation; 233/233 tests passed at df06366 in 2.046 s, with the final package/staging success message. Phase 6d.3 introduces offline development backup and inert recovery rehearsal with SQLite snapshots, receipt/media checks and a private digest manifest. Initial reference-server run at 0f5386a discovered 245 tests, with five errors in pre-existing staging fixtures and no reported errors in the new backup tests. The corrected staging fixtures passed 20/20 tests under each of umask 002, 022 and 077; 245/245 full tests passed at 1b478fa (3.910 s), no ResourceWarnings. Phase 6e adds a local development-only ZIP with a fixed payload allowlist, commit/digest manifest, verification and isolated staging from the extracted archive. Owner reported 253/253 tests in 2.078 s and the final package, development bundle and versioned staging success message after the 248e49d test instruction (commit not reprinted). Phase 7 begins the [production-readiness review](docs/PRODUCTION_READINESS.md), including an offline structural comparison with the original reference commit. Phase 7a: 257/257 tests passed at 6e468a4 (2.091 s); 147 unchanged normalized definitions, all four reported findings and nine import-inventory differences reviewed. Phase 7b.1 introduces a read-only, synthetic-testable production layout metadata contract for separated administrator/service ownership and disabled activation; nine tests passed in 0.009 s and full 266/266 in 2.094 s at fdc23fe. Phase 7b.2 adds non-root candidate building with copied interpreter, fresh-inode handoff at the original absolute path and a same-owner integration rehearsal. Eleven targeted tests passed in 0.009 s, full 277/277 in 2.103 s and the package/bundle/staging/handoff rehearsal completed at 2f262a8. Phase 7b.3a adds a development-only stop/backup/approval/switch transaction with real synthetic SQLite state and continuous queue/deployment locking; thirteen targeted tests passed in 0.078 s, full 290/290 in 4.431 s at 5282e63 with no ResourceWarnings. Phase 7b.3b.1 adds a fixed-unit administrator-only service control library with digest/loaded-unit checks, activation marker removal, synchronous stop and inactive-state verification; twelve mocked tests passed in 0.007 s, full 302/302 in 2.186 s at 206418f. Phase 7b.3b.2 adds mixed-owner backup into administrator-controlled private storage and a fixed-path update composition; eleven targeted tests passed in 0.054 s, full 313/313 in 4.648 s at cff4b87, no ResourceWarnings. Phase 7b.4a adds a conservative version-1 SQLite schema contract and offline config/credential parser check; fifteen targeted tests passed in 0.055 s, full 328/328 in 2.271 s at 4cfbabe. Phase 7b.4b.1 adds independently approved whole-venv tree digests, candidate readiness and a concrete schema/config/backup gate bound to both release IDs with final pre-switch revalidation. Twelve additional tests (340 expected), reference verification pending. Real systemd and distinct-identity validation remain open. Production recovery and activation remain deferred. Separately, the ongoing L3 reference run at 163f46b reached 977 cycles and 15 new SMTP acceptance entries with no counted failures in the subsequently supplied 2026-11-28 log; all 65 distinct telemetry snapshots reported battery=100; see [L3 evidence](docs/SERVICE.md#l3-interim-results-2026-11-28). See [deployment preparation](deploy/README.md). Local development artifact validation passed; target-platform installation, production artifact authorization and service lifecycle remain pending. From the repository root run `python -m unittest discover -s tests -t . -v`. Existing service and probe CLI commands remain valid in this phase. See [repository layout](docs/REPOSITORY_LAYOUT.md). Do not update a running reference test checkout or deploy this branch as production.
+
+### Deployment simplification (current)
+
+The owner approved the ten decisions recorded in [deploy/README.md](deploy/README.md). The fixed-path root handoff, whole-venv integrity approval, release pointer, privileged update and systemd prototype are removed from the active tree in S1; the final prototype c895064 remains in history and its 340-test suite was not run. Runtime, dependency pins, project wheel/ZIP checks, configuration/schema and full offline backup helpers are retained. Reduced suite: 253/253 passed in 2.141 s at 56979da, with owner-confirmed package/development bundle success. New installer, logging, systemd templates, update and uninstall follow in separate checkpoints. No production deployment, merge, L3 or new camera changes.
+
+Retention requirements (approved, not implemented): configurable 90-day detailed metadata, delivery receipt and automatic SMTP image-age limits, manual older-image delivery, 24-hour post-acceptance image cleanup, 30-day file logs and three update backups. Permanent image archival deferred. Discuss remaining behavioral choices before runtime implementation. See [deployment contract](deploy/README.md#approved-retention-requirements-not-implemented-yet).
+
+Further approved requirements: the automatic 90-day age limit applies to cloud event queries, downloads and SMTP; stop automatic retries for expired events, allow explicit manual camera/date-range delivery, retain configurable 90-day camera telemetry history, and measure receipt retention and 24-hour local image cleanup from confirmed SMTP acceptance. Expired unsent/uncertain deletion, manual resend safeguards and telemetry sampling are not yet decided or implemented.
+
+Retention R1 (development): [retention].automatic_days defaults to 90 (1–3650 integer days), inclusive capture-time bound for automatic cloud intake, download and SMTP. Fresh queues still start at current time, expired backlog is skipped in bounded catch-up, and existing explicit diagnostic commands retain their behavior. Six new tests; owner confirmed 259/259 in 2.136 s at 41b3361. Owner also approved expired definitely unsent image deletion, preserving uncertain originals/status until manual resolution, --resend for known successful deliveries, metadata age from capture time, and telemetry history for each fresh observation. These later cleanup/history/manual features are not implemented in R1; legacy media cleanup settings remain unchanged.
+
+R1 validation: 259/259 passed in 2.136 s at 41b3361. Owner also requires SMTP message pacing for backlogs; design approval pending, runtime unchanged.
+
+SMTP pacing requirements approved: global 30-second minimum interval, no daily cap, oldest eligible images first, explicit manual interval override. Configurable downloads per camera connection also required; actual camera limit unknown. Current downloads are sequential within one relay (service --batch-limit default 3, allowed 1–10). Design review pending; no runtime change.
+
+Download configuration D1: [download].batch_limit defaults to 3, [cameras.download].batch_limit overrides per camera, explicit service --batch-limit overrides both; range 1–100 (experimental), sequential transfer, unchanged bounded one-hour SD window. SMTP image batch limits remain separate. Three additional tests (262 expected), reference validation pending. Larger camera batches not live-validated. SMTP pacing with persistent shared attempt interval and alert priority follows separately.
+
+D1 validation: 18/18 targeted in 0.035 s and 262/262 full in 2.154 s at d855099. D2 adds [smtp_pacing].interval_seconds (default 30, 1–3600), shared persisted per-queue SMTP attempt gate, alarm priority, oldest eligible image message per service cycle, no daily cap. Failed attempts count; deferral is not an error. The default 60-second service cycle normally allows at most 60 individual image messages/hour. Explicit queue/camera diagnostic commands share the gate and support --smtp-interval; historical full-range manual delivery remains pending. Standalone stateless test probes are outside the gate. D2 owner confirmed 55/55 targeted tests (0.150 s) and 269/269 full (2.261 s) at 8db4b0d. Live validation pending.
+
+R2a: owner approved startup/hourly cleanup, longer minimal deduplication evidence when needed, clearly identifiable incomplete downloads after 7 days and manual-only VACUUM. Accepted original cleanup now defaults to 24 hours from SMTP acceptance ([retention].sent_image_hours), enabled in --send service or explicit maintenance; legacy explicit enabled=false/days respected. Verified deletion intent is committed before unlink, recovered after interruption, and incomplete deletion prevents a valid backup. Five new tests (274 expected), reference pending. Expired unsent deletion, metadata/receipt pruning and incomplete attempt cleanup follow separately. No live changes.
+
+R2a verification: 41/41 targeted in 0.102 s and 274/274 full in 2.193 s at fe9a6d2. R2b.1 marks definitely unsent events older than automatic_days expired, verifies and removes downloaded originals via persistent deletion intent, preserves uncertain events and prevents automatic retries for expired events even after a config increase. Retains metadata/cleanup receipts until R2b.2, retires obsolete download retries without false recovery, accepts completed expired cleanup in backup checks. Four synthetic tests (278 expected); verification pending. No DDL change; new expired state is not recognized by old backup checkers. Manual historical recovery is R4.
+
+R2b.1 verified 47/47 targeted in 0.089 s, 278/278 full in 2.205 s at 124d2fb. R2b.2 adds independent [retention].metadata_days and delivery_receipt_days (90 each), compacts terminal reconciled metadata, retires expired detailed receipts atomically, and retains a sent_history known-delivery marker until metadata and automatic eligibility expire. Unresolved states and failed/incomplete file cleanup preserve evidence. No DDL change or automatic VACUUM. Seven tests (285 expected), reference pending. R4 historical delivery must respect sent_history and warn of duplicates after final pruning; increasing automatic age cannot restore deleted history.
+
+R2b.2 verified 47/47 targeted in 0.099 s and 285/285 full in 2.221 s at b6936e8. R2c registers new local download attempts before transfer, clears registration atomically with successful receipt, and removes eligible abandoned registered attempts after [retention].incomplete_days (default 7, integer 1–3650) from creation and last activity. Protect committed/uncertain originals, unknown files, links and recent activity. Existing unregistered attempts are untouched. Startup/hourly and manual preview/apply; optional additive schema table; six tests (291 expected), reference pending.
+
+R2c verified 44/44 targeted in 0.109 s and 291/291 full in 2.235 s at 365414a. R3 adds 90-day configurable fresh cloud telemetry history ([retention].telemetry_days), one observation per configured camera per fresh device response, missing values NULL, no additional cloud requests or backfill. Current alarm snapshot unchanged. Startup/hourly history pruning independent of image cleanup; optional history table; six new tests (297 expected), reference pending.
+
+R3 validation: 52/52 targeted in 0.110 s and 297/297 full in 2.264 s at c1f4199. R4 historical delivery design review pending; no runtime changes.
+
+R4 owner approved common history command, default cloud/local preview, verified local reuse, stopped service/shared lock, explicit unknown-history acknowledgement, no fixed date-range limit, and no persisted job resume. R4a implements only preview: existing service CLI plus history --config --queue-db --camera --from --to [--tz], inclusive local dates, hourly windows, read-only queue merge, state counts, no download or SMTP. Seven tests (304 expected), reference pending. R4b/R4c actions pending.
+
+R4a verified 31/31 targeted (1.208 s), 304/304 full (2.288 s), 58af4b0. R4b adds history --download --output-dir with verified local reuse or bounded sequential H4 downloads, private new export directory and manifest, no automatic queue or SMTP mutation. Exports are operator-owned and not automatically pruned; partial exports may remain after interruption. Six tests (310 expected), reference pending. R4c SMTP pending.
+
+R4b verified 25/25 targeted (0.047 s), 310/310 full (2.283 s), 0dbc83b. R4c.1 adds independent historical delivery evidence and automatic-selection/uncertainty guards; historical preview includes that evidence. Seven synthetic tests (317 expected), reference pending. No historical SMTP CLI yet; receipt lifecycle and backup handling follow R4c.2.
+
+R4c.1 verified 87/87 targeted (0.199 s), 317/317 full (2.322 s), 4345aea. R4c.2a adds explicit historical SMTP CLI (--download --output-dir --send, independent --resend/--allow-unknown-history, optional --smtp-interval), verified export, chronological single/grouped send, shared persistent pacing and conservative failure receipts. Seven tests (324 expected), reference pending. Historical receipt retention/reconciliation and explicit resolution remain pending; no production use yet.
+
+R4c.2a owner test at 43fb559: 70/70 targeted in 0.168 s; full regression 323/324 passed in 2.344 s, one failure in literal runtime DDL uniqueness (duplicate smtp_retries definition). Corrected by sharing one cooldown helper between automatic rollback and historical setup failure; exact existing DDL and strict schema test unchanged. Added cross-path cooldown regression (325 total expected). Reference retest pending; R4c.2b not started, no live changes.
+
+R4c.2a corrected validation: owner confirmed 31/31 targeted in 0.118 s and 325/325 full in 2.351 s at 94cba38. R4c.2b.1 reconciles known manual success to sent_manual (managed original) or sent_history (no original), applies existing verified deletion intent after the latest historical acceptance for previously unsent originals, and retires historical receipts according to configured periods while preserving required deduplication markers. Previous automatic acceptance remains separate; explicit exports never removed. Unresolved outcomes and incomplete/failed managed cleanup retain evidence. Backup checks recognize sent_manual; older validators do not. No new DDL; ten synthetic tests (335 expected), reference pending, including independent automatic/manual receipt ages and verified backup/refusal for unresolved external exports. Explicit historical status resolution follows separately; do not deploy yet.
+
+R4c.2b.1 reference test reported 68/72 targeted passed, four managed-original cleanup failures. The pasted leading SHA was the earlier 94cba38 checkpoint, but failing tests were introduced in 7bc5fed. Likely fixture cause: pathlib mkdir(mode=0700, parents=True) applies the mode only to the leaf; intermediate directory inherits umask. Reproduced the permissions behavior with umask 0002 (0775 intermediate, 0700 leaf). Corrected the synthetic fixture to create both directories separately with 0700, mirroring queue_download. Runtime safety checks unchanged. Two additional tests verify umask independence and rejection of group-writable directories (337 expected full). Reference retest pending; no live changes.

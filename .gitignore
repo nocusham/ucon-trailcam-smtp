@@ -11,3 +11,14 @@ config.local.*
 *.pcap*
 media/
 data/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# Local installed application state (never commit)
+/config/config.toml
+/logs/
+/backups/
+/install-info.json

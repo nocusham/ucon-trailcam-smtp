@@ -1,0 +1,139 @@
+# Ucon Trailcam SMTP — local configuration
+# Copy once to config.local.toml in the repository root and set mode 600.
+# Keep existing local configuration on updates; add new fields manually.
+# config.local.toml and .env are ignored by Git.
+# Store private passwords in .env, not in this file.
+# Create a separate [[cameras]] section for each camera.
+
+[smtp_pacing]
+# Global minimum seconds between image and alarm SMTP attempts (1–3600).
+# No daily limit; persisted in the queue. A service cycle may delay further.
+interval_seconds = 30
+
+[download]
+# Sequential originals per relay; 1–100 (experimental software cap).
+# Start with the validated conservative default; large batches are unverified.
+batch_limit = 3
+
+[[cameras]]
+# Unique local alias: 1–64 ASCII letters, digits, hyphens or underscores.
+name = "testkamera"
+
+# Stable device UID from Ucon or the local event database (not an app index).
+uid = "REPLACE_WITH_CAMERA_UID"
+
+# true = enabled for SMTP, configured cloud/SD probes and service processing.
+# false = exclude from configured selection and delivery.
+# The legacy diagnostic --index selection is separate.
+enabled = true
+
+# Optional inactivity warning; disabled by default.
+# Uses latest_active_utc, with conservative photo-event fallback when unavailable.
+inactivity_warning = false
+# Threshold in days (1–365, default 7); no extra P4P connection.
+inactivity_days = 7
+
+# Optional per-camera override; omit this table to inherit [download].
+# [cameras.download]
+# batch_limit = 5
+
+[cameras.smtp]
+# SMTP hostname or IP address, without a URL scheme.
+host = "smtp.example.invalid"
+
+# TCP port (1–65535); defaults by security: none 25, starttls 587, tls 465.
+port = 587
+
+# Encryption: starttls (default), tls (implicit TLS), none (unencrypted).
+# No automatic fallback to unencrypted SMTP.
+security = "starttls"
+
+# Sender address: exactly one bare email address.
+from = "sender@example.invalid"
+
+# Recipient address: exactly one bare email address; unique per Revierwelt camera.
+to = "recipient@example.invalid"
+
+# SMTP username; leave empty or omit when authentication is not required.
+username = "sender@example.invalid"
+
+# Password key in .env (or existing process environment).
+# Cameras may share a key. Omit when authentication is not required.
+password_env = "SMTP_PASSWORD"
+
+# Optional literal-password exception: only the public password "mail" for
+# smtp.revierwelt.de and an @revierwelt.de recipient. Omit password_env then.
+# password = "mail"
+
+# single (default): one image per email; required for Revierwelt.
+# grouped: multiple images from the same camera per email.
+mode = "single"
+
+# Maximum originals per delivery batch (1–10, default 3), not a download limit.
+limit = 3
+
+# For another camera, copy the complete [[cameras]] block including [cameras.smtp],
+# set a unique alias and UID, and configure its delivery parameters.
+# Never put actual credentials or device UIDs in this public template.
+
+# Optional global alert channel, independent of image-delivery SMTP profiles.
+[alerts]
+# true = enable alerts; false = no alert emails (default).
+enabled = false
+# Login failure duration in minutes (1–10080, default 15).
+login_minutes = 15
+# Cloud API failure duration in minutes (1–10080, default 30).
+api_minutes = 30
+# Repeated original-download failures for a known cloud event, in hours
+# (1–720, default 24). No additional active reachability checks.
+# Absence of images alone does not constitute a download failure.
+camera_hours = 24
+# Minimum interval between successful alerts for the same incident, in hours (1–720).
+repeat_hours = 24
+# Minimum delay after failed alert delivery, in minutes (1–10080).
+retry_minutes = 60
+# true = send recovery notice after a successful check of a reported incident.
+recovery = true
+
+[alerts.smtp]
+# Independent SMTP server for failure reports, preferably separate from image delivery.
+host = "smtp.example.invalid"
+# TCP port (1–65535); default 587 for STARTTLS or 465 for implicit TLS.
+port = 587
+# starttls or tls; encrypted SMTP is mandatory for alerts.
+security = "starttls"
+# Sender address (exactly one bare email address).
+from = "alerts@example.invalid"
+# Private alert recipient (exactly one address; not a Revierwelt recipient).
+to = "admin@example.invalid"
+# SMTP username; omit both following fields when authentication is not required.
+username = "alerts@example.invalid"
+# Reference to the private password key in .env.
+password_env = "ALERT_SMTP_PASSWORD"
+
+# Retry intervals for pending original downloads (optional).
+# Applies to explicit --retry-due tests and continuous service processing.
+[download_retry]
+# Initial delay after a failed download, in minutes (1–1440).
+initial_minutes = 5
+# Maximum exponential backoff, in minutes (initial_minutes–1440).
+max_minutes = 360
+
+# Local accepted original cleanup at service startup and hourly in --send mode.
+# Manual inspection/preview never deletes without --apply or explicit --cleanup.
+[retention]
+# Maximum capture age for automatic event queries, downloads and SMTP (1–3650 days).
+# A new queue still starts at installation time, not this far in the past.
+automatic_days = 90
+# Hours since confirmed SMTP acceptance (1–87600, default 24).
+sent_image_hours = 24
+# Existing explicit legacy enabled=false / days settings are respected.
+# Expired definitely unsent events use automatic_days; uncertain events are retained.
+# Detailed metadata from capture, and detailed delivery receipts from SMTP acceptance.
+metadata_days = 90
+delivery_receipt_days = 90
+# Minimal known-delivery marker survives while automatic eligibility or metadata requires it.
+# Uncommitted registered download attempts: days since creation and last file activity.
+incomplete_days = 7
+# Fresh cloud telemetry observations, days since observation (1–3650).
+telemetry_days = 90

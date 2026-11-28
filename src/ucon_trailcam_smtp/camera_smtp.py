@@ -17,6 +17,7 @@ from ucon_trailcam_smtp.service_download import DEFAULT_BATCH_LIMIT, parse_batch
 from ucon_trailcam_smtp.smtp_pacing import Pacer, parse_interval, validate_interval
 from ucon_trailcam_smtp.smtp_retry import retry_due
 import time
+from ucon_trailcam_smtp.history_receipts import camera_uncertain
 
 
 @dataclass(frozen=True)
@@ -144,7 +145,7 @@ def route_batch(db, profiles, begin, end, *, preview_sent=False, send_enabled=Fa
     for p in selected:
         uncertain, = db.execute("SELECT count(*) FROM events WHERE camera_uid=? AND state='uncertain'",
                                 (p.uid,)).fetchone()
-        if uncertain and not preview_sent:
+        if (uncertain or camera_uncertain(db,p.uid)) and not preview_sent:
             emit(f'Camera {p.name}: blocked by uncertain delivery; no SMTP')
             jobs.append((p, None, None))
             continue

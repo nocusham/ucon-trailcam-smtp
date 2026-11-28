@@ -85,3 +85,5 @@ R3 result: c1f4199, 52/52 targeted (0.110 s), 297/297 full (2.264 s). Synthetic 
 R4a adds seven tests (304 expected): local/cloud union and boundary filtering, read-only state, identity conflicts, invalid cloud response, unrestricted multi-day bounded windows, DST and future clamp, CLI dispatch and failure handling. Synthetic only; reference verification pending.
 
 R4a result: 58af4b0, 31/31 targeted (1.208 s), 304/304 full (2.288 s). For direct module invocation from source set PYTHONPATH=src. R4b adds six synthetic tests (310 expected): verified copy, historical/cloud-only export, cleaned original redownload, modified receipt refusal, uncertain/ambiguous/missing skip, SD identity claim protection; queue serialization unchanged. No live relay or SMTP. Reference pending.
+
+R4b result: 0dbc83b, 25/25 targeted (0.047 s), 310/310 full (2.283 s). R4c.1 adds seven synthetic tests (317 expected): explicit unknown/resend, preserved primary/previous receipts, uncertain camera block, automatic selection and transition guard, download/expiry protection, transactional group rollback and original uncertainty. No SMTP network. Reference pending.

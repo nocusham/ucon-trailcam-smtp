@@ -83,6 +83,7 @@ def cleanup_attempts(db, root, now, days=7, *, apply=False, emit=print):
     """Only explicitly registered attempts; no guessing from folder names."""
     if type(days) is not int or not 1 <= days <= 3650 or type(now) is not int or now <= 0:
         raise ValueError('Invalid incomplete attempt retention')
+    from ucon_trailcam_smtp.history_receipts import event_uncertain
     tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if 'download_attempts' not in tables:
         return 0, 0
@@ -106,7 +107,7 @@ def cleanup_attempts(db, root, now, days=7, *, apply=False, emit=print):
                     raise ValueError('Attempt contains a committed original')
                 state = db.execute('SELECT state FROM events WHERE camera_uid=? AND itemid=?',
                                    (uid, ident)).fetchone()
-                if state == ('uncertain',):
+                if state == ('uncertain',) or event_uncertain(db,uid,ident):
                     raise ValueError('Uncertain event protects its attempts')
                 if 'deliveries' in tables and db.execute(
                         'SELECT 1 FROM deliveries WHERE camera_uid=? AND itemid=? AND accepted_utc IS NULL',

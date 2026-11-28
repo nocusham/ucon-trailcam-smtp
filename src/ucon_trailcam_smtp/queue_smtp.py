@@ -15,6 +15,7 @@ from ucon_trailcam_smtp.smtp_transport import SafeSMTPFailure, smtp_failure_fiel
 from ucon_trailcam_smtp.safe_diagnostics import error_fields
 from ucon_trailcam_smtp.smtp_retry import retry_due, rollback_unsent, clear_retry
 from ucon_trailcam_smtp.smtp_pacing import Pacer, DEFAULT_INTERVAL, validate_interval
+from ucon_trailcam_smtp.history_receipts import exclusion, protected, camera_uncertain
 
 
 class DeliveryError(Exception):
@@ -26,8 +27,9 @@ def ready_rows(db, begin, end, limit, state='downloaded', camera_uid=None):
         raise DeliveryError('Invalid selection state')
     scope = ' AND camera_uid=?' if camera_uid is not None else ''
     params = (state, begin, end) + ((camera_uid,) if camera_uid is not None else ())
+    guard = exclusion(db, 'events') if state=='downloaded' else ''
     count, = db.execute('SELECT count(*) FROM events WHERE state=? '
-                        'AND et_utc>=? AND et_utc<?' + scope, params).fetchone()
+                        'AND et_utc>=? AND et_utc<?' + scope + guard, params).fetchone()
     if not count:
         return []
     return db.execute('''SELECT e.camera_uid,e.itemid,e.et_utc,e.metadata_json,
@@ -36,6 +38,7 @@ def ready_rows(db, begin, end, limit, state='downloaded', camera_uid=None):
                          ON e.camera_uid=d.camera_uid AND e.itemid=d.itemid
                          WHERE e.state=? AND e.et_utc>=? AND e.et_utc<?'''
                       + (' AND e.camera_uid=?' if camera_uid is not None else '')
+                      + (exclusion(db,'e') if state=='downloaded' else '')
                       + ' ORDER BY e.et_utc,e.camera_uid,e.itemid LIMIT ?',
                       (*params, limit)).fetchall()
 
@@ -114,6 +117,8 @@ def begin_delivery(db, rows, message_id, route=None):
         started = int(time.time())
         for row in rows:
             uid, ident, stamp = row[:3]
+            if camera_uncertain(db,uid) or protected(db,uid,ident):
+                raise DeliveryError('Historical receipt blocks automatic delivery')
             cur = db.execute("UPDATE events SET state='uncertain' WHERE camera_uid=? "
                              "AND itemid=? AND et_utc=? AND state='downloaded'", (uid, ident, stamp))
             if cur.rowcount != 1:
@@ -143,6 +148,8 @@ def process(db, rows, *, load_image, build_message, sender, recipient, send=None
             mode='single', route=None, pacer=None):
     if len({row[0] for row in rows}) > 1:
         raise DeliveryError('Mixed-camera SMTP batch refused; select a camera profile')
+    if send is not None and any(camera_uncertain(db,row[0]) or protected(db,row[0],row[1]) for row in rows):
+        raise DeliveryError('Historical receipt blocks automatic delivery')
     if send is not None and rows and not retry_due(db, rows[0][0], int(time.time())):
         emit('SMTP retry not due; no SMTP connection.')
         return 1

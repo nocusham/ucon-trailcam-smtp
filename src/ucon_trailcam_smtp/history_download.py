@@ -12,6 +12,7 @@ from pathlib import Path
 from ucon_trailcam_smtp.cloud_image import validate_image
 from ucon_trailcam_smtp.event_match import match_events
 from ucon_trailcam_smtp.service_download import validate_batch_limit, WINDOW_SECONDS
+from ucon_trailcam_smtp.history_receipts import observations, event_uncertain
 
 MAX_BYTES = 16 * 1024 * 1024
 
@@ -116,8 +117,9 @@ def export_history(db,uid,local,remote,parent,limit,open_batch,*,emit=print):
     for ident in local.keys() | remote.keys():
         if ident in local:
             stamp,state = local[ident]
-            raw, = db.execute('SELECT metadata_json FROM events WHERE camera_uid=? AND itemid=?',
-                              (uid,ident)).fetchone()
+            row = db.execute('SELECT metadata_json FROM events WHERE camera_uid=? AND itemid=?',
+                             (uid,ident)).fetchone()
+            raw = row[0] if row is not None else observations(db,uid,stamp,stamp+1)[ident][2]
         else:
             stamp,raw = remote[ident]
             state = 'unknown_history'
@@ -134,7 +136,7 @@ def export_history(db,uid,local,remote,parent,limit,open_batch,*,emit=print):
     with os.fdopen(fd,'w',encoding='utf-8') as manifest:
         for ident,(stamp,state,raw) in sorted(candidates.items(),key=lambda x:(x[1][0],x[0])):
             delivery = one(db,'deliveries','accepted_utc',uid,ident)
-            if state=='uncertain' or (delivery is not None and delivery[0] is None):
+            if state=='uncertain' or event_uncertain(db,uid,ident) or (delivery is not None and delivery[0] is None):
                 skipped += 1
                 continue
             original = local_original(db,uid,ident,stamp,state)

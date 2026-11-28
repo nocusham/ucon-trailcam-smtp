@@ -57,3 +57,5 @@ R3 verified c1f4199, 52/52 targeted in 0.110 s and 297/297 full in 2.264 s. R4 d
 R4 owner approved historical workflow; R4a cloud/local preview implemented under existing queue lock, no fixed date span, no persisted job resume. Seven tests (304 expected), reference pending. Historical downloads/SMTP not yet implemented. No live changes.
 
 R4a verified 58af4b0, 31/31 targeted in 1.208 s, 304/304 full in 2.288 s. R4b private historical download export implemented, no primary queue mutations; six tests (310 expected), reference pending. Export files manually managed; no live historical SD test or SMTP implementation.
+
+R4b verified 0dbc83b, 25/25 targeted in 0.047 s, 310/310 full in 2.283 s. R4c.1 evidence and automatic-selection guards implemented, seven tests (317 expected), reference pending. No actual historical SMTP CLI; R4c.2 retention, backup and send integration pending.

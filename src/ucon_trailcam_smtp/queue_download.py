@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ucon_trailcam_smtp.event_match import match_events
 from ucon_trailcam_smtp.download_attempts import register_attempt
+from ucon_trailcam_smtp.history_receipts import protected
 
 
 @contextmanager
@@ -59,6 +60,8 @@ def check_existing(path, uid, rows, begin, end, validate):
 def record_download(path, uid, ident, stamp, sd, dest, details, *, attempt=None):
     with closing(sqlite3.connect(path, timeout=10)) as db, db:
         db.execute('BEGIN IMMEDIATE')
+        if protected(db,uid,ident):
+            raise ValueError('Historical receipt blocks automatic download')
         db.execute('''CREATE TABLE IF NOT EXISTS downloads (
             camera_uid TEXT NOT NULL, itemid TEXT NOT NULL, sd_time INTEGER NOT NULL,
             path TEXT NOT NULL, sha256 TEXT NOT NULL, size INTEGER NOT NULL,
@@ -82,7 +85,9 @@ def record_download(path, uid, ident, stamp, sd, dest, details, *, attempt=None)
 def download_batch(session, path, uid, rows, begin, end, events, output, limit, download, validate,
                    *, retry_ids=None, on_failure=None):
     results = match_events([r[1] for r in rows], events)
-    pending = [(r, m) for r, m in zip(rows, results) if eligible(r, begin, end)]
+    with closing(sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro', uri=True)) as db:
+        pending = [(r, m) for r, m in zip(rows, results) if eligible(r, begin, end)
+                   and not protected(db,uid,r[0])]
     if retry_ids is not None:
         rank = {ident: i for i, ident in enumerate(retry_ids)}
         pending = sorted(((r, m) for r, m in pending if r[0] in rank), key=lambda pair: rank[pair[0][0]])

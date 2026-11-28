@@ -60,6 +60,12 @@ DDL = {
                 state TEXT NOT NULL DEFAULT 'pending',
                 PRIMARY KEY (camera_uid, itemid)
             )""",
+    'historical_deliveries': """CREATE TABLE IF NOT EXISTS historical_deliveries (
+            camera_uid TEXT NOT NULL, itemid TEXT NOT NULL, message_id TEXT NOT NULL,
+            et_utc INTEGER NOT NULL, started_utc INTEGER NOT NULL, accepted_utc INTEGER,
+            metadata_json TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL,
+            size INTEGER NOT NULL, route_json TEXT NOT NULL,
+            PRIMARY KEY(camera_uid,itemid,message_id))""",
     'health_incidents': """CREATE TABLE IF NOT EXISTS health_incidents (
             category TEXT NOT NULL, scope TEXT NOT NULL, first_failure INTEGER NOT NULL,
             last_failure INTEGER NOT NULL, failures INTEGER NOT NULL, code INTEGER,
@@ -92,7 +98,7 @@ def expected_rows(tables):
 def check_schema(db):
     """Read-only check of exact SQLite catalog, including autoindexes.
 
-    All six startup tables are required. Eight lazily created tables are
+    All six startup tables are required. Nine lazily created tables are
     optional, but must have exactly the reviewed schema when present.
     This deliberately rejects even benign unreviewed schema differences.
     """

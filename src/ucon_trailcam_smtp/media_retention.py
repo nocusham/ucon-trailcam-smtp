@@ -11,6 +11,7 @@ from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from pathlib import Path
 from ucon_trailcam_smtp.safe_diagnostics import error_fields
+from ucon_trailcam_smtp.history_receipts import exclusion, protected
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,7 @@ def candidates(db, cutoff):
     return db.execute('''SELECT e.camera_uid,e.itemid,d.path,d.sha256,d.size
         FROM events e JOIN downloads d USING(camera_uid,itemid)
         JOIN deliveries s USING(camera_uid,itemid)'''
-        + join + " WHERE e.state='sent' AND s.accepted_utc>0 AND " + age
+        + join + " WHERE e.state='sent' AND s.accepted_utc>0 AND " + age + exclusion(db,'e',uncertain_only=True)
         + ' ORDER BY s.accepted_utc,e.camera_uid,e.itemid', (cutoff,)).fetchall()
 
 
@@ -98,7 +99,7 @@ def expired_candidates(db, cutoff):
     return db.execute('SELECT e.camera_uid,e.itemid,d.path,d.sha256,d.size '
                       'FROM events e JOIN downloads d USING(camera_uid,itemid)' + join
                       + ' WHERE ' + selection + no_receipt(db, 'deliveries')
-                      + no_receipt(db, 'delivery_routes')
+                       + no_receipt(db, 'delivery_routes') + exclusion(db,'e')
                       + ' ORDER BY e.et_utc,e.camera_uid,e.itemid', (cutoff,)).fetchall()
 
 
@@ -107,7 +108,7 @@ def expire_pending(db, cutoff, *, apply):
     # have no original or delivery receipt, including contradictory state.
     selection = ("e.state='pending' AND e.et_utc<?" + no_receipt(db, 'downloads')
                  + no_receipt(db, 'deliveries') + no_receipt(db, 'delivery_routes')
-                 + no_receipt(db, 'media_cleanup'))
+                 + no_receipt(db, 'media_cleanup') + exclusion(db,'e'))
     rows = db.execute('SELECT e.camera_uid,e.itemid FROM events e WHERE ' + selection
                       + ' ORDER BY e.et_utc,e.camera_uid,e.itemid LIMIT 100', (cutoff,)).fetchall()
     if not apply:
@@ -336,6 +337,8 @@ def prune_metadata(db, root, policy, now, *, apply=False, emit=print):
         for uid, ident, stamp, state, raw in rows:
             if compacted + retired + deleted >= 1000:
                 break
+            if protected(db,uid,ident):
+                continue  # Historical evidence lifecycle follows in R4c.2.
             old_metadata = stamp <= meta_cutoff
             outside_auto = stamp < auto_cutoff
             delivery = one('deliveries', 'accepted_utc', uid, ident)

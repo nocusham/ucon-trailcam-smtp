@@ -17,6 +17,7 @@ from ucon_trailcam_smtp.cloud_intake import MAX_STEP, login_blocked
 from ucon_trailcam_smtp.queue_download import batch_lock
 from ucon_trailcam_smtp.event_metadata import event_metadata
 from ucon_trailcam_smtp.service_download import effective_batch_limit
+from ucon_trailcam_smtp.history_receipts import observations
 from ucon_trailcam_smtp.safe_diagnostics import cloud_fields, error_fields
 
 
@@ -40,7 +41,17 @@ def local_events(db, uid, begin, end):
     known = {'pending','downloaded','sent','uncertain','expired','sent_history'}
     if any(state not in known for _,_,state in rows):
         raise ValueError('Unexpected local event state')
-    return {ident:(stamp,state) for ident,stamp,state in rows}
+    local = {ident:(stamp,state) for ident,stamp,state in rows}
+    for ident,(stamp,state,_) in observations(db,uid,begin,end).items():
+        prior = local.get(ident)
+        if prior and prior[0]!=stamp:
+            raise ValueError('Historical receipt identity conflict')
+        if prior and prior[1]=='uncertain':
+            state='uncertain'
+        elif prior and prior[1]=='sent' and state!='uncertain':
+            state='sent'
+        local[ident]=(stamp,state)
+    return local
 
 
 async def collect_preview(db, uid, begin, end, query, *, emit=print, include_events=False):
@@ -73,7 +84,8 @@ async def collect_preview(db, uid, begin, end, query, *, emit=print, include_eve
                 raise ValueError('Cloud event identity conflict')
             existing = db.execute('SELECT et_utc,state FROM events WHERE camera_uid=? AND itemid=?',
                                   (uid,ident)).fetchone()
-            if existing is not None and (existing[0] != stamp or ident not in local):
+            if (existing is not None and (existing[0] != stamp or ident not in local)) or (
+                    ident in local and local[ident][0]!=stamp):
                 raise ValueError('Local and cloud event identity conflict')
             raw = json.dumps(event_metadata(item), ensure_ascii=False, allow_nan=False)
             if len(raw.encode('utf-8')) > 1_048_576:

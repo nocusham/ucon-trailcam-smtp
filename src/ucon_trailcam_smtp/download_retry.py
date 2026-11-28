@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 
 from ucon_trailcam_smtp.health_alerts import init_health, observe
+from ucon_trailcam_smtp.history_receipts import protected, exclusion
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,8 @@ def due_ids(db, uid, rows, begin, end, now, limit):
     """Fair order by due time, then capture time; never select nonpending rows."""
     retries = dict(db.execute('SELECT itemid,next_due FROM download_retries WHERE camera_uid=?', (uid,)))
     candidates = [(retries.get(r[0], r[1]), r[1], r[0]) for r in rows
-                  if pending_photo(r, begin, end) and retries.get(r[0], r[1]) <= now]
+                  if pending_photo(r, begin, end) and retries.get(r[0], r[1]) <= now
+                  and not protected(db,uid,r[0])]
     return [ident for _, _, ident in sorted(candidates)[:limit]]
 
 
@@ -58,7 +60,7 @@ def reserve(db, uid, ids, now, policy):
         for ident in ids:
             row = db.execute('SELECT et_utc,state,metadata_json FROM events WHERE camera_uid=? AND itemid=?',
                              (uid, ident)).fetchone()
-            if row is None or not pending_photo((ident, *row), 0, now + 1):
+            if row is None or not pending_photo((ident, *row), 0, now + 1) or protected(db,uid,ident):
                 raise ValueError('Retry selection changed')
             previous = db.execute('SELECT next_due,failures FROM download_retries WHERE camera_uid=? AND itemid=?',
                                   (uid, ident)).fetchone()
@@ -97,7 +99,7 @@ def sync_download_health(db, uid, now, threshold):
     """
     rows = db.execute('''SELECT r.first_failure,r.last_failure,r.failures
         FROM download_retries r JOIN events e USING(camera_uid,itemid)
-        WHERE r.camera_uid=? AND e.state='pending' AND r.failures>0''', (uid,)).fetchall()
+        WHERE r.camera_uid=? AND e.state='pending' AND r.failures>0''' + exclusion(db,'e'), (uid,)).fetchall()
     if not rows:
         observe(db, 'camera', uid, healthy=True, now=now)
         return

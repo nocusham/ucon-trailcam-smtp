@@ -261,3 +261,5 @@ R2c verified 44/44 targeted in 0.109 s and 291/291 full in 2.235 s at 365414a. R
 R3 validation: 52/52 targeted in 0.110 s and 297/297 full in 2.264 s at c1f4199. R4 historical delivery design review pending; no runtime changes.
 
 R4 owner approved common history command, default cloud/local preview, verified local reuse, stopped service/shared lock, explicit unknown-history acknowledgement, no fixed date-range limit, and no persisted job resume. R4a implements only preview: existing service CLI plus history --config --queue-db --camera --from --to [--tz], inclusive local dates, hourly windows, read-only queue merge, state counts, no download or SMTP. Seven tests (304 expected), reference pending. R4b/R4c actions pending.
+
+R4a verified 31/31 targeted (1.208 s), 304/304 full (2.288 s), 58af4b0. R4b adds history --download --output-dir with verified local reuse or bounded sequential H4 downloads, private new export directory and manifest, no automatic queue or SMTP mutation. Exports are operator-owned and not automatically pruned; partial exports may remain after interruption. Six tests (310 expected), reference pending. R4c SMTP pending.

@@ -55,3 +55,5 @@ R2c verified 365414a, 44/44 targeted in 0.109 s, 291/291 full in 2.235 s. R3 fre
 R3 verified c1f4199, 52/52 targeted in 0.110 s and 297/297 full in 2.264 s. R4 design approval pending; explicit historical range, preview, resend evidence and manual-only processing isolation require review. Live validation remains pending.
 
 R4 owner approved historical workflow; R4a cloud/local preview implemented under existing queue lock, no fixed date span, no persisted job resume. Seven tests (304 expected), reference pending. Historical downloads/SMTP not yet implemented. No live changes.
+
+R4a verified 58af4b0, 31/31 targeted in 1.208 s, 304/304 full in 2.288 s. R4b private historical download export implemented, no primary queue mutations; six tests (310 expected), reference pending. Export files manually managed; no live historical SD test or SMTP implementation.

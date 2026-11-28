@@ -332,11 +332,13 @@ State counts are not local original integrity checks or confirmed SD
 availability. Cloud completeness is unverified; failure aborts without
 final combined result. No changes to SQLite, cursors, telemetry, images
 or SMTP state (existing lock file may be created if absent).
-Seven new tests (304 expected), reference verification pending.
+Owner confirmed 31/31 targeted in 1.208 s and 304/304 full in 2.288 s at 58af4b0; source checkout module invocation requires PYTHONPATH=src.
 
-R4b download and R4c delivery/resend remain pending. Future actions must
+R4b implements explicit --download --output-dir export; R4c delivery/resend remains pending. Future actions must
 isolate manual-only work from automatic delivery, reuse verified local
 originals, respect shared persistent SMTP pacing, preserve acceptance
 evidence and never bypass uncertain state. No historical job resume
 command; re-invocation must still respect receipts to prevent unintended
 duplicates. No runtime changes to main or live L3.
+
+R4b: historical download is an explicit private export, not an import into the automatic queue. The operator supplies an output parent; each invocation creates a new owner-controlled history-* directory with per-event hashed subdirectories and a private manifest.jsonl of verified files, event metadata, prior state, SD time and hash/dimensions. Reuse existing originals only after complete JPEG and receipt verification; missing originals with completed cleanup or no expected receipt may be fetched through the existing H4 app flow. Changed or unexpectedly missing receipts stop the request; uncertain events/receipts and missing/ambiguous matches are skipped with nonzero final status. Sequential bounded relay windows use per-camera limit or explicit --batch-limit. Nearby known identities and previously claimed SD times protect against ambiguous assignment. No queue writes, cursor or SMTP changes. Exports are intentional operator-owned copies outside automatic retention; remove them manually when no longer needed. Interruptions may leave partial export files; no persisted resumable job. Six new tests (310 expected), reference pending. R4c may reuse verified exported bytes within a single invocation; cross-invocation export import is not implemented.

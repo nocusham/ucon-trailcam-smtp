@@ -182,3 +182,5 @@ See [development history](docs/DEVELOPMENT_HISTORY.md) for detailed earlier expe
 - R3 owner verified 52/52 targeted (0.110 s), 297/297 full (2.264 s), c1f4199. Record R4 historical delivery design review; no runtime changes.
 
 - R4a: record owner-approved historical workflow and add read-only history subcommand with bounded hourly cloud queries over unrestricted explicit calendar range, local/cloud deduplication, unknown-history classification, shared lock and unchanged service CLI. Seven tests (304 expected), pending reference verification. Download and delivery/resend not yet implemented.
+
+- R4a verified 31/31 targeted and 304/304 full at 58af4b0. R4b explicit historical export, verified local reuse, bounded H4 downloads and matching, private per-invocation export and manifest, unchanged automatic queue and SMTP evidence. Six tests (310 expected), reference pending. Operator-managed export retention; no resumable job.

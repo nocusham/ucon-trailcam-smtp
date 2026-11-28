@@ -83,3 +83,5 @@ R2c result: 365414a, 44/44 targeted (0.109 s), 291/291 full (2.235 s). R3 adds s
 R3 result: c1f4199, 52/52 targeted (0.110 s), 297/297 full (2.264 s). Synthetic validation only. R4 design approval pending.
 
 R4a adds seven tests (304 expected): local/cloud union and boundary filtering, read-only state, identity conflicts, invalid cloud response, unrestricted multi-day bounded windows, DST and future clamp, CLI dispatch and failure handling. Synthetic only; reference verification pending.
+
+R4a result: 58af4b0, 31/31 targeted (1.208 s), 304/304 full (2.288 s). For direct module invocation from source set PYTHONPATH=src. R4b adds six synthetic tests (310 expected): verified copy, historical/cloud-only export, cleaned original redownload, modified receipt refusal, uncertain/ambiguous/missing skip, SD identity claim protection; queue serialization unchanged. No live relay or SMTP. Reference pending.

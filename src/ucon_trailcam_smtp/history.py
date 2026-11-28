@@ -1,10 +1,11 @@
-"""Read-only preview of one configured camera's historical photo events."""
+"""Preview or explicitly export one configured camera's historical photo events."""
 import argparse
 import asyncio
 from collections import Counter
 from contextlib import closing
 import datetime as dt
 import logging
+import json
 from pathlib import Path
 import sqlite3
 import time
@@ -14,6 +15,8 @@ from ucon_trailcam_smtp.camera_selection import profile_uid, select_device
 from ucon_trailcam_smtp.camera_smtp import load_profiles
 from ucon_trailcam_smtp.cloud_intake import MAX_STEP, login_blocked
 from ucon_trailcam_smtp.queue_download import batch_lock
+from ucon_trailcam_smtp.event_metadata import event_metadata
+from ucon_trailcam_smtp.service_download import effective_batch_limit
 from ucon_trailcam_smtp.safe_diagnostics import cloud_fields, error_fields
 
 
@@ -40,7 +43,7 @@ def local_events(db, uid, begin, end):
     return {ident:(stamp,state) for ident,stamp,state in rows}
 
 
-async def collect_preview(db, uid, begin, end, query, *, emit=print):
+async def collect_preview(db, uid, begin, end, query, *, emit=print, include_events=False):
     """Merge bounded cloud windows without persisting or changing a queue."""
     if not 0 <= begin < end:
         raise ValueError('Invalid historical interval')
@@ -66,13 +69,16 @@ async def collect_preview(db, uid, begin, end, query, *, emit=print):
                 continue
             if not isinstance(ident,str) or not ident.strip() or len(ident)>512:
                 raise ValueError('Invalid historical photo identity')
-            if ident in remote and remote[ident] != stamp:
+            if ident in remote and remote[ident][0] != stamp:
                 raise ValueError('Cloud event identity conflict')
             existing = db.execute('SELECT et_utc,state FROM events WHERE camera_uid=? AND itemid=?',
                                   (uid,ident)).fetchone()
             if existing is not None and (existing[0] != stamp or ident not in local):
                 raise ValueError('Local and cloud event identity conflict')
-            remote[ident] = stamp
+            raw = json.dumps(event_metadata(item), ensure_ascii=False, allow_nan=False)
+            if len(raw.encode('utf-8')) > 1_048_576:
+                raise ValueError('Historical metadata exceeds size limit')
+            remote[ident] = (stamp, raw)
         cursor = boundary
         windows += 1
         if windows % 24 == 0:
@@ -83,6 +89,8 @@ async def collect_preview(db, uid, begin, end, query, *, emit=print):
     counts['local_only'] = len(local.keys() - remote.keys())
     counts['cloud_and_local'] = len(remote.keys() & local.keys())
     counts['total'] = len(local.keys() | remote.keys())
+    if include_events:
+        return counts, local, remote
     return counts
 
 
@@ -91,7 +99,10 @@ async def run(args):
     import httpx
     from ucon_trailcam_smtp.cloud_api import discover_devices, list_cloud_events
     from ucon_trailcam_smtp.ucon_auth import read_credentials
-    uid = profile_uid(load_profiles(args.config),args.camera)
+    profiles = load_profiles(args.config)
+    uid = profile_uid(profiles,args.camera)
+    profile = next(p for p in profiles if p.uid == uid)
+    limit = effective_batch_limit(profile,args.batch_limit)
     begin,end = date_range(args.first,args.last,args.tz,int(time.time()))
     with batch_lock(args.queue_db), closing(sqlite3.connect(
             args.queue_db.resolve().as_uri()+'?mode=ro',uri=True)) as db:
@@ -101,9 +112,19 @@ async def run(args):
         account,password = read_credentials(interactive=False)
         async with httpx.AsyncClient(timeout=30,follow_redirects=False) as client:
             headers,devices = await discover_devices(client,account,password)
-            select_device(devices,uid=uid)
-            counts = await collect_preview(db,uid,begin,end,
-                lambda u,b,e: list_cloud_events(client,headers,u,b,e))
+            device = select_device(devices,uid=uid)
+            result = await collect_preview(db,uid,begin,end,
+                lambda u,b,e: list_cloud_events(client,headers,u,b,e), include_events=args.download)
+        if args.download:
+            from ucon_trailcam_smtp.history_download import export_history, relay_batch
+            from functools import partial
+            from importlib.metadata import version
+            if version('p4p-camera-sdk') != '0.1.16':
+                raise ValueError('Pinned SDK required')
+            counts, local, remote = result
+            return export_history(db, uid, local, remote, args.output_dir, limit,
+                                  partial(relay_batch, device))
+        counts = result
     print(f'History preview: camera={args.camera}; dates={args.first} through {args.last}; tz={args.tz}')
     for key in ('total','pending','downloaded','sent','sent_history','uncertain','expired',
                 'unknown_history','cloud_only','local_only','cloud_and_local'):
@@ -122,14 +143,21 @@ def main(argv=None):
     parser.add_argument('--to',dest='last',required=True,type=dt.date.fromisoformat,
                         help='Inclusive local end date')
     parser.add_argument('--tz',default='Europe/Berlin')
+    parser.add_argument('--download',action='store_true',help='Export verified originals; no SMTP')
+    parser.add_argument('--output-dir',type=Path,help='Private parent directory for a new export')
+    parser.add_argument('--batch-limit',type=int,help='Override sequential originals per relay (1–100)')
     args = parser.parse_args(argv)
+    if args.download != (args.output_dir is not None):
+        parser.error('--download requires --output-dir; preview does not use it')
+    if args.batch_limit is not None and (not args.download or not 1 <= args.batch_limit <= 100):
+        parser.error('--batch-limit requires --download and range 1–100')
     logging.disable(logging.CRITICAL)
     try:
         return asyncio.run(run(args))
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
-        print(f'History preview stopped; {error_fields(exc)} {cloud_fields(exc)}. No queue changes.')
+        print(f'History stopped; {error_fields(exc)} {cloud_fields(exc)}. No queue changes; partial exports may remain.')
         return 1
 
 

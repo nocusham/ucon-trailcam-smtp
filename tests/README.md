@@ -81,3 +81,5 @@ R2b.2 result: b6936e8, 47/47 targeted (0.099 s), 285/285 full (2.221 s). R2c add
 R2c result: 365414a, 44/44 targeted (0.109 s), 291/291 full (2.235 s). R3 adds six tests (297 expected): history scope/allowlist, unchanged fresh values and duplicate protection, missing values, age boundary and read-only preview, configuration, fresh observations despite later event-list failure. Existing alarm tests and schema assertions retained; synthetic only, reference verification pending.
 
 R3 result: c1f4199, 52/52 targeted (0.110 s), 297/297 full (2.264 s). Synthetic validation only. R4 design approval pending.
+
+R4a adds seven tests (304 expected): local/cloud union and boundary filtering, read-only state, identity conflicts, invalid cloud response, unrestricted multi-day bounded windows, DST and future clamp, CLI dispatch and failure handling. Synthetic only; reference verification pending.

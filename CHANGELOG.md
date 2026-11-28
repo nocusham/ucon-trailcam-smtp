@@ -180,3 +180,5 @@ See [development history](docs/DEVELOPMENT_HISTORY.md) for detailed earlier expe
 - R2c verified 44/44 targeted (0.109 s), 291/291 full (2.235 s), 365414a. R3 records fresh device telemetry history with allowlisted fields, NULL for missing values, no cached samples or extra requests; configurable 90-day observation retention, startup/hourly pruning and manual preview/apply. Optional schema table, current alarm snapshot unchanged. Six tests (297 expected), verification pending.
 
 - R3 owner verified 52/52 targeted (0.110 s), 297/297 full (2.264 s), c1f4199. Record R4 historical delivery design review; no runtime changes.
+
+- R4a: record owner-approved historical workflow and add read-only history subcommand with bounded hourly cloud queries over unrestricted explicit calendar range, local/cloud deduplication, unknown-history classification, shared lock and unchanged service CLI. Seven tests (304 expected), pending reference verification. Download and delivery/resend not yet implemented.

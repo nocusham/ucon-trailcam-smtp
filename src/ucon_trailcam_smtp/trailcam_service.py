@@ -184,8 +184,14 @@ async def run(args):
             return int(bool(failed))
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv=None):
+    import sys
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] == 'history':
+        from ucon_trailcam_smtp.history import main as history_main
+        return history_main(argv[1:])
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     epilog='Use history --help for historical event preview.')
     parser.add_argument('--config', required=True, type=Path)
     parser.add_argument('--queue-db', required=True, type=Path)
     parser.add_argument('--output-dir', type=Path, default=Path('media/service'))
@@ -200,7 +206,7 @@ def main():
     parser.add_argument('--send-alerts', action='store_true')
     parser.add_argument('--resume-login', action='store_true')
     parser.add_argument('--cleanup', action='store_true', help='Explicit local image cleanup even without --send (legacy disable respected)')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not 1 <= args.cycles <= 1000 or not 10 <= args.interval <= 900 or (args.batch_limit is not None and not 1 <= args.batch_limit <= MAX_BATCH_LIMIT):
         parser.error('cycles 1–1000; interval 10–900 seconds; batch-limit 1–100')
     logging.disable(logging.CRITICAL)

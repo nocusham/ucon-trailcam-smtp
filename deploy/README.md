@@ -308,6 +308,35 @@ changes. Keep L3 running at its original commit.
 
 Record one allowlisted observation per configured camera and fresh validated device-list response, keyed by camera UID and observation UTC second. Store actual reported battery, signal, online state, charging, low power, and latest activity; missing/invalid values are NULL, not carried forward. Identical values on later fresh responses are retained. Fresh device responses are recorded even if subsequent event listing fails; cached devices, failed discovery and duplicate same-second observations do not generate extra samples. Existing camera_telemetry current snapshot and alarm semantics remain unchanged. No backfill, no extra network requests, no private raw payloads. Optional camera_telemetry_history table and schema checker updated; earlier validators reject it. [retention].telemetry_days defaults to 90 (integer 1–3650); prune by observation age at startup and hourly independently of image deletion, including intake-only runs. Manual retention preview/apply includes history. No VACUUM. Six new tests; owner confirmed 52/52 targeted in 0.110 s and 297/297 full in 2.264 s at c1f4199. R4 historical delivery remains pending.
 
-## R4 historical delivery design review (pending owner approval)
+## R4 historical delivery (owner-approved)
 
-Existing console entry is the service CLI, not a subcommand dispatcher; explicit diagnostic day-range operations are bounded and are not the historical workflow. Previously approved rules: explicit configured camera/date range; historical access outside automatic_days only on operator request, subject to source availability; require --resend for known previous sends; protect unresolved uncertain status; explicit acknowledgement of possible duplicates when prior history is no longer available; shared persisted SMTP interval with explicit manual override. Review preview scope, cloud discovery versus local queue, original reuse/redownload, finite work bounds, service exclusion via existing queue lock, manual-only state isolation and recovery of interrupted requests before implementation. Do not temporarily relax global automatic_days or erase existing acceptance evidence to replay a message. No R4 runtime changes in this checkpoint.
+Approved: common history subcommand, default cloud/local preview, verified
+local original reuse, stop service and use shared queue lock, explicit
+--allow-unknown-history in addition to --resend for known prior delivery,
+no fixed calendar range limit, no persisted resumable manual job. A new
+invocation is a new request; existing accepted and uncertain evidence
+must still be honored. Existing automatic age limit and cursors unchanged.
+
+R4a implements only read-only preview. Existing service CLI is unchanged;
+history accepts --config, --queue-db, --camera, --from, --to and --tz
+(default Europe/Berlin). Inclusive local calendar dates with DST-aware
+UTC conversion; current day is limited to elapsed time. Requires an
+existing initialized queue, enabled camera and shared lock, checks
+persisted login block and validates account camera selection. Sequential
+one-hour cloud windows, no fixed total span, no automatic retry on
+failure. Large ranges can make many requests; progress every 24 windows.
+Merge by camera UID/itemid, reject timestamp conflicts, report local
+state counts and source overlap, never print raw payloads. Any cloud-only
+event is conservatively unknown history, not proof of non-delivery.
+State counts are not local original integrity checks or confirmed SD
+availability. Cloud completeness is unverified; failure aborts without
+final combined result. No changes to SQLite, cursors, telemetry, images
+or SMTP state (existing lock file may be created if absent).
+Seven new tests (304 expected), reference verification pending.
+
+R4b download and R4c delivery/resend remain pending. Future actions must
+isolate manual-only work from automatic delivery, reuse verified local
+originals, respect shared persistent SMTP pacing, preserve acceptance
+evidence and never bypass uncertain state. No historical job resume
+command; re-invocation must still respect receipts to prevent unintended
+duplicates. No runtime changes to main or live L3.

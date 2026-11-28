@@ -202,7 +202,13 @@ def verify_backup(root):
     return manifest
 
 
-def create_backup(config, state, destination):
+@contextmanager
+def locked_backup(config, state, destination):
+    """Create a verified backup and retain the queue lock through the caller's checks.
+
+    Same-owner development paths only. All writers must already be stopped.
+    Do not call another queue-locking helper from inside this context.
+    """
     config, state = directory(config), directory(state)
     destination = new_destination(destination)
     disjoint(config, state, destination)
@@ -234,7 +240,12 @@ def create_backup(config, state, destination):
         except BaseException:
             marker.unlink(missing_ok=True)
             raise
-    return counts
+        yield counts
+
+
+def create_backup(config, state, destination):
+    with locked_backup(config, state, destination) as counts:
+        return counts
 
 
 def rehearse(backup, destination):

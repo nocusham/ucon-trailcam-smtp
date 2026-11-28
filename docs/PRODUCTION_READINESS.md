@@ -1,13 +1,13 @@
 # Production-readiness gates (phase 7)
 
-Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification pending. Not a production release or deployment authorization.
+Status: development checks in phases 1–6 and phase 7a passed; phase 7b.1 permission contract verification passed; phase 7b.2 candidate handoff verification passed; phase 7b.3a transaction rehearsal pending. Not a production release or deployment authorization.
 
 ## Evidence and limitations
 
 | Gate | Status | Evidence / remaining work |
 | --- | --- | --- |
 | Source separation, CLI and English policy | Development pass | Phases 1–5; phase 7a structural comparison reviewed. Preserve German user-facing mail. |
-| Automated regression | Development pass | Owner reported 257/257 in 2.091 s at 6e468a4; prior local ZIP integration 253/253. |
+| Automated regression | Development pass | Owner reported 277/277 in 2.103 s at 2f262a8; local ZIP/staging/handoff rehearsal passed. |
 | Reference dependencies and packaging | Development pass | Python 3.14.4 Linux x86_64, pinned SDK/KCP, local wheel and ZIP, staging from extracted ZIP. Not target Python 3.13 or hash-locked builds. |
 | Unit syntax | Offline pass | Placeholder executable check only. Actual service identity, access and LXC sandbox untested. |
 | Backup and rollback | Fixture pass | 245/245 warning-enabled regression and 20/20 under each tested umask. No production backup/restore. |
@@ -132,9 +132,46 @@ The privileged library has no root CLI, and real privilege orchestration
 and service-user smoke checks are not yet implemented. Eleven synthetic
 tests plus a real non-root same-owner build/copy rehearsal in
 check-package.sh validate the path and content handoff without changing
-users or host state. Expected suite: 277. Actual ownership transfer,
+users or host state. Owner-reported result: 2f262a8, 11/11 targeted in 0.009 s, 277/277 full in 2.103 s, Python 3.14.4 x86_64 and final package/bundle/staging/handoff success. Actual ownership transfer,
 trusted input provisioning, isolation, ACL/mount review and acceptance
 under the real service identity remain mandatory before activation.
+
+### 7b.3a: same-owner transaction rehearsal
+
+Use deploy/update_transaction.py only with trusted disposable same-owner
+paths and trusted caller callbacks. Require an existing ready selected
+release, a different ready target, an explicit expected previous release,
+a new disjoint backup destination and absent service-enabled marker.
+Hold the existing deployment flock before checking current and invoking
+quiesce; require explicit True from quiesce and is_quiescent. Then create
+a fresh verified backup via locked_backup (the existing create_backup API
+still works). Retain the queue flock through read-only compatibility
+approval and selection. Verify the backup again, recheck stopped writers
+and marker, and compare expected previous within the pointer flock before
+atomic replacement. A rollback follows the same sequence with an older
+code target and a **new** backup of latest state. Never restore the old
+database, delete a backup, or restart the service automatically.
+
+This is a library rehearsal, not a privileged CLI or a production service
+adapter. Callback success is an explicit contract, not proof of quiescence
+or schema compatibility. The caller must prevent all starts and writers,
+including noncooperating processes, and use the same deployment lock.
+An absent marker alone does not prove the service stopped. Source state
+must be trusted and already initialized; this does not support first
+install. Backup verification is integrity, not authenticity or durability.
+Failure may leave an incomplete backup or a valid private backup; keep
+it for operator review and leave the service disabled. No attempt to
+undo a third party's independent pointer modification. The pointer
+comparison guards against a stale expected release, not all possible
+bypasses of deployment serialization. Thirteen synthetic tests (290
+expected), including real SQLite snapshots, latest receipt preservation,
+both locks, stop/backup/approval failure and stale pointer rejection.
+
+Next 7b.3b must address real service-stop/start inhibition and mixed-owner
+backup with distinct root/service identities, without granting the service
+write access to administrator configuration or backup storage. 7b.4 must
+implement actual schema/config compatibility and controlled first
+selection/activation; all require target validation. No production use yet.
 
 ## 7c: licensing and artifact trust
 

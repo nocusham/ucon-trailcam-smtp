@@ -83,11 +83,16 @@ def _pointer_lock(root):
         yield
 
 
-def switch_release(root, release):
+_UNSPECIFIED = object()
+
+
+def switch_release(root, release, *, expected_previous=_UNSPECIFIED):
     """Atomically select a prepared release, returning the previous ID or None.
 
     Does not copy, remove or restore releases, configuration, databases or media.
     A previous ID may be supplied again for an explicit code-only rollback.
+    If supplied, expected_previous is checked under the pointer lock (None
+    denotes no current pointer).
     Atomic visibility is not a power-loss durability guarantee.
     """
     root = _directory(Path(root).absolute())
@@ -95,6 +100,8 @@ def switch_release(root, release):
     with _pointer_lock(root):
         _ready_release(root, release)
         previous = _current_release(root)
+        if expected_previous is not _UNSPECIFIED and previous != expected_previous:
+            raise ReleaseError('Current release changed since approval')
         if previous == release:
             return previous
         with tempfile.TemporaryDirectory(prefix='.switch-', dir=root) as tmp:
